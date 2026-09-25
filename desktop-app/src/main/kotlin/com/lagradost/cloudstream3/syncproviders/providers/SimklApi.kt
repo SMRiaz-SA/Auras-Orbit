@@ -35,12 +35,17 @@ class SimklApi : SyncAPI() {
     override val mainUrl = API_URL
     override val createAccountUrl = "https://simkl.com/settings/developer/"
     override val syncIdName = SyncIdName.Simkl
+    override val supportedMediaTypes = setOf(
+        SyncAPI.SyncMediaType.ANIME,
+        SyncAPI.SyncMediaType.SHOW,
+        SyncAPI.SyncMediaType.MOVIE,
+    )
     override val supportsExactEpisodeProgress = true
     override val supportsWatchedEpisodeEvents = true
 
     private val clientId: String get() = TrackerClientConfig.simklClientId()
     private val appVersion: String
-        get() = System.getProperty("cloudstream.version")?.takeIf(String::isNotBlank) ?: "0.1.6-pre-alpha"
+        get() = System.getProperty("cloudstream.version")?.takeIf(String::isNotBlank) ?: "0.2.0.00"
 
     /** The desktop flow supplies its ephemeral loopback URI, state, and PKCE verifier. */
     fun loginRequest(redirectUri: String, state: String, codeVerifier: String): AuthLoginPage? {
@@ -189,7 +194,9 @@ class SimklApi : SyncAPI() {
 
     override suspend fun status(auth: AuthData?, id: String): SyncAPI.AbstractSyncStatus? {
         val numericId = idFrom(id) ?: return null
-        val response = request("/sync/all-items", auth?.token, mapOf("extended" to "ids_only"))
+        // The editor needs membership plus status, score, and progress fields. The IDs-only
+        // response used for delta removals intentionally omits those values.
+        val response = request("/sync/all-items", auth?.token)
         val library = tryParseJson<AllItemsResponse>(response) ?: return null
         val match = library.anime.firstOrNull { it.simklId() == numericId }
             ?.let { SyncAPI.SyncMediaType.ANIME to it }
@@ -327,6 +334,16 @@ class SimklApi : SyncAPI() {
         val accepted = result.added?.episodes != null && result.notFound.isEmpty()
         if (accepted) requireLibraryRefresh = true
         return accepted
+    }
+
+    override suspend fun watchedEpisodeSelection(
+        auth: AuthData?,
+        id: String,
+    ): Set<SyncAPI.SyncEpisode>? {
+        val numericId = idFrom(id) ?: return null
+        val current = status(auth, numericId.toString()) ?: return null
+        val mediaType = current.mediaType ?: return null
+        return currentWatchedEpisodes(numericId, mediaType, auth?.token ?: return null, current.watchedEpisodes)
     }
 
     private fun episodeHistoryBody(
@@ -473,7 +490,8 @@ class SimklApi : SyncAPI() {
         )
     }
 
-    private fun LibraryEntry.simklId(): Int? = (show ?: movie)?.ids?.simkl
+    private fun LibraryEntry.simklId(): Int? =
+        (show ?: movie)?.ids?.simkl ?: ids?.simkl
 
     private fun AllItemsResponse.ids(): List<Int> =
         (shows + anime + movies).mapNotNull { it.simklId() }
@@ -563,6 +581,7 @@ class SimklApi : SyncAPI() {
             quality = null,
             releaseDate = media.year?.let { java.util.GregorianCalendar(it, 0, 1).time },
             id = simklId,
+            mediaType = mediaType,
         )
     }
 
@@ -665,6 +684,7 @@ class SimklApi : SyncAPI() {
         @JsonProperty("last_watched_at") val lastWatchedAt: String? = null,
         @JsonProperty("show") val show: SimklMedia? = null,
         @JsonProperty("movie") val movie: SimklMedia? = null,
+        @JsonProperty("ids") val ids: SimklIds? = null,
     )
 
     private data class AddHistoryResponse(

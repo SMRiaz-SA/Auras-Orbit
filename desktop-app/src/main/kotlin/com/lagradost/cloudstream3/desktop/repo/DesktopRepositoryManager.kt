@@ -18,8 +18,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 object DesktopRepositoryManager {
-    private const val FIRST_RUN_REPOSITORY_URL =
-        "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
+    private const val TESTER_DEFAULT_REPOSITORY_URL_PROPERTY = "auras.tester.defaultRepositoryUrl"
 
     private val reposFile by lazy { File(getExtensionsDir(), "repos.json") }
     private val repoCacheFile by lazy { File(getExtensionsDir(), "repo_cache.json") }
@@ -76,22 +75,25 @@ object DesktopRepositoryManager {
     }
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
+        val testerDefaultRepositoryUrl = System.getProperty(TESTER_DEFAULT_REPOSITORY_URL_PROPERTY)
+            ?.takeIf { it.isNotBlank() }
         val isFirstRun = !reposFile.exists()
         refreshSavedRepositoriesFromDisk()
-        if (isFirstRun && _savedRepositories.value.isEmpty()) {
+        if (isFirstRun && _savedRepositories.value.isEmpty() && testerDefaultRepositoryUrl != null) {
             saveRepository(
                 RepositoryData(
                     name = "Phisher Repo",
-                    url = FIRST_RUN_REPOSITORY_URL,
+                    url = testerDefaultRepositoryUrl,
                 ),
             )
         }
         loadCachesFromDisk()
-        if (_savedRepositories.value.any { it.url == FIRST_RUN_REPOSITORY_URL } &&
-            repoCache[FIRST_RUN_REPOSITORY_URL] == null
+        if (testerDefaultRepositoryUrl != null &&
+            _savedRepositories.value.any { it.url == testerDefaultRepositoryUrl } &&
+            repoCache[testerDefaultRepositoryUrl] == null
         ) {
             try {
-                addRepositoryFromInput(FIRST_RUN_REPOSITORY_URL)
+                addRepositoryFromInput(testerDefaultRepositoryUrl)
             } catch (e: Exception) {
                 AppLogger.i("First-run Phisher repository sync deferred: ${e.message}")
             }

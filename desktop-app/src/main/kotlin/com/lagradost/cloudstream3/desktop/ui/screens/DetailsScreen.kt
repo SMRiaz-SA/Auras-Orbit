@@ -539,6 +539,14 @@ fun DetailsContent(
                 }
             }
 
+            item(key = "TrackerStatus") {
+                com.lagradost.cloudstream3.desktop.ui.screens.details.TrackerDetailsSection(
+                    data = data,
+                    onNavigate = onNavigate,
+                    modifier = Modifier.padding(horizontal = if (isWindowCompact) 24.dp else 64.dp, vertical = 36.dp),
+                )
+            }
+
             detailsSectionOrder.filter { it !in detailsDisabledSections }.forEach { sectionKey ->
                 when (sectionKey) {
                     com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey.EPISODES -> {

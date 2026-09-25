@@ -44,6 +44,15 @@ class GenreBrowseComponent(
     }
 }
 
+class ProviderBrowseComponent(
+    componentContext: ComponentContext,
+    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
+) : ComponentContext by componentContext {
+    val viewModel = rootInstanceKeeper.getOrCreate(key = "ProviderBrowseViewModel") {
+        com.lagradost.cloudstream3.desktop.providerbrowse.ProviderBrowseViewModel()
+    }
+}
+
 class HistoryComponent(
     componentContext: ComponentContext,
     rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
@@ -66,6 +75,15 @@ class LibraryComponent(
     rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
 ) : ComponentContext by componentContext {
     val viewModel = rootInstanceKeeper.getOrCreate(key = "LibraryViewModel") { LibraryViewModel() }
+}
+
+class TrackerLibraryComponent(
+    componentContext: ComponentContext,
+    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
+) : ComponentContext by componentContext {
+    val viewModel = rootInstanceKeeper.getOrCreate(key = "TrackerLibraryViewModel") {
+        com.lagradost.cloudstream3.desktop.ui.screens.tracker.TrackerLibraryViewModel()
+    }
 }
 
 class DownloadsComponent(

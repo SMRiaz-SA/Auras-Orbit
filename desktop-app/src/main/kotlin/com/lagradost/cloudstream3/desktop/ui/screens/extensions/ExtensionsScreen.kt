@@ -207,7 +207,11 @@ fun ComposeExtensionScreen(
                 label = "ExtensionsTabContent",
             ) { targetTab ->
                 when (targetTab) {
-                    0 -> BrowseTab(viewModel = viewModel, syncGeneration = syncGen)
+                    0 -> BrowseTab(
+                        viewModel = viewModel,
+                        syncGeneration = syncGen,
+                        onNavigateToRepos = { selectedTab = 2 },
+                    )
                     1 -> InstalledTab(viewModel = viewModel, syncGeneration = syncGen)
                     2 -> RepositoriesTab(viewModel = viewModel)
                     3 -> SettingsAddons(viewModel = viewModel)

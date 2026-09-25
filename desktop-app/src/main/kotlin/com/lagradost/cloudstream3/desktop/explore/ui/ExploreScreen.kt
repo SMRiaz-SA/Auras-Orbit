@@ -148,6 +148,7 @@ fun ExploreScreen(
                 EmptyCatalogState(
                     onNavigateToSettings = { onNavigate(Config.Settings) },
                     onOpenGenreBrowse = { onNavigate(Config.GenreBrowse) },
+                    onOpenProviderBrowse = { onNavigate(Config.ProviderBrowse) },
                 )
             } else {
                 // Row 1: Primary Scope & Search Controls (~34dp)
@@ -228,6 +229,9 @@ fun ExploreScreen(
                     ) {
                         TextButton(onClick = { onNavigate(Config.GenreBrowse) }) {
                             Text("Genres", fontSize = 11.sp)
+                        }
+                        TextButton(onClick = { onNavigate(Config.ProviderBrowse) }) {
+                            Text("Providers", fontSize = 11.sp)
                         }
 
                         ExploreSearchField(
@@ -788,6 +792,7 @@ private fun ExploreSearchField(
 private fun EmptyCatalogState(
     onNavigateToSettings: () -> Unit,
     onOpenGenreBrowse: () -> Unit,
+    onOpenProviderBrowse: () -> Unit,
 ) {
     val theme = LocalDesktopTheme.current
 
@@ -839,6 +844,13 @@ private fun EmptyCatalogState(
                 shape = RoundedCornerShape(8.dp),
             ) {
                 Text("Browse Genres", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = onOpenProviderBrowse,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text("Browse Providers", fontSize = 12.sp)
             }
         }
     }

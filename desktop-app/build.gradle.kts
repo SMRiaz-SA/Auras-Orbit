@@ -106,6 +106,16 @@ dependencies {
     implementation(libs.sqldelight.coroutines.extensions)
 }
 
+val orbitDistribution = project.findProperty("orbitDistribution")?.toString() ?: "release"
+require(orbitDistribution == "release" || orbitDistribution == "tester") {
+    "orbitDistribution must be either 'release' or 'tester' (was '$orbitDistribution')."
+}
+val testerDefaultRepositoryJvmArg = if (orbitDistribution == "tester") {
+    "-Dauras.tester.defaultRepositoryUrl=https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
+} else {
+    null
+}
+
 // Compose Desktop application configuration
 compose.desktop {
     application {
@@ -119,6 +129,7 @@ compose.desktop {
                 "-Dcloudstream.version=${project.findProperty("APP_VERSION")}",
                 "-Dfile.encoding=UTF-8",
             )
+        jvmArgs += listOfNotNull(testerDefaultRepositoryJvmArg)
         buildTypes.release.proguard {
             isEnabled.set(false)
         }
@@ -175,13 +186,14 @@ tasks.matching { it.name == "run" }.configureEach {
         "-Djava.library.path=${project.file("appResources/windows/jni").absolutePath}",
         "-Dcloudstream.version=${project.findProperty("APP_VERSION")}",
     )
+    testerDefaultRepositoryJvmArg?.let { runTask.jvmArgs(it) }
 }
 
 val generateInstallerVersion by tasks.registering {
     val versionFile = project.file("../installer/version.iss")
     outputs.file(versionFile)
     doLast {
-        val appVer = project.findProperty("APP_VERSION")?.toString()?.takeIf { it.isNotBlank() } ?: "0.1.0-dev"
+        val appVer = project.findProperty("APP_VERSION")?.toString()?.takeIf { it.isNotBlank() } ?: "0.2.0.00"
         versionFile.writeText("#define AppVersion \"$appVer\"")
     }
 }
@@ -200,6 +212,65 @@ tasks.named<Copy>("processResources") {
         into("legal")
         rename { "THIRD-PARTY-NOTICES.txt" }
     }
+}
+
+val copyDistributionLegalNotices by tasks.registering(Copy::class) {
+    val requiredFiles = listOf(
+        rootProject.file("LICENSE"),
+        rootProject.file("NOTICE.md"),
+        rootProject.file("THIRD-PARTY-NOTICES.md"),
+        rootProject.file("android-reference/LICENSE"),
+        project.file("src/main/cpp/webview2/LICENSE.txt"),
+        project.file("src/main/cpp/webview2/NOTICE.txt"),
+        project.file("appResources/legal/mpv-LICENSE.GPL.txt"),
+        project.file("appResources/legal/MPV-PROVENANCE.txt"),
+    )
+    inputs.files(requiredFiles)
+    into(layout.buildDirectory.dir("compose/binaries/main/app/Auras-Orbit"))
+
+    from(rootProject.file("LICENSE")) {
+        into("legal")
+        rename { "AURAS-ORBIT-LICENSE.txt" }
+    }
+    from(rootProject.file("NOTICE.md")) {
+        into("legal")
+        rename { "AURAS-ORBIT-NOTICE.txt" }
+    }
+    from(rootProject.file("THIRD-PARTY-NOTICES.md")) {
+        into("legal")
+        rename { "THIRD-PARTY-NOTICES.txt" }
+    }
+    from(rootProject.file("android-reference/LICENSE")) {
+        into("legal")
+        rename { "CLOUDSTREAM-UPSTREAM-LICENSE.txt" }
+    }
+    from(project.file("src/main/cpp/webview2/LICENSE.txt")) {
+        into("legal")
+        rename { "WEBVIEW2-SDK-LICENSE.txt" }
+    }
+    from(project.file("src/main/cpp/webview2/NOTICE.txt")) {
+        into("legal")
+        rename { "WEBVIEW2-SDK-NOTICE.txt" }
+    }
+    from(project.file("appResources/legal/mpv-LICENSE.GPL.txt")) {
+        into("legal")
+        rename { "MPV-LICENSE.GPL.txt" }
+    }
+    from(project.file("appResources/legal/MPV-PROVENANCE.txt")) {
+        into("legal")
+        rename { "MPV-PROVENANCE.txt" }
+    }
+
+    doFirst {
+        val missing = requiredFiles.filterNot(File::isFile)
+        check(missing.isEmpty()) {
+            "Required distribution legal/provenance files are missing: ${missing.joinToString()}. Run .github/scripts/fetch-mpv.ps1 first."
+        }
+    }
+}
+
+tasks.matching { it.name == "createDistributable" }.configureEach {
+    finalizedBy(copyDistributionLegalNotices)
 }
 
 tasks.withType<Test> {

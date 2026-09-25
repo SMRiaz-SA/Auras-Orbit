@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.request.crossfade
 import dev.chrisbanes.haze.hazeSource
@@ -85,7 +86,10 @@ fun ComposeHomeScreen(
         val allPages = remember(activeProviderApis, uiState.disabledCatalogs, uiState.refreshEpoch) {
             activeProviderApis.flatMap { prov ->
                 val disabledForProv = uiState.disabledCatalogs[prov.name] ?: emptySet()
-                prov.mainPage.filter { it.name !in disabledForProv }.map { prov to it }
+                prov.mainPage
+                    .filter { it.name !in disabledForProv }
+                    .filterNot { isHiddenHomeCatalogTitle(it.name) }
+                    .map { prov to it }
             }
         }
 
@@ -153,26 +157,15 @@ fun ComposeHomeScreen(
                                     }
                                 },
                                 outerPadding = horizontalPad,
-                                afterHeroContent = if (isFirstPage && showContinueWatching) {
-                                    {
-                                        HomeHistoryRow(
-                                            historyList = historyList,
-                                            providers = providers,
-                                            onClearHistory = { viewModel.onEvent(HomeUiEvent.OnClearHistory) },
-                                            onRemoveHistoryItem = { viewModel.onEvent(HomeUiEvent.OnRemoveHistoryItem(it)) },
-                                            onViewAllClick = {
-                                                onNavigate(Config.History)
-                                            },
-                                            onItemClick = { prov, hist ->
-                                                onNavigate(Config.Details(prov.name, hist.showUrl, hist.showName, hist.posterUrl, null, autoPlay = false, targetSeason = hist.season, targetEpisodeId = hist.episodeId))
-                                            },
-                                            onPlayClick = { prov, hist ->
-                                                onNavigate(Config.Details(prov.name, hist.showUrl, hist.showName, hist.posterUrl, null, autoPlay = true, targetSeason = hist.season, targetEpisodeId = hist.episodeId))
-                                            },
+                                afterHeroContent = {
+                                    if (isFirstPage) {
+                                        HomeDashboardRows(
+                                            uiState = uiState,
+                                            viewModel = viewModel,
+                                            showContinueWatching = showContinueWatching,
+                                            onNavigate = onNavigate,
                                         )
                                     }
-                                } else {
-                                    {}
                                 },
                                 isHistoryVisible = isFirstPage && showContinueWatching && historyList.isNotEmpty(),
                                 onViewAll = { provider, pageData, title, items, hasNext ->
@@ -193,41 +186,125 @@ fun ComposeHomeScreen(
                     }
                 }
             }
-        } else if (providers.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Warning,
-                        contentDescription = "No providers",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        com.lagradost.cloudstream3.desktop.utils.DesktopStrings.NO_PROVIDERS_FOUND,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        com.lagradost.cloudstream3.desktop.utils.DesktopStrings.PLEASE_INSTALL_PLUGINS,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(onClick = { onNavigate(Config.Extensions(initialTab = 2)) }) {
-                        Text(com.lagradost.cloudstream3.desktop.utils.DesktopStrings.GO_TO_EXTENSIONS)
+        } else if (providers.isEmpty() && historyList.isEmpty() && uiState.bookmarks.isEmpty()) {
+            val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+            val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+            val safeStart = safeArea.calculateStartPadding(layoutDirection)
+            val safeEnd = safeArea.calculateEndPadding(layoutDirection)
+            Box(
+                modifier = Modifier.fillMaxSize().padding(start = safeStart, end = safeEnd),
+                contentAlignment = Alignment.Center,
+            ) {
+                Card(
+                    modifier = Modifier
+                        .widthIn(max = 620.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Extension,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME_START_TITLE,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME_START_DESCRIPTION,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = { onNavigate(Config.Extensions(initialTab = 0)) },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        ) {
+                            Text(com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME_BROWSE_PLUGINS)
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { onNavigate(Config.Extensions(initialTab = 3)) }) {
+                            Text(com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME_STREMIO_CTA)
+                        }
+                        Text(
+                            com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME_STREMIO_DESCRIPTION,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
             }
         } else {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    HomeHeroCarouselPlaceholder()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    CategoryRowPlaceholder(title = "Loading...", showLargeHeader = true)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    CategoryRowPlaceholder(title = "Loading...", showLargeHeader = true)
+            val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+            val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+            val safeStart = maxOf(safeArea.calculateStartPadding(layoutDirection), 24.dp)
+            val safeEnd = maxOf(safeArea.calculateEndPadding(layoutDirection), 24.dp)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(homeVerticalSpacingDp.dp),
+                contentPadding = PaddingValues(
+                    top = safeArea.calculateTopPadding(),
+                    bottom = safeArea.calculateBottomPadding() + 32.dp,
+                ),
+            ) {
+                item(key = "home-dashboard-rows") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(homeVerticalSpacingDp.dp),
+                    ) {
+                        HomeDashboardRows(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            showContinueWatching = showContinueWatching,
+                            onNavigate = onNavigate,
+                        )
+                    }
+                }
+                item(key = "home-no-catalogs") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd, top = 16.dp, bottom = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                if (providers.isEmpty()) "Your library is ready" else "No Home catalogs are available",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (providers.isEmpty()) "Add a source to discover more movies and series." else "Enable a provider catalog or refresh after installing a source.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { onNavigate(Config.Extensions(initialTab = 0)) }) {
+                                Text("Browse Plugins")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -9,9 +9,11 @@ object DesktopStrings {
     const val SETTINGS = "Settings"
 
     // Home Screen
-    const val NO_PROVIDERS_FOUND = "No Providers Found"
-    const val PLEASE_INSTALL_PLUGINS = "Please go to the Extensions tab to install some plugins."
-    const val GO_TO_EXTENSIONS = "Go to Extensions"
+    const val HOME_START_TITLE = "Start with CloudStream extensions"
+    const val HOME_START_DESCRIPTION = "Browse community repositories, then review and install only the extensions you choose. Adding a repository does not install extensions."
+    const val HOME_BROWSE_PLUGINS = "Browse Plugins"
+    const val HOME_STREMIO_CTA = "Set up Stremio add-ons"
+    const val HOME_STREMIO_DESCRIPTION = "A separate manifest-based integration; it does not install CloudStream extensions."
 
     // Extensions Screen
     const val INSTALLED = "Installed"

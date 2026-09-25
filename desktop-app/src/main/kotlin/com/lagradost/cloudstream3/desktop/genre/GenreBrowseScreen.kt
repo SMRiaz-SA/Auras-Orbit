@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +77,7 @@ fun GenreBrowseScreen(
     val genreListState = rememberLazyListState()
     val topicListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    var filtersExpanded by rememberSaveable { mutableStateOf(true) }
 
     LaunchedEffect(viewModel) {
         viewModel.effectFlow.collect { effect ->
@@ -171,6 +173,7 @@ fun GenreBrowseScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (filtersExpanded) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -193,6 +196,16 @@ fun GenreBrowseScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    IconButton(
+                        onClick = { filtersExpanded = false },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.ExpandMore,
+                            contentDescription = "Collapse filters",
+                            modifier = Modifier.rotate(180f),
+                        )
+                    }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -331,6 +344,36 @@ fun GenreBrowseScreen(
                                     contentDescription = "Scroll topics right",
                                 )
                             }
+                        }
+                    }
+                }
+                } else {
+                    val filterSummary = listOf(
+                        state.selectedProvider?.name ?: "Choose provider",
+                        state.mediaType.label,
+                        state.selectedGenre?.name ?: "All genres",
+                        state.selectedTopic?.label ?: "All topics",
+                    ).joinToString(" · ")
+                    TextButton(
+                        onClick = { filtersExpanded = true },
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("Filters", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = filterSummary,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Icon(Icons.Default.ExpandMore, contentDescription = "Expand filters")
                         }
                     }
                 }
