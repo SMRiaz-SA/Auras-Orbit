@@ -7,13 +7,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.window.WindowPlacement
 import com.lagradost.cloudstream3.desktop.player.ComposeNativeWebPlayer
+import com.lagradost.cloudstream3.desktop.player.webview.WebView2RuntimeDetector
 import com.lagradost.cloudstream3.desktop.ui.LocalFullscreenController
 import com.lagradost.cloudstream3.desktop.ui.LocalWindowState
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerUiEvent
 import com.lagradost.cloudstream3.fixUrlNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun EmbeddedVideoPlayer(
@@ -24,10 +29,49 @@ fun EmbeddedVideoPlayer(
     onError: (String) -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var webView2RuntimeAvailable by remember { mutableStateOf<Boolean?>(null) }
+    var downloadLinkFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        webView2RuntimeAvailable = withContext(Dispatchers.IO) {
+            WebView2RuntimeDetector.isInstalled()
+        }
+    }
+
     DisposableEffect(viewModel) {
         onDispose {
             viewModel.dispose()
         }
+    }
+
+    if (webView2RuntimeAvailable != true) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (webView2RuntimeAvailable == null) {
+                CircularProgressIndicator()
+            } else {
+                WebView2RuntimeRequired(
+                    onOpenDownload = {
+                        downloadLinkFailed = runCatching {
+                            uriHandler.openUri(WebView2RuntimeDetector.DOWNLOAD_URL)
+                        }.isFailure
+                    },
+                    onRetry = {
+                        coroutineScope.launch {
+                            webView2RuntimeAvailable = withContext(Dispatchers.IO) {
+                                WebView2RuntimeDetector.isInstalled()
+                            }
+                        }
+                    },
+                    onClose = onClose,
+                    downloadLinkFailed = downloadLinkFailed,
+                )
+            }
+        }
+        return
     }
 
     LaunchedEffect(launchData) {

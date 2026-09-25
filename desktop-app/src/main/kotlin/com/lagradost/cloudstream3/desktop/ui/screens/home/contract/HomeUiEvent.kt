@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.home.contract
 
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeDiscoveryKind
 import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
 
 sealed interface HomeUiEvent : UiEvent {
@@ -16,4 +17,5 @@ sealed interface HomeUiEvent : UiEvent {
     data class OnShowHomeManagement(val show: Boolean) : HomeUiEvent
     data class OnToggleCatalog(val providerName: String, val catalogName: String, val isEnabled: Boolean) : HomeUiEvent
     data class OnLoadCategory(val provider: MainAPI, val pageData: com.lagradost.cloudstream3.MainPageData) : HomeUiEvent
+    data class OnRetryDiscovery(val kind: HomeDiscoveryKind) : HomeUiEvent
 }

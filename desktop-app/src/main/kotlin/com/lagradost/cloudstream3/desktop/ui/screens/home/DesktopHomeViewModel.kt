@@ -23,9 +23,14 @@ import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiState
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * Returns true only for real, user-facing content providers:
@@ -45,6 +50,26 @@ class DesktopHomeViewModel(
 ) {
     private val categoryCache = java.util.concurrent.ConcurrentHashMap<String, com.lagradost.cloudstream3.HomePageResponse>()
     private val categoryMutex = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+    private data class CachedDiscoveryResult(
+        val items: List<HomeDiscoveryItem>,
+        val pageSources: List<HomeDiscoveryPageSource>,
+    )
+
+    private val discoveryCache = java.util.concurrent.ConcurrentHashMap<String, CachedDiscoveryResult>()
+    private val discoveryReloadEpoch = MutableStateFlow(0L)
+    private var discoverySignature: String? = null
+    private var lastDiscoveryReloadEpoch = -1L
+    private var discoverySources: Map<HomeDiscoveryKind, List<HomeDiscoverySource>> = emptyMap()
+    private var discoveryKindJobs = mutableMapOf<HomeDiscoveryKind, kotlinx.coroutines.Job>()
+
+    private data class HomeDiscoverySource(
+        val kind: HomeDiscoveryKind,
+        val provider: MainAPI,
+        val pageData: MainPageData,
+    ) {
+        val cacheKey: String
+            get() = "${kind.name}:${provider.name}:${provider.mainUrl}:${pageData.name}:${pageData.data}"
+    }
 
     // Redundant StateFlow mappings have been permanently deleted in accordance with MVI best practices.
     // UI should collect `uiState` and read properties directly from the immutable snapshot.
@@ -79,6 +104,17 @@ class DesktopHomeViewModel(
                     DesktopDataStore.getKey<Set<String>>(PreferenceKeys.disabledCatalogsKey(name)) ?: emptySet()
                 }
                 updateState { copy(disabledCatalogs = disabledMap) }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                uiState.map { it.activeProviderApis to it.disabledCatalogs }.distinctUntilChanged(),
+                discoveryReloadEpoch,
+            ) { (providers, disabledCatalogs), reloadEpoch ->
+                Triple(providers, disabledCatalogs, reloadEpoch)
+            }.collectLatest { (providers, disabledCatalogs, reloadEpoch) ->
+                configureDiscovery(providers, disabledCatalogs, reloadEpoch)
             }
         }
 
@@ -145,6 +181,191 @@ class DesktopHomeViewModel(
             }
             is HomeUiEvent.OnLoadCategory -> {
                 loadCategory(event.provider, event.pageData)
+            }
+            is HomeUiEvent.OnRetryDiscovery -> retryDiscovery(event.kind)
+        }
+    }
+
+    private suspend fun configureDiscovery(
+        providers: List<MainAPI>,
+        disabledCatalogs: Map<String, Set<String>>,
+        reloadEpoch: Long,
+    ) {
+        val pagesByProvider = coroutineScope {
+            providers.map { provider ->
+                async(Dispatchers.IO) {
+                    val result = SafePluginInvoker.invoke(
+                        tag = "HomeDiscovery:${provider.name}:mainPage",
+                        timeoutMs = SafePluginInvoker.TIMEOUT_LOAD_MS,
+                    ) { provider.mainPage }
+                    val pages = if (result.isSuccess) result.getOrNull().orEmpty() else {
+                        val failure = result.exceptionOrNull()
+                        if (failure is kotlinx.coroutines.CancellationException) throw failure
+                        com.lagradost.common.logging.AppLogger.w(
+                            "HomeDiscovery:${provider.name}",
+                            "Could not inspect provider catalogs: ${failure?.message}",
+                        )
+                        emptyList()
+                    }
+                    provider to pages
+                }
+            }.awaitAll()
+        }
+
+        val sourcesByKind = HomeDiscoveryKind.entries.associateWith { kind ->
+            pagesByProvider.mapNotNull { (provider, pages) ->
+                val disabledForProvider = disabledCatalogs[provider.name].orEmpty()
+                pages.firstOrNull { page ->
+                    page.name !in disabledForProvider &&
+                        !isHiddenHomeCatalogTitle(page.name) &&
+                        classifyHomeDiscoveryCatalog(page.name) == kind
+                }?.let { page -> HomeDiscoverySource(kind, provider, page) }
+            }
+        }
+        val signature = sourcesByKind.values.flatten().joinToString("|") { it.cacheKey }
+        if (signature == discoverySignature && reloadEpoch == lastDiscoveryReloadEpoch) return
+
+        discoverySignature = signature
+        lastDiscoveryReloadEpoch = reloadEpoch
+        discoverySources = sourcesByKind
+        discoveryCache.clear()
+        discoveryKindJobs.values.forEach(kotlinx.coroutines.Job::cancel)
+        discoveryKindJobs.clear()
+
+        val recentSources = sourcesByKind[HomeDiscoveryKind.RECENT].orEmpty()
+        val popularSources = sourcesByKind[HomeDiscoveryKind.POPULAR].orEmpty()
+        updateState {
+            copy(
+                recentDiscovery = HomeDiscoverySectionState(
+                    isLoading = recentSources.isNotEmpty(),
+                    hasLoaded = recentSources.isEmpty(),
+                    sourceCount = recentSources.size,
+                ),
+                popularDiscovery = HomeDiscoverySectionState(
+                    isLoading = popularSources.isNotEmpty(),
+                    hasLoaded = popularSources.isEmpty(),
+                    sourceCount = popularSources.size,
+                ),
+            )
+        }
+
+        coroutineScope {
+            HomeDiscoveryKind.entries.map { kind ->
+                async { loadDiscoveryKind(kind, sourcesByKind[kind].orEmpty()) }
+            }.awaitAll()
+        }
+    }
+
+    private fun retryDiscovery(kind: HomeDiscoveryKind) {
+        val current = if (kind == HomeDiscoveryKind.RECENT) {
+            uiState.value.recentDiscovery
+        } else {
+            uiState.value.popularDiscovery
+        }
+        if (current.isLoading) return
+
+        discoveryKindJobs[kind]?.cancel()
+        val sources = discoverySources[kind].orEmpty()
+        discoveryKindJobs[kind] = viewModelScope.launch {
+            loadDiscoveryKind(kind, sources)
+        }
+    }
+
+    private suspend fun loadDiscoveryKind(kind: HomeDiscoveryKind, sources: List<HomeDiscoverySource>) {
+        setDiscoveryState(kind) { current ->
+            current.copy(
+                isLoading = sources.isNotEmpty(),
+                hasLoaded = sources.isEmpty(),
+                sourceCount = sources.size,
+                failedSourceCount = 0,
+                items = emptyList(),
+                pageSources = emptyList(),
+            )
+        }
+        if (sources.isEmpty()) return
+
+        val semaphore = Semaphore(MAX_PARALLEL_DISCOVERY_LOADS)
+        val sourceResults = coroutineScope {
+            sources.map { source ->
+                async(Dispatchers.IO) {
+                    val cached = discoveryCache[source.cacheKey]
+                    if (cached != null) return@async cached to false
+
+                    val result = semaphore.withPermit {
+                        SafePluginInvoker.invoke(
+                            tag = "HomeDiscovery:${source.provider.name}:${source.pageData.name}",
+                            timeoutMs = SafePluginInvoker.TIMEOUT_LOAD_MS,
+                        ) {
+                            source.provider.getMainPage(
+                                1,
+                                MainPageRequest(source.pageData.name, source.pageData.data, source.pageData.horizontalImages),
+                            )
+                        }
+                    }
+                    if (!result.isSuccess) {
+                        val failure = result.exceptionOrNull()
+                        if (failure is kotlinx.coroutines.CancellationException) throw failure
+                        com.lagradost.common.logging.AppLogger.w(
+                            "HomeDiscovery:${source.provider.name}",
+                            "Could not load ${source.pageData.name}: ${failure?.message}",
+                        )
+                        return@async CachedDiscoveryResult(emptyList(), emptyList()) to true
+                    }
+
+                    val response = result.getOrNull()
+                    val visibleSections = response?.items.orEmpty()
+                        .filter { section ->
+                            val label = section.name.ifBlank { source.pageData.name }
+                            !isHiddenHomeCatalogTitle(label)
+                        }
+                    val items = visibleSections.flatMap { section ->
+                        section.list.map { HomeDiscoveryItem(source.provider.name, it) }
+                    }
+                    val pageSources = if (response?.hasNext == true) {
+                        visibleSections.filter { it.list.isNotEmpty() }.map { section ->
+                            HomeDiscoveryPageSource(
+                                provider = source.provider,
+                                request = MainPageRequest(
+                                    source.pageData.name,
+                                    source.pageData.data,
+                                    source.pageData.horizontalImages,
+                                ),
+                                sectionName = section.name.ifBlank { source.pageData.name },
+                            )
+                        }
+                    } else {
+                        emptyList()
+                    }
+                    val loaded = CachedDiscoveryResult(items, pageSources)
+                    discoveryCache[source.cacheKey] = loaded
+                    loaded to false
+                }
+            }.awaitAll()
+        }
+
+        val merged = mergeHomeDiscoveryItems(sourceResults.flatMap { it.first.items })
+        val pageSources = sourceResults.flatMap { it.first.pageSources }
+        val failedCount = sourceResults.count { it.second }
+        setDiscoveryState(kind) { current ->
+            current.copy(
+                isLoading = false,
+                hasLoaded = true,
+                items = merged,
+                sourceCount = sources.size,
+                failedSourceCount = failedCount,
+                pageSources = pageSources,
+            )
+        }
+    }
+
+    private fun setDiscoveryState(
+        kind: HomeDiscoveryKind,
+        transform: (HomeDiscoverySectionState) -> HomeDiscoverySectionState,
+    ) {
+        updateState {
+            when (kind) {
+                HomeDiscoveryKind.RECENT -> copy(recentDiscovery = transform(recentDiscovery))
+                HomeDiscoveryKind.POPULAR -> copy(popularDiscovery = transform(popularDiscovery))
             }
         }
     }
@@ -265,11 +486,17 @@ class DesktopHomeViewModel(
     private fun reloadProvider() {
         categoryCache.clear()
         categoryMutex.clear()
+        discoveryCache.clear()
+        discoveryReloadEpoch.update { it + 1L }
         updateState {
             copy(
                 categories = emptyMap(),
                 refreshEpoch = refreshEpoch + 1L,
             )
         }
+    }
+
+    private companion object {
+        const val MAX_PARALLEL_DISCOVERY_LOADS = 3
     }
 }

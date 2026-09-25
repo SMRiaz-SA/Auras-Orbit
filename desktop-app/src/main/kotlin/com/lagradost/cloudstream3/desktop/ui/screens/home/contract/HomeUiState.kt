@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.DesktopErrorReporter
 import com.lagradost.cloudstream3.desktop.repo.HeroMeta
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
+import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeDiscoverySectionState
 import com.lagradost.common.storage.DesktopBookmark
 import com.lagradost.common.storage.WatchHistory
 
@@ -28,6 +29,8 @@ data class HomeUiState(
     val disabledCatalogs: Map<String, Set<String>> = emptyMap(),
     val showHomeManagement: Boolean = false,
     val categories: Map<String, HomeCategoryUiState> = emptyMap(),
+    val recentDiscovery: HomeDiscoverySectionState = HomeDiscoverySectionState(),
+    val popularDiscovery: HomeDiscoverySectionState = HomeDiscoverySectionState(),
     val refreshEpoch: Long = 0L,
 ) : UiState {
     val activeProviders: List<String>

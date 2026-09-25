@@ -44,7 +44,7 @@ import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 fun BrowseTab(
     viewModel: ExtensionsViewModel,
     syncGeneration: Int,
-    onNavigateToRepos: () -> Unit = {},
+    onNavigateToRepos: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedLanguages by remember { mutableStateOf(emptySet<String>()) }

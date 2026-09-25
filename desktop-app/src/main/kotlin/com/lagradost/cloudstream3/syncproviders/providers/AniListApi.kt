@@ -41,6 +41,8 @@ class AniListApi : SyncAPI() {
     override val icon = 0 // R.drawable.ic_anilist_icon
     override val createAccountUrl = "$mainUrl/settings/developer"
     override val syncIdName = SyncIdName.Anilist
+    override val supportedMediaTypes = setOf(SyncAPI.SyncMediaType.ANIME)
+    override val supportsCountBasedProgress = true
 
     override fun loginRequest(): AuthLoginPage? = key.takeIf(String::isNotBlank)?.let {
         AuthLoginPage("https://anilist.co/api/v2/oauth/authorize?client_id=$it&response_type=token")
@@ -159,7 +161,8 @@ class AniListApi : SyncAPI() {
                 "youtube" -> listOf("https://www.youtube.com/watch?v=${season.trailer.id}")
                 else -> null
             },
-            // TODO REST
+            // AniList metadata is intentionally served by the GraphQL load contract above;
+            // there is no REST fallback with a different field schema to merge here.
         )
     }
 
@@ -645,6 +648,7 @@ class AniListApi : SyncAPI() {
                 null,
                 null,
                 plot = this.media.description,
+                mediaType = SyncAPI.SyncMediaType.ANIME,
             )
         }
     }

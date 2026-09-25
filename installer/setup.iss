@@ -4,9 +4,9 @@ AppId={{C626E83F-8C3A-4D78-B5B3-FA19FE223E0C}}
 AppName=Auras Orbit
 AppVersion={#AppVersion}
 AppPublisher=Auras Prime Dynamics
-AppPublisherURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
-AppSupportURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
-AppUpdatesURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
+AppPublisherURL=https://github.com/SMRiaz-SA/Auras-Orbit
+AppSupportURL=https://github.com/SMRiaz-SA/Auras-Orbit/issues
+AppUpdatesURL=https://github.com/SMRiaz-SA/Auras-Orbit/releases
 DefaultDirName={autopf}\Auras Orbit
 DefaultGroupName=Auras Orbit
 AllowNoIcons=yes
@@ -30,7 +30,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Copy all files and folders from the AppImage output
-Source: "..\desktop-app\build\compose\binaries\main\app\Auras-Orbit\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\desktop-app\build\compose\binaries\main\app\Auras-Orbit\*"; DestDir: "{app}"; Excludes: "CloudStreamData\*,AurasData\*,AurasOrbitData\*,CloudStreamDesktop\*,AurasDesktop\*,AurasOrbit\*,data\*,shared_prefs\*,profiles\*,Extensions\*,logs\*,downloads\*,settings.json,auth_tokens*,tracker_credentials*,*.db,*.db-shm,*.db-wal,*.sqlite,*.sqlite3"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Auras Orbit"; Filename: "{app}\Auras-Orbit.exe"

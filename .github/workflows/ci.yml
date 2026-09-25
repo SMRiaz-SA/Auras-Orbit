@@ -25,32 +25,16 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Download MPV runtime dependency
+    - name: Fetch and verify pinned MPV runtime and notices
       shell: pwsh
-      run: |
-        $mpvDirectory = Join-Path $env:GITHUB_WORKSPACE 'desktop-app/appResources/windows/mpv'
-        $mpvDll = Join-Path $mpvDirectory 'libmpv-2.dll'
-        if (-not (Test-Path -LiteralPath $mpvDll)) {
-          New-Item -ItemType Directory -Force -Path $mpvDirectory | Out-Null
-          $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/tags/20260610' -Headers @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'Auras-Orbit-CI' }
-          $asset = $release.assets | Where-Object { $_.name -like 'mpv-dev-x86_64-*.7z' } | Select-Object -First 1
-          if ($null -eq $asset) { throw 'Pinned MPV release has no x86_64 development archive.' }
-
-          $archive = Join-Path $env:RUNNER_TEMP $asset.name
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive
-          $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
-          if ($null -eq $sevenZip) {
-            $sevenZipPath = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
-            if (-not (Test-Path -LiteralPath $sevenZipPath)) { throw '7-Zip is required to extract the MPV runtime.' }
-          } else {
-            $sevenZipPath = $sevenZip.Source
-          }
-          & $sevenZipPath e $archive 'libmpv-2.dll' "-o$mpvDirectory" -r -y
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $mpvDll)) { throw 'Could not extract libmpv-2.dll.' }
-        }
+      run: .\.github\scripts\fetch-mpv.ps1
 
     - name: Run Tests and Build Portable App
-      run: .\gradlew.bat clean test :desktop-app:createDistributable --no-daemon
+      run: .\gradlew.bat clean test :desktop-app:createDistributable -PorbitDistribution=tester --no-daemon
+
+    - name: Verify distribution version and notices
+      shell: pwsh
+      run: .\.github\scripts\verify-distribution.ps1
 
     - name: Zip portable app
       shell: pwsh

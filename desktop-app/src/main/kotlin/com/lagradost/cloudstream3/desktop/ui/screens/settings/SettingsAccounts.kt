@@ -21,6 +21,9 @@ import com.lagradost.cloudstream3.syncproviders.AuthAPI
 import com.lagradost.cloudstream3.syncproviders.AuthData
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.syncproviders.TrackerClientConfig
+import com.lagradost.cloudstream3.syncproviders.TrackerSyncHealth
+import com.lagradost.cloudstream3.syncproviders.TrackerSyncOutcome
+import com.lagradost.cloudstream3.syncproviders.TrackerSyncPreferences
 import com.lagradost.cloudstream3.syncproviders.providers.SimklApi
 import com.lagradost.cloudstream3.desktop.sync.OAuthLocalServer
 import com.lagradost.common.storage.DesktopDataStore
@@ -38,7 +41,48 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
     var trackerLoginBusy by remember { mutableStateOf(false) }
     var trackerLoginMessage by remember { mutableStateOf<String?>(null) }
     var trackerAccountMessage by remember { mutableStateOf<String?>(null) }
+    var trackerRetryBusy by remember { mutableStateOf(false) }
     val cachedAccounts by AccountManager.accountsFlow.collectAsState()
+    val syncHealth by TrackerSyncHealth.states.collectAsState()
+
+    fun startTrackerLogin(api: SyncAPI) {
+        trackerLoginMessage = null
+        trackerAccountMessage = null
+        scope.launch {
+            trackerLoginBusy = true
+            try {
+                if (api is SimklApi) {
+                    val verifier = AuthAPI.generateCodeVerifier()
+                    val state = AuthAPI.generateCodeVerifier()
+                    var payload: String? = null
+                    val callback = OAuthLocalServer.authenticate(
+                        authorizationUrl = { redirectUri ->
+                            val page = api.loginRequest(redirectUri, state, verifier)
+                                ?: error("Set a Simkl client ID first")
+                            payload = page.payload
+                            page.url
+                        },
+                        expectedState = state,
+                        expectedIssuer = "https://simkl.com",
+                    ) ?: error("Sign-in was cancelled or timed out")
+                    val token = api.login(callback, payload) ?: error("Simkl sign-in did not return a token")
+                    val user = api.user(token) ?: error("Could not verify the Simkl account")
+                    AccountManager.updateAccounts(api.idPrefix, arrayOf(AuthData(user, token)))
+                } else {
+                    val page = api.loginRequest() ?: error("Set a ${api.name} client ID first")
+                    if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                        error("Opening a browser is not supported on this system")
+                    }
+                    Desktop.getDesktop().browse(URI(page.url))
+                    pendingTrackerLogin = PendingTrackerLogin(api, page.payload, page.url)
+                }
+            } catch (error: Exception) {
+                trackerLoginMessage = error.message ?: "Sign-in failed"
+            } finally {
+                trackerLoginBusy = false
+            }
+        }
+    }
 
     val scrollState = rememberScrollState()
     var containerCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
@@ -209,6 +253,11 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                     listOf(AccountManager.malApi, AccountManager.aniListApi, AccountManager.simklApi).forEach { api ->
                         val account = cachedAccounts[api.idPrefix]?.firstOrNull()
                         val clientIdSet = trackerClientId(api).isNotBlank()
+                        val expired = account?.token?.isAccessTokenExpired() == true &&
+                            account.token.isRefreshTokenExpired()
+                        var automaticSyncEnabled by remember(api.idPrefix) {
+                            mutableStateOf(TrackerSyncPreferences.isAutomaticSyncEnabled(api.idPrefix))
+                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -237,48 +286,15 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                                         if (account == null) {
                                             Button(
                                                 enabled = clientIdSet && !trackerLoginBusy,
-                                                onClick = {
-                                                    trackerLoginMessage = null
-                                                    trackerAccountMessage = null
-                                                    scope.launch {
-                                                        trackerLoginBusy = true
-                                                        try {
-                                                            if (api is SimklApi) {
-                                                                val verifier = AuthAPI.generateCodeVerifier()
-                                                                val state = AuthAPI.generateCodeVerifier()
-                                                                var payload: String? = null
-                                                                val callback = OAuthLocalServer.authenticate(
-                                                                    authorizationUrl = { redirectUri ->
-                                                                        val page = api.loginRequest(redirectUri, state, verifier)
-                                                                            ?: error("Set a Simkl client ID first")
-                                                                        payload = page.payload
-                                                                        page.url
-                                                                    },
-                                                                    expectedState = state,
-                                                                    expectedIssuer = "https://simkl.com",
-                                                                ) ?: error("Sign-in was cancelled or timed out")
-                                                                val token = api.login(callback, payload) ?: error("Simkl sign-in did not return a token")
-                                                                val user = api.user(token) ?: error("Could not verify the Simkl account")
-                                                                AccountManager.updateAccounts(api.idPrefix, arrayOf(AuthData(user, token)))
-                                                            } else {
-                                                                val page = api.loginRequest() ?: error("Set a ${api.name} client ID first")
-                                                                if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                                                                    error("Opening a browser is not supported on this system")
-                                                                }
-                                                                Desktop.getDesktop().browse(URI(page.url))
-                                                                pendingTrackerLogin = PendingTrackerLogin(api, page.payload, page.url)
-                                                            }
-                                                        } catch (error: Exception) {
-                                                            trackerLoginMessage = error.message ?: "Sign-in failed"
-                                                        } finally {
-                                                            trackerLoginBusy = false
-                                                        }
-                                                    }
-                                                },
+                                                onClick = { startTrackerLogin(api) },
                                             ) {
                                                 Text(if (trackerLoginBusy) "Signing in…" else "Connect")
                                             }
                                         } else {
+                                            Button(
+                                                enabled = clientIdSet && !trackerLoginBusy,
+                                                onClick = { startTrackerLogin(api) },
+                                            ) { Text(if (expired) "Reauthorize" else "Reconnect") }
                                             OutlinedButton(
                                                 onClick = {
                                                     trackerAccountMessage = null
@@ -311,7 +327,9 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                                 }
                                 if (account != null) {
                                     Text(
-                                        if (api is SimklApi) {
+                                        if (expired) {
+                                            "This saved session has expired. Reauthorize to replace it; cancelling or failing leaves the existing account record unchanged."
+                                        } else if (api is SimklApi) {
                                             "Disconnect requests remote token revocation and clears the protected local credentials. Simkl does not confirm whether a grant was active."
                                         } else {
                                             "This clears the protected local credentials; revoke the app separately in ${api.name} account settings to cancel remote access."
@@ -319,6 +337,54 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Automatic playback sync", style = MaterialTheme.typography.bodyMedium)
+                                            Text(
+                                                "Send watched items only after the local watched threshold; local history is never imported from a tracker.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Switch(
+                                            checked = automaticSyncEnabled,
+                                            onCheckedChange = { enabled ->
+                                                automaticSyncEnabled = enabled
+                                                TrackerSyncPreferences.setAutomaticSyncEnabled(api.idPrefix, enabled)
+                                            },
+                                        )
+                                    }
+                                    syncHealth[api.idPrefix]?.let { health ->
+                                        val healthColor = if (health.outcome == TrackerSyncOutcome.SYNCED) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                        Text(
+                                            "Last sync: ${health.outcome.name.lowercase().replace('_', ' ')} — ${health.detail}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = healthColor,
+                                        )
+                                        if (health.outcome == TrackerSyncOutcome.RETRYABLE || health.outcome == TrackerSyncOutcome.PROVIDER_REJECTED) {
+                                            TextButton(
+                                                enabled = !trackerRetryBusy,
+                                                onClick = {
+                                                    scope.launch {
+                                                        trackerRetryBusy = true
+                                                        try {
+                                                            com.lagradost.cloudstream3.desktop.ui.screens.player.TrackerPlaybackSyncCoordinator.retryLast()
+                                                        } finally {
+                                                            trackerRetryBusy = false
+                                                        }
+                                                    }
+                                                },
+                                            ) { Text(if (trackerRetryBusy) "Retrying…" else "Retry last playback sync") }
+                                        }
+                                    }
                                 }
                                 if (trackerLoginBusy && api.idPrefix == "simkl") {
                                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())

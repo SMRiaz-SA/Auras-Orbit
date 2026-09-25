@@ -2,13 +2,27 @@ package com.lagradost.cloudstream3.desktop.ui.screens
 
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.MainAPI
 
 data class CategoryGridContent(
     val items: List<SearchResponse>,
     val pageRequest: MainPageRequest? = null,
     val sectionName: String? = null,
     val hasNext: Boolean = false,
+    val itemProviders: Map<String, MainAPI> = emptyMap(),
+    val mergedSources: List<CategoryGridPageSource> = emptyList(),
 )
+
+data class CategoryGridPageSource(
+    val provider: MainAPI,
+    val request: MainPageRequest,
+    val sectionName: String,
+    val nextPage: Int = 2,
+    val hasNext: Boolean = true,
+    val lastError: String? = null,
+)
+
+fun categoryGridItemKey(providerName: String, url: String): String = "$providerName\u0000$url"
 
 object CategoryGridCache {
     private const val MAX_ENTRIES = 30
@@ -29,8 +43,31 @@ object CategoryGridCache {
         items: List<SearchResponse>,
         request: MainPageRequest,
         hasNext: Boolean,
+        sectionName: String = title,
     ) {
-        putContent(providerName, title, CategoryGridContent(items, request, title, hasNext))
+        putContent(
+            providerName,
+            title,
+            CategoryGridContent(items, request, sectionName, hasNext),
+        )
+    }
+
+    fun putMergedHomeCategory(
+        providerName: String,
+        title: String,
+        items: List<SearchResponse>,
+        itemProviders: Map<String, MainAPI>,
+        sources: List<CategoryGridPageSource>,
+    ) {
+        putContent(
+            providerName,
+            title,
+            CategoryGridContent(
+                items = items,
+                itemProviders = itemProviders,
+                mergedSources = sources,
+            ),
+        )
     }
 
     private fun putContent(providerName: String, title: String, content: CategoryGridContent) {

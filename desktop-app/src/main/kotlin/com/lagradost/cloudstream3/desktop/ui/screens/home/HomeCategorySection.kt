@@ -66,6 +66,7 @@ fun HomeCategorySection(
         if (isLoading) {
             if (isFirstPage) {
                 HomeHeroCarouselPlaceholder()
+                afterHeroContent()
             } else {
                 CategoryRowPlaceholder(
                     title = pageData.name,
@@ -74,11 +75,16 @@ fun HomeCategorySection(
                 )
             }
         } else {
-            if (hp != null && hp.items.isNotEmpty()) {
-                hp.items.forEachIndexed { sectionIndex, section ->
+            val visibleSections = hp?.items.orEmpty().filter { section ->
+                val title = section.name.takeIf { it.isNotBlank() } ?: pageData.name
+                !isHiddenHomeCatalogTitle(title)
+            }
+
+            if (visibleSections.isNotEmpty()) {
+                visibleSections.forEachIndexed { sectionIndex, section ->
                     if (heroEnabled && isFirstPage && sectionIndex == 0 && section.list.size >= 3) {
-                        val heroCandidates = remember(hp.items) {
-                            hp.items.flatMap { it.list }.distinctBy { it.url }.take(30)
+                        val heroCandidates = remember(visibleSections) {
+                            visibleSections.flatMap { it.list }.distinctBy { it.url }.take(30)
                         }
                         HomeHeroCarousel(
                             items = heroCandidates,
@@ -150,7 +156,7 @@ fun HomeCategorySection(
                                 modifier = Modifier.fillMaxWidth(),
                                 title = titleStr,
                                 itemCount = section.list.size,
-                                onViewAll = { onViewAll(provider, pageData, section.name, section.list, hp.hasNext) },
+                                onViewAll = { onViewAll(provider, pageData, section.name, section.list, hp?.hasNext == true) },
                                 rowContentPadding = androidx.compose.foundation.layout.PaddingValues(
                                     horizontal = if (isCompact) 4.dp else 10.dp,
                                     vertical = if (isCompact) 4.dp else (4.dp + (homeVerticalSpacingDp * 0.25f).dp),
@@ -215,6 +221,9 @@ fun HomeCategorySection(
                         Text("Retry", style = MaterialTheme.typography.labelSmall)
                     }
                 }
+                if (isFirstPage) afterHeroContent()
+            } else if (isFirstPage) {
+                afterHeroContent()
             }
         }
     }

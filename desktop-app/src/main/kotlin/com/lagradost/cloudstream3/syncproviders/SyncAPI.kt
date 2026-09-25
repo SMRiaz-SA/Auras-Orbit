@@ -30,6 +30,12 @@ abstract class SyncAPI : AuthAPI() {
      * This should specify what sync watch types can be used with this service. */
     open val supportedWatchTypes: Set<SyncWatchType> = SyncWatchType.entries.toSet()
 
+    /** Media kinds this provider can search, list, and mutate through this adapter. */
+    open val supportedMediaTypes: Set<SyncMediaType> = setOf(SyncMediaType.ANIME)
+
+    /** Whether playback can advance a provider's count without exact episode coordinates. */
+    open val supportsCountBasedProgress: Boolean = false
+
     /** Whether this provider can preserve a set of individually watched episodes. */
     open val supportsExactEpisodeProgress: Boolean = false
 
@@ -57,6 +63,12 @@ abstract class SyncAPI : AuthAPI() {
         media: SyncMediaIdentity,
         episodes: List<WatchedEpisodeEvent>,
     ): Boolean = false
+
+    /**
+     * Returns the provider's exact watched episode set when the provider exposes one.
+     * Count-only providers intentionally return null instead of manufacturing coordinates.
+     */
+    open suspend fun watchedEpisodeSelection(auth: AuthData?, id: String): Set<SyncEpisode>? = null
 
     /** Get the current status of an item */
     @Throws
@@ -259,5 +271,7 @@ abstract class SyncAPI : AuthAPI() {
         val plot: String? = null,
         override var score: Score? = null,
         val tags: List<String>? = null,
+        /** Required by providers such as Simkl when a title is edited or added. */
+        val mediaType: SyncMediaType? = null,
     ) : SearchResponse
 }

@@ -43,6 +43,8 @@ class MalApi : SyncAPI() {
         SyncWatchType.DROPPED,
         SyncWatchType.PLAN_TO_WATCH,
     )
+    override val supportedMediaTypes = setOf(SyncAPI.SyncMediaType.ANIME)
+    override val supportsCountBasedProgress = true
 
     private val clientId: String get() = TrackerClientConfig.malClientId()
 
@@ -243,6 +245,7 @@ class MalApi : SyncAPI() {
             quality = null,
             releaseDate = node.startDate.toEpochSeconds()?.let { java.util.Date(it * 1000) },
             plot = node.synopsis,
+            mediaType = SyncAPI.SyncMediaType.ANIME,
         )
     }
 
