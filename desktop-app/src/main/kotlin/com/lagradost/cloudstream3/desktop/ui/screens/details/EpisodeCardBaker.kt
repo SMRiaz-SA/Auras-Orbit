@@ -28,8 +28,10 @@ object EpisodeCardBaker {
     fun getFromCache(
         key: String,
         shouldHideSpoilers: Boolean,
+        width: Int = 480,
+        height: Int = 405,
     ): ImageBitmap? {
-        val cacheKey = "$key-$shouldHideSpoilers"
+        val cacheKey = "$key-$shouldHideSpoilers-$width-$height"
         synchronized(lock) {
             return memoryCache[cacheKey]
         }
@@ -40,10 +42,10 @@ object EpisodeCardBaker {
         srcBitmap: Bitmap,
         shouldHideSpoilers: Boolean,
         width: Int = 480,
-        height: Int = 405, // Aspect ratio 16:13.5
+        height: Int = 405,
     ): ImageBitmap? {
         if (srcBitmap.width <= 0 || srcBitmap.height <= 0) return null
-        val cacheKey = "$key-$shouldHideSpoilers"
+        val cacheKey = "$key-$shouldHideSpoilers-$width-$height"
         synchronized(lock) {
             val cached = memoryCache[cacheKey]
             if (cached != null) return cached

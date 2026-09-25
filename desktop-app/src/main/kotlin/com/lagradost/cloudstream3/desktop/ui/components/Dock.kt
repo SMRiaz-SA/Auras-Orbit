@@ -33,6 +33,7 @@ fun DockItemsList(
     indicatorAtTop: Boolean = false,
     onNavigate: (com.lagradost.cloudstream3.desktop.ui.navigation.Config) -> Unit,
     onSearchClick: () -> Unit,
+    expanded: Boolean = false,
 ) {
     val dockOrder by AppearanceConfig.dockItemOrder.collectAsState()
     val dockDisabled by AppearanceConfig.dockDisabledItems.collectAsState()
@@ -45,6 +46,7 @@ fun DockItemsList(
                     label = com.lagradost.cloudstream3.desktop.utils.DesktopStrings.HOME,
                     selected = currentTitle == "Home",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Home) },
                 )
@@ -55,6 +57,7 @@ fun DockItemsList(
                     label = "Explore",
                     selected = currentTitle == "Explore & Catalogs",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Explore) },
                 )
@@ -65,6 +68,7 @@ fun DockItemsList(
                     label = com.lagradost.cloudstream3.desktop.utils.DesktopStrings.SEARCH,
                     selected = currentTitle == "Search",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = onSearchClick,
                 )
@@ -75,6 +79,7 @@ fun DockItemsList(
                     label = com.lagradost.cloudstream3.desktop.utils.DesktopStrings.LIBRARY,
                     selected = currentTitle == "Library",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Library) },
                 )
@@ -88,6 +93,7 @@ fun DockItemsList(
                     label = "Downloads",
                     selected = currentTitle == "Downloads",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     badge = if (downloadingCount > 0) downloadingCount.toString() else null,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Downloads) },
@@ -99,6 +105,7 @@ fun DockItemsList(
                     label = "Watch History",
                     selected = currentTitle == "Watch History",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.History) },
                 )
@@ -109,6 +116,7 @@ fun DockItemsList(
                     label = "Extensions",
                     selected = currentTitle == "Extensions",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Extensions()) },
                 )
@@ -119,6 +127,7 @@ fun DockItemsList(
                     label = com.lagradost.cloudstream3.desktop.utils.DesktopStrings.SETTINGS,
                     selected = currentTitle == "Settings",
                     isHorizontal = isHorizontal,
+                    expanded = expanded,
                     indicatorAtTop = indicatorAtTop,
                     onClick = { onNavigate(com.lagradost.cloudstream3.desktop.ui.navigation.Config.Settings) },
                 )
@@ -136,6 +145,7 @@ fun DockItem(
     badge: String? = null,
     isHorizontal: Boolean = false,
     indicatorAtTop: Boolean = false,
+    expanded: Boolean = false,
     onClick: () -> Unit,
 ) {
     val itemInteraction = remember { MutableInteractionSource() }
@@ -160,7 +170,9 @@ fun DockItem(
     Box(
         modifier = Modifier
             .then(
-                if (isHorizontal) {
+                if (expanded) {
+                    Modifier.fillMaxWidth().height(44.dp)
+                } else if (isHorizontal) {
                     Modifier.size(42.dp)
                 } else {
                     Modifier.fillMaxWidth().height(42.dp)
@@ -185,8 +197,25 @@ fun DockItem(
             )
         }
 
-        // Active indicator pill
-        AnimatedVisibility(
+        if (expanded && selected) {
+            Box(
+                modifier = Modifier.align(Alignment.CenterStart)
+                    .padding(start = 1.dp).width(3.dp).height(20.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+        }
+
+        if (expanded && selected) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            )
+        }
+
+        if (!expanded) AnimatedVisibility(
             visible = selected,
             enter = fadeIn() + when {
                 indicatorAtTop -> slideInVertically { -it / 2 }
@@ -222,7 +251,27 @@ fun DockItem(
             )
         }
 
-        Column(
+        if (expanded) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = label,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(13.dp))
+                Text(
+                    text = label,
+                    color = if (selected) theme.TextPrimary else theme.TextMuted,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                )
+            }
+        } else Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,

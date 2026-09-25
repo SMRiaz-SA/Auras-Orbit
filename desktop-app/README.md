@@ -1,6 +1,6 @@
-# CloudStream Desktop App
+# Auras Orbit Desktop App
 
-This module contains the primary CloudStream Desktop client, built using Compose for Desktop and Kotlin Multiplatform.
+This module contains the Auras Orbit desktop client, built using Compose for Desktop and Kotlin Multiplatform.
 
 ## Overview
 

@@ -1,9 +1,12 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.player
 
 import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.desktop.domain.history.interactor.UpsertWatchHistory
 import com.lagradost.cloudstream3.desktop.domain.player.interactor.SavePlaybackProgress
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
+import kotlinx.coroutines.launch
 
 internal object WatchHistoryCoordinator {
 
@@ -18,13 +21,23 @@ internal object WatchHistoryCoordinator {
         hasNextEpisode: Boolean,
         nextEpisode: Episode?,
         saveProgress: SavePlaybackProgress,
+        loadResponse: LoadResponse? = null,
         forceNotify: Boolean = false,
     ) {
+        val previouslyWatched = history.episodeId?.let { episodeId ->
+            DesktopDataStore.getEpisodeWatched(history.parentId, episodeId)
+        }?.let { UpsertWatchHistory.isWatched(it.position, it.duration) } ?: false
         val currentDurSec = history.duration
         val currentPosSec = history.position
         val percentage = if (currentDurSec > 0) currentPosSec.toFloat() / currentDurSec else 0f
 
         saveProgress.await(history, forceNotify = forceNotify)
+
+        if (!previouslyWatched && UpsertWatchHistory.isWatched(history.position, history.duration) && loadResponse != null) {
+            com.lagradost.cloudstream3.desktop.utils.appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                TrackerPlaybackSyncCoordinator.syncWatchedHistory(loadResponse, history.parentId, history)
+            }
+        }
 
         if (percentage >= 0.90f && hasNextEpisode && nextEpisode != null) {
             val existingNext = DesktopDataStore.getEpisodeWatched(

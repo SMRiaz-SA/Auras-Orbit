@@ -2,6 +2,7 @@ package com.lagradost.runtime.loader
 
 import com.lagradost.common.logging.AppLogger
 import org.objectweb.asm.*
+import org.objectweb.asm.commons.AdviceAdapter
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -55,7 +56,7 @@ object PluginBytecodeTransformer {
                                     exceptions: Array<out String>?,
                                 ): MethodVisitor {
                                     val mv = super.visitMethod(access, fixMethodName(name), descriptor, signature, exceptions)
-                                    return object : MethodVisitor(Opcodes.ASM9, mv) {
+                                    return object : AdviceAdapter(Opcodes.ASM9, mv, access, name, descriptor) {
                                         private fun isUIClass(owner: String): Boolean {
                                             return owner.startsWith("android/widget/") ||
                                                 owner.startsWith("android/view/") ||
@@ -91,6 +92,50 @@ object PluginBytecodeTransformer {
                                             descriptor: String,
                                             isInterface: Boolean,
                                         ) {
+                                            if (owner == "java/io/File" && opcode == Opcodes.INVOKESTATIC &&
+                                                (methodName == "createTempFile" || methodName == "listRoots")) {
+                                                super.visitMethodInsn(
+                                                    Opcodes.INVOKESTATIC,
+                                                    "com/lagradost/runtime/loader/stubs/PluginFileSecurityStub",
+                                                    methodName,
+                                                    descriptor,
+                                                    false,
+                                                )
+                                                return
+                                            }
+
+                                            val argumentTypes = Type.getArgumentTypes(descriptor)
+                                            val fileReceiver = owner == "java/io/File" && opcode != Opcodes.INVOKESTATIC && methodName != "<init>"
+                                            val fileArguments = argumentTypes.any { it.descriptor == "Ljava/io/File;" }
+                                            if (fileReceiver || fileArguments) {
+                                                val locals = IntArray(argumentTypes.size)
+                                                for (i in argumentTypes.indices.reversed()) {
+                                                    locals[i] = newLocal(argumentTypes[i])
+                                                    storeLocal(locals[i], argumentTypes[i])
+                                                }
+                                                if (fileReceiver) {
+                                                    super.visitMethodInsn(
+                                                        Opcodes.INVOKESTATIC,
+                                                        "com/lagradost/runtime/loader/stubs/PluginFileSecurityStub",
+                                                        "checkFile",
+                                                        "(Ljava/io/File;)Ljava/io/File;",
+                                                        false,
+                                                    )
+                                                }
+                                                for (i in argumentTypes.indices) {
+                                                    loadLocal(locals[i], argumentTypes[i])
+                                                    if (argumentTypes[i].descriptor == "Ljava/io/File;") {
+                                                        super.visitMethodInsn(
+                                                            Opcodes.INVOKESTATIC,
+                                                            "com/lagradost/runtime/loader/stubs/PluginFileSecurityStub",
+                                                            "checkFile",
+                                                            "(Ljava/io/File;)Ljava/io/File;",
+                                                            false,
+                                                        )
+                                                    }
+                                                }
+                                            }
+
                                             if (methodName != "<init>" && isUIClass(owner) && methodName != "getSharedPreferences") {
                                                 val argTypes = Type.getArgumentTypes(descriptor)
                                                 val retType = Type.getReturnType(descriptor)

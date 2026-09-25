@@ -242,8 +242,11 @@ class PluginSecurityVerifierTest {
 
     @Test
     fun `verify real installed extensions pass pure whitelist verification`() {
-        val appData = System.getenv("APPDATA") ?: return
-        val extRoot = File(appData, "CloudStreamDesktop/Extensions")
+        // This is an opt-in integration check. Unit tests must not inspect or fail on
+        // whatever third-party extensions happen to be installed on the developer's PC.
+        if (!System.getenv("RUN_INSTALLED_PLUGIN_SECURITY_QA").equals("true", ignoreCase = true)) return
+
+        val extRoot = com.lagradost.common.platform.PlatformPaths.extensionsDir
         if (!extRoot.exists()) return
 
         val jars = extRoot.walkTopDown()
@@ -252,6 +255,10 @@ class PluginSecurityVerifierTest {
 
         val violations = mutableListOf<String>()
         for (jar in jars) {
+            // Match production behavior: a plugin explicitly trusted by the user is
+            // intentionally allowed to bypass static verification.
+            if (com.lagradost.runtime.loader.ExtensionLoader.isTrusted(jar)) continue
+
             try {
                 PluginSecurityVerifier.verifyJar(jar, jar.nameWithoutExtension)
             } catch (e: SecurityException) {

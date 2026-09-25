@@ -177,7 +177,7 @@ fun RepositoriesTab(viewModel: ExtensionsViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    val cleanRepo = remember(repo.name) { repo.name.replace(Regex("[^a-zA-Z0-9.-]"), "_") }
+                    val cleanRepo = remember(repo.name) { com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.safeDirectoryName(repo.name) }
                     val installedPluginKeys = remember(installedPlugins) {
                         val set = mutableSetOf<String>()
                         installedPlugins.forEach { installed ->

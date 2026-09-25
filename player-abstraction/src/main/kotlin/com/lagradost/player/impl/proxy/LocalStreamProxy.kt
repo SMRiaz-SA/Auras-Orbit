@@ -187,6 +187,20 @@ object LocalStreamProxy {
                 get("/trailer") {
                     val id = call.request.queryParameters["id"] ?: ""
                     val u = call.request.queryParameters["u"] ?: ""
+                    if (id.isNotBlank() && !id.matches(Regex("[A-Za-z0-9_-]{11}"))) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@get
+                    }
+                    if (id.isBlank() && !u.startsWith("https://", ignoreCase = true) &&
+                        !u.startsWith("http://", ignoreCase = true)) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@get
+                    }
+                    val escapedUrl = u.replace("&", "&amp;")
+                        .replace("\"", "&quot;")
+                        .replace("'", "&#39;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
                     val html = if (id.isNotBlank()) {
                         """
                         <!DOCTYPE html>
@@ -241,7 +255,7 @@ object LocalStreamProxy {
                             </style>
                         </head>
                         <body style="background: #000;">
-                            <video src="$u" autoplay muted controls playsinline style="background: #000;"></video>
+                            <video src="$escapedUrl" autoplay muted controls playsinline style="background: #000;"></video>
                             <script>
                                 document.addEventListener('DOMContentLoaded', function() {
                                     if (window.chrome && window.chrome.webview) {

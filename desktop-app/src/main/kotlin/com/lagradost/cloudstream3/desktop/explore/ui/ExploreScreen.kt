@@ -145,7 +145,10 @@ fun ExploreScreen(
                 }
             } else if (uiState.availableTypes.isEmpty()) {
                 // Empty state if no catalog addon is enabled
-                EmptyCatalogState(onNavigateToSettings = { onNavigate(Config.Settings) })
+                EmptyCatalogState(
+                    onNavigateToSettings = { onNavigate(Config.Settings) },
+                    onOpenGenreBrowse = { onNavigate(Config.GenreBrowse) },
+                )
             } else {
                 // Row 1: Primary Scope & Search Controls (~34dp)
                 Row(
@@ -223,6 +226,10 @@ fun ExploreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        TextButton(onClick = { onNavigate(Config.GenreBrowse) }) {
+                            Text("Genres", fontSize = 11.sp)
+                        }
+
                         ExploreSearchField(
                             query = uiState.searchQuery,
                             onQueryChange = { viewModel.onEvent(ExploreUiEvent.UpdateSearchQuery(it)) },
@@ -780,6 +787,7 @@ private fun ExploreSearchField(
 @Composable
 private fun EmptyCatalogState(
     onNavigateToSettings: () -> Unit,
+    onOpenGenreBrowse: () -> Unit,
 ) {
     val theme = LocalDesktopTheme.current
 
@@ -824,6 +832,13 @@ private fun EmptyCatalogState(
                 shape = RoundedCornerShape(8.dp),
             ) {
                 Text("Open Addons Settings", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = onOpenGenreBrowse,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text("Browse Genres", fontSize = 12.sp)
             }
         }
     }

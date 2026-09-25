@@ -528,7 +528,7 @@ fun BrowseTab(
                             ?: uiState.remotePluginIcons[plugin.internalName]
                             ?: uiState.remotePluginIcons[plugin.name]
 
-                        val cleanRepo = remember(repoName) { repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_") }
+                        val cleanRepo = remember(repoName) { com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.safeDirectoryName(repoName) }
                         val isPluginInstalled = remember(plugin.internalName, cleanRepo, installedPluginKeys) {
                             installedPluginKeys.contains("$cleanRepo:${plugin.internalName}") ||
                                 installedPluginKeys.contains("$repoName:${plugin.internalName}") ||

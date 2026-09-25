@@ -13,6 +13,7 @@ data class DesktopAppearance(
     val isLightMode: Boolean = false,
     val amoledMode: Boolean = false,
     val dockPosition: DockPosition = DockPosition.LEFT,
+    val dockCollapsed: Boolean = false,
     val navigationStyle: NavigationStyle = NavigationStyle.FLOATING_DOCK,
     val ambientGlowEnabled: Boolean = false,
     val ambientGlowIntensity: Float = 0.15f,
@@ -39,6 +40,7 @@ fun rememberDesktopAppearance(): DesktopAppearance {
     val isLightMode by AppearanceConfig.isLightMode.collectAsState()
     val amoledMode by AppearanceConfig.amoledMode.collectAsState()
     val dockPosition by AppearanceConfig.dockPosition.collectAsState()
+    val dockCollapsed by AppearanceConfig.dockCollapsed.collectAsState()
     val navigationStyle by AppearanceConfig.navigationStyle.collectAsState()
     val ambientGlowEnabled by AppearanceConfig.ambientGlowEnabled.collectAsState()
     val ambientGlowIntensity by AppearanceConfig.ambientGlowIntensity.collectAsState()
@@ -61,6 +63,7 @@ fun rememberDesktopAppearance(): DesktopAppearance {
         isLightMode,
         amoledMode,
         dockPosition,
+        dockCollapsed,
         navigationStyle,
         ambientGlowEnabled,
         ambientGlowIntensity,
@@ -83,6 +86,7 @@ fun rememberDesktopAppearance(): DesktopAppearance {
             isLightMode = isLightMode,
             amoledMode = amoledMode,
             dockPosition = dockPosition,
+            dockCollapsed = dockCollapsed,
             navigationStyle = navigationStyle,
             ambientGlowEnabled = ambientGlowEnabled,
             ambientGlowIntensity = ambientGlowIntensity,

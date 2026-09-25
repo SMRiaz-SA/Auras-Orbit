@@ -44,6 +44,7 @@ dependencies {
     // ASM Bytecode Manipulation for Static Verification
     implementation("org.ow2.asm:asm:9.6")
     implementation("org.ow2.asm:asm-tree:9.6")
+    implementation("org.ow2.asm:asm-commons:9.6")
 
     // Rhino JS Engine Sandbox
     implementation(libs.rhino)

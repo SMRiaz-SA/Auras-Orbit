@@ -94,4 +94,21 @@ class PluginFileSecurityTest {
             PluginFileSecurityStub.checkFile(badFile)
         }
     }
+
+    @Test
+    fun `temporary files and listed roots stay inside plugin storage`() {
+        assertEquals(listOf(storageRoot), PluginFileSecurityStub.listRoots().toList())
+        val tempFile = PluginFileSecurityStub.createTempFile("sandbox", ".tmp")
+        assertEquals(storageRoot, tempFile.parentFile.canonicalFile)
+        tempFile.delete()
+        assertFailsWith<SecurityException> {
+            PluginFileSecurityStub.createTempFile("sandbox", ".tmp", tempDir)
+        }
+    }
+
+    @Test
+    fun `plugin name traversal cannot move its storage outside Extensions`() {
+        val root = PluginFileSecurityStub.getStorageRootForPlugin("..")
+        assertEquals(File(tempDir, "Extensions/_/storage").canonicalFile, root)
+    }
 }

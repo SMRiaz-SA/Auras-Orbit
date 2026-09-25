@@ -146,6 +146,7 @@ class EmbeddedPlayerViewModel(
                         hasNextEpisode = hasNextEpisode,
                         nextEpisode = nextEpisodeData,
                         saveProgress = savePlaybackProgress,
+                        loadResponse = currentData.loadResponse,
                         forceNotify = true,
                     )
                 } catch (e: Exception) {
@@ -292,6 +293,18 @@ class EmbeddedPlayerViewModel(
         // Re-read the pref fresh so a mid-session toggle takes effect immediately.
         val autoPlay = DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_AUTO_PLAY) ?: true
         val state = uiState.value
+        val currentData = state.launchData
+        val durationSeconds = playerState.durationMs.value / 1000L
+        if (currentData?.loadResponse != null && currentData.history.episode != null && durationSeconds > 0) {
+            savePosition(
+                currentData.history.copy(
+                    position = durationSeconds,
+                    duration = durationSeconds,
+                    updateTime = System.currentTimeMillis(),
+                ),
+                forceNotify = true,
+            )
+        }
         val hasNext = state.hasNextEpisode
         val isOffline = state.launchData?.history?.apiName in listOf("Offline", "Local")
         // When loadResponse is null (history / deep-link launch), episodes is empty so
@@ -454,17 +467,24 @@ class EmbeddedPlayerViewModel(
     private fun savePosition(history: WatchHistory, forceNotify: Boolean = false) {
         saveJob?.cancel()
         saveJob = viewModelScope.launch(Dispatchers.IO) {
+            val currentData = uiState.value.launchData
             WatchHistoryCoordinator.saveWithNextEpisodeQueue(
                 history = history,
                 hasNextEpisode = uiState.value.hasNextEpisode,
                 nextEpisode = uiState.value.nextEpisodeData,
                 saveProgress = savePlaybackProgress,
+                loadResponse = currentData?.loadResponse,
                 forceNotify = forceNotify,
             )
         }
     }
 
     private fun init(initialData: VideoLaunchData) {
+        initialData.loadResponse?.let { response ->
+            com.lagradost.cloudstream3.desktop.utils.appScope.launch(Dispatchers.IO) {
+                TrackerPlaybackSyncCoordinator.syncWatchedHistory(response, initialData.history.parentId)
+            }
+        }
         linkRetries.clear()
         loadLinksJob?.cancel()
         countdownJob?.cancel()

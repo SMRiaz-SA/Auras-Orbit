@@ -2,6 +2,7 @@ package com.lagradost.runtime.loader
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -73,6 +74,40 @@ class SafeComputeClassWriterTest {
         java.util.zip.ZipFile(tempJar).use { zip ->
             val entry = zip.getEntry("com/test/SamplePlugin.class")
             assertNotNull(entry)
+        }
+    }
+
+    @Test
+    fun testFileOperationsAreGuardedAfterTransformation() {
+        val tempJar = File.createTempFile("test_file_guard", ".jar")
+        tempJar.deleteOnExit()
+        val writer = ClassWriter(ClassWriter.COMPUTE_FRAMES or ClassWriter.COMPUTE_MAXS)
+        writer.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "com/test/FilePlugin", null, "java/lang/Object", null)
+        val method = writer.visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC, "remove", "(Ljava/io/File;)Z", null, null)
+        method.visitCode()
+        method.visitVarInsn(Opcodes.ALOAD, 0)
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/File", "delete", "()Z", false)
+        method.visitInsn(Opcodes.IRETURN)
+        method.visitMaxs(0, 0)
+        method.visitEnd()
+        writer.visitEnd()
+        ZipOutputStream(FileOutputStream(tempJar)).use { zip ->
+            zip.putNextEntry(ZipEntry("com/test/FilePlugin.class"))
+            zip.write(writer.toByteArray())
+            zip.closeEntry()
+        }
+
+        PluginBytecodeTransformer.transform(tempJar)
+
+        java.util.zip.ZipFile(tempJar).use { zip ->
+            val reader = org.objectweb.asm.ClassReader(zip.getInputStream(zip.getEntry("com/test/FilePlugin.class")))
+            val node = org.objectweb.asm.tree.ClassNode()
+            reader.accept(node, 0)
+            val calls = node.methods.first { it.name == "remove" }.instructions
+                .filterIsInstance<org.objectweb.asm.tree.MethodInsnNode>()
+                .toList()
+            assertTrue(calls.any { it.owner.endsWith("PluginFileSecurityStub") && it.name == "checkFile" })
+            assertTrue(calls.any { it.owner == "java/io/File" && it.name == "delete" })
         }
     }
 }

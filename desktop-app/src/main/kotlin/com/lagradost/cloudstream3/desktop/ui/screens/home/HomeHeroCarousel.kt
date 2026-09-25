@@ -111,8 +111,6 @@ fun HomeHeroCarousel(
     }
 
     val isLightMode = LocalDesktopTheme.current.isLightMode
-    val dockPosition by AppearanceConfig.dockPosition.collectAsState()
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -121,24 +119,19 @@ fun HomeHeroCarousel(
     ) {
         val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
         val safeBottom = safeArea.calculateBottomPadding()
+        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
         val isCompact = maxWidth < 600.dp
         val autoAdvanceIntervalMs = autoSlideDelay * 1000L
 
-        val paddingStart = if (isCompact) {
-            12.dp
-        } else if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) {
-            98.dp
-        } else {
-            32.dp
-        }
-
-        val paddingEnd = if (isCompact) {
-            12.dp
-        } else if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) {
-            98.dp
-        } else {
-            32.dp
-        }
+        val compactPadding = if (isCompact) 12.dp else 0.dp
+        val paddingStart = maxOf(
+            safeArea.calculateStartPadding(layoutDirection),
+            compactPadding,
+        )
+        val paddingEnd = maxOf(
+            safeArea.calculateEndPadding(layoutDirection),
+            compactPadding,
+        )
 
         val thumbnailHeight = (maxHeight * 0.22f).coerceIn(160.dp, 280.dp)
         val thumbnailsMaxWidth = if (isCompact) maxWidth - paddingStart - paddingEnd else maxWidth * 0.55f

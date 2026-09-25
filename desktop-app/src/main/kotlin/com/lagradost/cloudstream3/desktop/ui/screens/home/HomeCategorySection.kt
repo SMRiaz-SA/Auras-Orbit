@@ -33,7 +33,7 @@ fun HomeCategorySection(
     outerPadding: androidx.compose.ui.unit.Dp = 0.dp,
     afterHeroContent: @Composable () -> Unit = {},
     isHistoryVisible: Boolean = false,
-    onViewAll: (MainAPI, String, List<SearchResponse>) -> Unit,
+    onViewAll: (MainAPI, com.lagradost.cloudstream3.MainPageData, String, List<SearchResponse>, Boolean) -> Unit,
     onItemClick: (MainAPI, SearchResponse, String?, Boolean) -> Unit,
 ) {
     var visible by remember { mutableStateOf(false) }
@@ -70,6 +70,7 @@ fun HomeCategorySection(
                 CategoryRowPlaceholder(
                     title = pageData.name,
                     showLargeHeader = !isFirstPage,
+                    outerPadding = outerPadding,
                 )
             }
         } else {
@@ -97,10 +98,16 @@ fun HomeCategorySection(
                         val titleStr = section.name.takeIf { it.isNotBlank() } ?: pageData.name
                         val showLargeHeader = sectionIndex == 0 && !isFirstPage && !titleStr.equals(pageData.name, ignoreCase = true)
 
-                        val dockPosition by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.dockPosition.collectAsState()
-                        // 88.dp base + 10.dp internal (used by Category headers) => visually aligns with 98.dp
-                        val paddingStart = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) 88.dp else 22.dp
-                        val paddingEnd = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) 88.dp else 22.dp
+                        val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+                        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+                        val paddingStart = maxOf(
+                            safeArea.calculateStartPadding(layoutDirection),
+                            outerPadding,
+                        )
+                        val paddingEnd = maxOf(
+                            safeArea.calculateEndPadding(layoutDirection),
+                            outerPadding,
+                        )
 
                         if (showLargeHeader) {
                             Text(
@@ -115,14 +122,10 @@ fun HomeCategorySection(
                         val isHorizontalCategory = pageData.horizontalImages || section.list.any { it.type == com.lagradost.cloudstream3.TvType.Live || it.posterHeaders?.containsKey("landscape") == true }
                         val categoryAspectRatio = if (isHorizontalCategory) 16f / 9f else 2f / 3f
 
-                        val isCompactScreen = paddingStart < 50.dp
-                        val effectivePaddingStart = if (isCompactScreen) 8.dp else paddingStart
-                        val effectivePaddingEnd = if (isCompactScreen) 8.dp else paddingEnd
-
                         BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = effectivePaddingStart, end = effectivePaddingEnd),
+                                .padding(start = paddingStart, end = paddingEnd),
                         ) {
                             val availableWidth = this.maxWidth
                             val isCompact = availableWidth < 600.dp
@@ -147,7 +150,7 @@ fun HomeCategorySection(
                                 modifier = Modifier.fillMaxWidth(),
                                 title = titleStr,
                                 itemCount = section.list.size,
-                                onViewAll = { onViewAll(provider, section.name, section.list) },
+                                onViewAll = { onViewAll(provider, pageData, section.name, section.list, hp.hasNext) },
                                 rowContentPadding = androidx.compose.foundation.layout.PaddingValues(
                                     horizontal = if (isCompact) 4.dp else 10.dp,
                                     vertical = if (isCompact) 4.dp else (4.dp + (homeVerticalSpacingDp * 0.25f).dp),
@@ -182,9 +185,16 @@ fun HomeCategorySection(
 
                 }
             } else if (errorMessage != null) {
-                val dockPosition by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.dockPosition.collectAsState()
-                val paddingStart = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) 88.dp else 22.dp
-                val paddingEnd = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) 88.dp else 22.dp
+                val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+                val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+                val paddingStart = maxOf(
+                    safeArea.calculateStartPadding(layoutDirection),
+                    outerPadding,
+                )
+                val paddingEnd = maxOf(
+                    safeArea.calculateEndPadding(layoutDirection),
+                    outerPadding,
+                )
 
                 androidx.compose.foundation.layout.Row(
                     modifier = Modifier

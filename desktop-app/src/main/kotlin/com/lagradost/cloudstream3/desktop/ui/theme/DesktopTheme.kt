@@ -36,7 +36,7 @@ fun accentColorFromName(name: String, customHex: String = "#7C6BFF"): Color = wh
     "Rose" -> Color(0xFFEC4899)
     "Ice" -> Color(0xFF94A3B8)
     "Custom" -> parseHexColor(customHex, Color(0xFF7C6BFF))
-    else -> Color(0xFF7C6BFF) // Purple
+    else -> Color(0xFFA394E1) // Auras muted lavender
 }
 
 fun calculateContrast(c1: Color, c2: Color): Float {

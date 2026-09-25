@@ -1,118 +1,127 @@
 package com.lagradost.cloudstream3.desktop.sync
 
+import com.lagradost.cloudstream3.syncproviders.AuthAPI
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
+import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URI
+import java.nio.charset.StandardCharsets
 
+/** Receives a single OAuth callback on loopback and validates its state and issuer. */
 object OAuthLocalServer {
+    private const val TAG = "OAuthLocalServer"
+    private const val ACCEPT_POLL_MS = 2_000
 
-    /**
-     * TODO: External Tracking (AniList/Simkl) is currently PAUSED.
-     * This object is boilerplate for the future native desktop tracking implementation.
-     * Do not wire this up to the UI until it's ready.
-     *
-     * Spins up a temporary localhost server, opens the user's browser to the [authUrl],
-     * and waits for the OAuth redirect.
-     *
-     * Handles both query string tokens (e.g., ?code=...) and fragment tokens (e.g., #access_token=...)
-     * by injecting a Javascript helper page.
-     *
-     * @return The raw token string or fragment (e.g., "#access_token=123&expires_in=..."), or null if failed/timed out.
-     */
-    suspend fun authenticate(authUrl: String, port: Int = 8080): String? = withContext(Dispatchers.IO) {
-        var serverSocket: ServerSocket? = null
+    suspend fun authenticate(
+        authorizationUrl: (redirectUri: String) -> String,
+        expectedState: String,
+        callbackPath: String = "/oauth/callback",
+        expectedIssuer: String? = null,
+        timeoutMillis: Long = 180_000,
+    ): String? = withContext(Dispatchers.IO) {
+        require(callbackPath.startsWith('/') && !callbackPath.contains('?') && !callbackPath.contains('#'))
+        require(expectedState.isNotBlank())
+
         try {
-            serverSocket = ServerSocket(port)
-            serverSocket.soTimeout = 60_000 // 60 second timeout
-
-            // Open the browser
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(authUrl))
-            } else {
-                AppLogger.e("OAuthLocalServer: Desktop browsing is not supported.")
-                return@withContext null
-            }
-
-            var tokenResult: String? = null
-            var keepRunning = true
-
-            while (keepRunning) {
-                try {
-                    val client = serverSocket.accept()
-                    client.use {
-                        val reader = client.getInputStream().bufferedReader()
-                        val requestLine = reader.readLine() ?: return@use
-
-                        // Parse the requested path
-                        val parts = requestLine.split(" ")
-                        if (parts.size >= 2) {
-                            val path = parts[1]
-
-                            if (path.startsWith("/token?data=")) {
-                                // This is the Javascript AJAX callback with the fragment
-                                tokenResult = path.substringAfter("/token?data=")
-                                val out = client.getOutputStream()
-                                out.write("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nOK".toByteArray())
-                                out.flush()
-                                keepRunning = false
-                            } else if (path.startsWith("/callback")) {
-                                // If it has query parameters directly (Authorization Code Grant)
-                                if (path.contains("?") && !path.endsWith("?")) {
-                                    tokenResult = path.substringAfter("?")
-                                    val out = client.getOutputStream()
-                                    out.write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h2>Success! You can close this tab.</h2></body></html>".toByteArray())
-                                    out.flush()
-                                    keepRunning = false
-                                } else {
-                                    // Implicit Grant (token in fragment). Send JS to capture it.
-                                    val html = """
-                                        <html>
-                                        <head><title>Cloudstream Authentication</title></head>
-                                        <body style="font-family: sans-serif; text-align: center; margin-top: 50px;">
-                                            <h2 id="msg">Authenticating... Please wait.</h2>
-                                            <script>
-                                                if (window.location.hash) {
-                                                    fetch('/token?data=' + encodeURIComponent(window.location.hash))
-                                                        .then(response => {
-                                                            document.getElementById('msg').innerText = "Success! You can safely close this tab.";
-                                                        })
-                                                        .catch(err => {
-                                                            document.getElementById('msg').innerText = "Failed to send token to app.";
-                                                        });
-                                                } else {
-                                                    document.getElementById('msg').innerText = "Error: No token found in URL.";
-                                                }
-                                            </script>
-                                        </body>
-                                        </html>
-                                    """.trimIndent()
-                                    val out = client.getOutputStream()
-                                    out.write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n$html".toByteArray())
-                                    out.flush()
-                                }
-                            } else {
-                                // Ignore favicon or other requests
-                                val out = client.getOutputStream()
-                                out.write("HTTP/1.1 404 Not Found\r\n\r\n".toByteArray())
-                                out.flush()
-                            }
-                        }
-                    }
-                } catch (e: SocketTimeoutException) {
-                    AppLogger.w("OAuthLocalServer: Timed out waiting for browser redirect.")
-                    keepRunning = false
+            ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
+                server.soTimeout = ACCEPT_POLL_MS
+                val redirectUri = "http://127.0.0.1:${server.localPort}$callbackPath"
+                val url = authorizationUrl(redirectUri)
+                if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    AppLogger.e("$TAG: Browser launch is not supported on this system.")
+                    return@withContext null
                 }
+                Desktop.getDesktop().browse(URI(url))
+
+                val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
+                while (System.nanoTime() < deadline) {
+                    currentCoroutineContext().ensureActive()
+                    val remainingMs = ((deadline - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+                    server.soTimeout = minOf(ACCEPT_POLL_MS.toLong(), remainingMs).toInt()
+                    val socket = try {
+                        server.accept()
+                    } catch (_: SocketTimeoutException) {
+                        continue
+                    }
+
+                    socket.use { client ->
+                        client.soTimeout = 3_000
+                        val requestLine = client.getInputStream().bufferedReader(StandardCharsets.US_ASCII).readLine()
+                        val parts = requestLine?.split(' ', limit = 3).orEmpty()
+                        val target = parts.getOrNull(1)
+                        if (parts.firstOrNull() != "GET" || target == null) {
+                            respond(client, 400, "Invalid OAuth callback.")
+                            return@withContext null
+                        }
+
+                        val path = target.substringBefore('?').substringBefore('#')
+                        if (path != callbackPath) {
+                            respond(client, 404, "Not found.")
+                            continue
+                        }
+
+                        val query = target.substringAfter('?', "").substringBefore('#')
+                        val callbackUrl = "$redirectUri?$query"
+                        val parameters = AuthAPI.splitRedirectUrl(callbackUrl)
+                        if (parameters["state"] != expectedState) {
+                            respond(client, 400, "Sign-in was rejected because the state check failed. Return to the app and try again.")
+                            AppLogger.w("$TAG: Rejected OAuth callback with a mismatched state.")
+                            return@withContext null
+                        }
+                        if (expectedIssuer != null && parameters["iss"] != expectedIssuer) {
+                            respond(client, 400, "Sign-in was rejected because the issuer could not be verified.")
+                            AppLogger.w("$TAG: Rejected OAuth callback from an unexpected issuer.")
+                            return@withContext null
+                        }
+                        if (!parameters["error"].isNullOrBlank()) {
+                            respond(client, 200, "Sign-in was cancelled. You can close this tab and return to the app.")
+                            return@withContext null
+                        }
+                        if (parameters["code"].isNullOrBlank()) {
+                            respond(client, 400, "The authorization response did not include a code.")
+                            return@withContext null
+                        }
+
+                        respond(client, 200, "Sign-in received. You can close this tab and return to the app.")
+                        return@withContext callbackUrl
+                    }
+                }
+                AppLogger.w("$TAG: Timed out waiting for OAuth callback.")
+                null
             }
-            return@withContext tokenResult?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            AppLogger.e("OAuthLocalServer failed", e)
-            return@withContext null
-        } finally {
-            serverSocket?.close()
+            AppLogger.e("$TAG: OAuth sign-in failed.", e)
+            null
+        }
+    }
+
+    private fun respond(socket: Socket, status: Int, message: String) {
+        val reason = if (status == 200) "OK" else if (status == 404) "Not Found" else "Bad Request"
+        val body = """
+            <!doctype html><meta charset="utf-8"><title>Auras Orbit sign-in</title>
+            <main style="font:16px system-ui;margin:10vh auto;max-width:34rem;text-align:center">
+              <h2>Auras Orbit sign-in</h2><p>$message</p>
+            </main>
+        """.trimIndent().toByteArray(StandardCharsets.UTF_8)
+        val headers = "HTTP/1.1 $status $reason\r\n" +
+            "Content-Type: text/html; charset=utf-8\r\n" +
+            "Cache-Control: no-store\r\n" +
+            "Connection: close\r\n" +
+            "Content-Length: ${body.size}\r\n\r\n"
+        socket.getOutputStream().use { output ->
+            output.write(headers.toByteArray(StandardCharsets.US_ASCII))
+            output.write(body)
+            output.flush()
         }
     }
 }

@@ -158,7 +158,7 @@ object SystemBrowserCdpBypass {
             com.lagradost.common.storage.DesktopDataStore.PREF_ALLOW_CF_BYPASS,
         ) ?: false
         if (!isBypassAllowed) {
-            AppLogger.d("$TAG: Experimental Cloudflare Solver is disabled. Suppressing clearance for $targetUrl.")
+            AppLogger.d("$TAG: Automatic challenge solving is disabled; waiting for interactive browser clearance for $targetUrl.")
             return false
         }
 

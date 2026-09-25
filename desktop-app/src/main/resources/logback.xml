@@ -6,7 +6,7 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <file>${user.home}/AppData/Roaming/CloudStreamDesktop/logs/app.log</file>
+        <file>${auras.logs.dir:-${user.home}/AppData/Roaming/AurasOrbit/logs}/app.log</file>
         <append>false</append>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>

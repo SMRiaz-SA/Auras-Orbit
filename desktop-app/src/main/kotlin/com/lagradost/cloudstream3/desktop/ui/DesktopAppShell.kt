@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop.ui
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -26,6 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -260,6 +262,7 @@ fun DesktopAppShell(
 ) {
     val appearance = rememberDesktopAppearance()
     val dockPosition = appearance.dockPosition
+    val dockCollapsed = appearance.dockCollapsed
     val posterCardStyle = com.lagradost.cloudstream3.desktop.ui.components.rememberPosterCardStyle()
     val hazeState = remember { dev.chrisbanes.haze.HazeState() }
 
@@ -272,6 +275,11 @@ fun DesktopAppShell(
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val isCompact = maxWidth < 600.dp
                 val effectiveDockPosition = if (isCompact) com.lagradost.cloudstream3.desktop.ui.DockPosition.BOTTOM else dockPosition
+                val navigationRailWidth by animateDpAsState(
+                    targetValue = if (dockCollapsed) 72.dp else 240.dp,
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    label = "navigation_rail_width",
+                )
 
                 DesktopShellBackground()
                 val safeTop = if (showTopBar) (if (isCompact) 54.dp else 64.dp) else 0.dp
@@ -280,7 +288,7 @@ fun DesktopAppShell(
                 val contentPadding = if (showDock) {
                     when (effectiveDockPosition) {
                         com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT -> PaddingValues(
-                            start = 82.dp + basePadding,
+                            start = navigationRailWidth + basePadding,
                             top = safeTop + basePadding,
                             end = basePadding,
                             bottom = basePadding,
@@ -320,6 +328,20 @@ fun DesktopAppShell(
                         content()
                     }
                 }
+
+                // Keep the development watermark inside the usable content area.
+                // The old absolute bottom-left position covered the navigation rail
+                // footer and made its tagline/version text overlap.
+                val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+                GlobalDevelopmentWatermark(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(
+                            start = contentPadding.calculateStartPadding(layoutDirection) + 14.dp,
+                            bottom = contentPadding.calculateBottomPadding() + 10.dp,
+                        )
+                        .zIndex(99f),
+                )
 
                 if (showTopBar) {
                     // Global TopBar (Back button + Window Controls + Top Dock)
@@ -441,6 +463,11 @@ fun DesktopAppShell(
                         modifier = Modifier.align(dockAlignment),
                         currentTitle = title ?: "",
                         dockPosition = effectiveDockPosition,
+                        railCollapsed = dockCollapsed,
+                        railWidth = navigationRailWidth,
+                        onToggleRailCollapsed = {
+                            com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.setDockCollapsed(!dockCollapsed)
+                        },
                         onNavigate = onNavigate,
                         onSearchClick = {
                             onNavigate(Config.Search)
@@ -458,6 +485,9 @@ private fun NavigationDock(
     modifier: Modifier = Modifier,
     currentTitle: String,
     dockPosition: com.lagradost.cloudstream3.desktop.ui.DockPosition,
+    railCollapsed: Boolean,
+    railWidth: androidx.compose.ui.unit.Dp,
+    onToggleRailCollapsed: () -> Unit,
     onNavigate: (Config) -> Unit,
     onSearchClick: () -> Unit,
 ) {
@@ -491,7 +521,17 @@ private fun NavigationDock(
         else -> Color(0xFF14141A)
     }
 
-    if (isSeamless) {
+    if (!isHorizontal && !isRight) {
+        AurasNavigationRail(
+            modifier = modifier,
+            currentTitle = currentTitle,
+            collapsed = railCollapsed,
+            railWidth = railWidth,
+            onToggleCollapsed = onToggleRailCollapsed,
+            onNavigate = onNavigate,
+            onSearchClick = onSearchClick,
+        )
+    } else if (isSeamless) {
         // Navigation bar mode
         val barModifier = when {
             isBottom -> Modifier.fillMaxWidth().height(56.dp)
@@ -656,6 +696,120 @@ private fun NavigationDock(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AurasNavigationRail(
+    modifier: Modifier = Modifier,
+    currentTitle: String,
+    collapsed: Boolean,
+    railWidth: androidx.compose.ui.unit.Dp,
+    onToggleCollapsed: () -> Unit,
+    onNavigate: (Config) -> Unit,
+    onSearchClick: () -> Unit,
+) {
+    val isLightMode = LocalDesktopAppearance.current.isLightMode
+    val railColor = if (isLightMode) Color(0xFFF7F6FA) else Color(0xFF111117)
+    val dividerColor = if (isLightMode) Color(0xFFE5E1ED) else Color.White.copy(alpha = 0.08f)
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(railWidth)
+            .background(railColor)
+            .drawWithCache {
+                onDrawWithContent {
+                    drawContent()
+                    drawLine(
+                        color = dividerColor,
+                        start = Offset(size.width - 1.dp.toPx(), 0f),
+                        end = Offset(size.width - 1.dp.toPx(), size.height),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+            },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = if (collapsed) 0.dp else 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.spacedBy(11.dp),
+        ) {
+            Box(
+                modifier = Modifier.size(34.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource("app_icon_small.png"),
+                    contentDescription = "Auras Orbit logo",
+                    modifier = Modifier.size(34.dp),
+                )
+            }
+            if (!collapsed) {
+                Text("AURAS ORBIT", fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.0.sp)
+            }
+        }
+
+        HorizontalDivider(color = dividerColor)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (collapsed) 8.dp else 14.dp)
+                .height(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onToggleCollapsed),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
+        ) {
+            Icon(
+                imageVector = if (collapsed) Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
+                contentDescription = if (collapsed) "Expand navigation rail" else "Collapse navigation rail",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            if (!collapsed) {
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "Collapse navigation",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+        Spacer(Modifier.height(if (collapsed) 10.dp else 8.dp))
+        if (!collapsed) {
+            Text(
+                text = "BROWSE",
+                modifier = Modifier.padding(start = 22.dp, bottom = 10.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.3.sp,
+            )
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = if (collapsed) 8.dp else 12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            com.lagradost.cloudstream3.desktop.ui.components.DockItemsList(
+                currentTitle = currentTitle,
+                onNavigate = onNavigate,
+                onSearchClick = onSearchClick,
+                expanded = !collapsed,
+            )
+        }
+
+        HorizontalDivider(color = dividerColor)
+        if (!collapsed) {
+            Text(
+                text = "Five origins. One identity.",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontSize = 10.sp,
+            )
         }
     }
 }

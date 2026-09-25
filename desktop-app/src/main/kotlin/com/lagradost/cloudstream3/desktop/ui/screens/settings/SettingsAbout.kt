@@ -26,7 +26,7 @@ fun SettingsAbout() {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        SettingsGroupCard(title = "CloudStream Desktop") {
+        SettingsGroupCard(title = "Auras Orbit") {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -38,7 +38,7 @@ fun SettingsAbout() {
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
                 ) {
                     Text(
-                        "UNOFFICIAL DESKTOP CLIENT",
+                        "INDEPENDENT OPEN-SOURCE CLIENT",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontWeight = FontWeight.Bold,
@@ -85,12 +85,20 @@ fun SettingsAbout() {
         }
 
         SettingsGroupCard(title = "Legal & Disclaimer") {
-            Text(
-                "This application is a media browser shell and does not host, scrape, or distribute media content directly. All metadata is provided by third-party APIs.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Auras Orbit is free and open-source software distributed under the GNU General Public License, version 3. See the LICENSE and third-party notices included with the source release.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                )
+                Text(
+                    "This application is a media browser shell and does not host, scrape, or distribute media content directly. All metadata is provided by third-party APIs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                )
+            }
         }
     }
 }

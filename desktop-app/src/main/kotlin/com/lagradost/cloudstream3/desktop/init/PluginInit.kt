@@ -84,7 +84,6 @@ private fun loadInstalledPlugins() {
         try {
             ExtensionLoader.loadAndInit(jarFile)
             loaded++
-            failed--
         } catch (e: Throwable) {
             failed++
             AppLogger.e("Failed to load plugin: ${jarFile.name}", e)

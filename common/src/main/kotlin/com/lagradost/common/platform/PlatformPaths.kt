@@ -3,15 +3,16 @@ package com.lagradost.common.platform
 import java.io.File
 
 /**
- * Cross-platform path resolution for the CloudStream Desktop client.
+ * Cross-platform path resolution for Auras Orbit.
  *
  * Replaces all direct `System.getenv("APPDATA")` calls with proper
  * OS-aware paths that work on Windows, macOS, and Linux.
  *
  * Directory layout per OS:
- *   Windows: %APPDATA%/CloudStreamDesktop/
- *   macOS:   ~/Library/Application Support/CloudStreamDesktop/
- *   Linux:   ~/.local/share/CloudStreamDesktop/
+ *   Windows: %APPDATA%/AurasOrbit/
+ *   macOS:   ~/Library/Application Support/AurasOrbit/
+ *   Linux:   ~/.local/share/AurasOrbit/
+ * Existing installations continue using their legacy CloudStreamDesktop or AurasDesktop directory.
  */
 object PlatformPaths {
     enum class OS { WINDOWS, MACOS, LINUX, UNKNOWN }
@@ -28,14 +29,21 @@ object PlatformPaths {
 
     /** The base application data directory, OS-aware. */
     val appDataDir: File by lazy {
-        val customDirProp = System.getProperty("cloudstream.data.dir")
+        val customDirProp = System.getProperty("auras.data.dir")
+            ?.takeIf { it.isNotBlank() }
+            ?: System.getProperty("cloudstream.data.dir")
         if (!customDirProp.isNullOrBlank()) {
             return@lazy File(customDirProp).also { it.mkdirs() }
         }
 
         val userDir = System.getProperty("user.dir")
         if (File(userDir, "portable.txt").exists()) {
-            return@lazy File(userDir, "CloudStreamData").also { it.mkdirs() }
+            val legacyPortableDir = File(userDir, "CloudStreamData")
+            val portableDir = if (legacyPortableDir.exists()) legacyPortableDir else {
+                val previousAurasDir = File(userDir, "AurasData")
+                if (previousAurasDir.exists()) previousAurasDir else File(userDir, "AurasOrbitData")
+            }
+            return@lazy portableDir.also { it.mkdirs() }
         }
 
         val basePath =
@@ -48,7 +56,16 @@ object PlatformPaths {
                 OS.LINUX -> System.getProperty("user.home") + "/.local/share"
                 OS.UNKNOWN -> System.getProperty("user.home")
             }
-        File(basePath, "CloudStreamDesktop").also { it.mkdirs() }
+        // Keep existing installations on their established data root so upgrades do not
+        // appear to lose profiles, history, preferences, or installed extensions.
+        val legacyAppDataDir = File(basePath, "CloudStreamDesktop")
+        val previousAurasAppDataDir = File(basePath, "AurasDesktop")
+        val resolvedAppDataDir = when {
+            legacyAppDataDir.exists() -> legacyAppDataDir
+            previousAurasAppDataDir.exists() -> previousAurasAppDataDir
+            else -> File(basePath, "AurasOrbit")
+        }
+        resolvedAppDataDir.also { it.mkdirs() }
     }
 
     /** Directory for persistent data store (bookmarks, history, preferences). */
@@ -97,7 +114,7 @@ object PlatformPaths {
             val userHome = System.getProperty("user.home") ?: ""
             val picturesDir = File(userHome, "Pictures")
             val targetDir = if (picturesDir.exists() && picturesDir.isDirectory) {
-                File(picturesDir, "CloudStream")
+                File(picturesDir, "Auras")
             } else {
                 File(appDataDir, "screenshots")
             }

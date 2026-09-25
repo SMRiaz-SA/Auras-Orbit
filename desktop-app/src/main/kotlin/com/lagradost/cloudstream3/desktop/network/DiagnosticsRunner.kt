@@ -196,7 +196,7 @@ object DiagnosticsRunner {
         val provider = DohProvider.values().getOrNull(providerIndex) ?: DohProvider.NONE
 
         val sb = StringBuilder()
-        sb.appendLine("CloudStream Desktop — Network Diagnostics")
+        sb.appendLine("Auras Orbit — Network Diagnostics")
         sb.appendLine("Date: ${java.time.LocalDateTime.now()}")
         sb.appendLine("DoH: ${provider.title}")
         sb.appendLine("─".repeat(50))

@@ -101,19 +101,6 @@ public class Context {
     }
 
     private static File getDefaultBaseDir() {
-        String os = System.getProperty("os.name").toLowerCase();
-        String basePath;
-        if (os.contains("win")) {
-            basePath = System.getenv("APPDATA");
-            if (basePath == null || basePath.isEmpty()) {
-                basePath = System.getProperty("user.home");
-            }
-            basePath = basePath + File.separator + "CloudStreamDesktop";
-        } else if (os.contains("mac")) {
-            basePath = System.getProperty("user.home") + "/Library/Application Support/CloudStreamDesktop";
-        } else {
-            basePath = System.getProperty("user.home") + "/.local/share/CloudStreamDesktop";
-        }
-        return new File(basePath);
+        return com.lagradost.common.platform.PlatformPaths.INSTANCE.getAppDataDir();
     }
 }

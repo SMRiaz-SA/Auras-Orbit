@@ -41,9 +41,15 @@ class AppUpdaterTest {
     }
 
     @Test
-    fun `malformed version segment treated as zero`() {
-        // Should not throw — gracefully treat non-numeric as 0
+    fun `malformed version does not trigger an update`() {
         assertEquals(0, AppUpdater.compareVersions("0.1.2", "0.1.2"))
-        assert(AppUpdater.compareVersions("1.0.0", "0.x.y") > 0)
+        assertEquals(0, AppUpdater.compareVersions("1.0.0", "0.x.y"))
+    }
+
+    @Test
+    fun `pre-release patch number is compared before its label`() {
+        assert(AppUpdater.compareVersions("0.1.5", "0.1.6-pre-alpha") < 0)
+        assert(AppUpdater.compareVersions("0.1.6", "0.1.6-pre-alpha") > 0)
+        assert(AppUpdater.compareVersions("0.1.6-pre-alpha.2", "0.1.6-pre-alpha.1") > 0)
     }
 }

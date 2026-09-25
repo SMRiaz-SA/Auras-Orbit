@@ -2,13 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [ "work" ]
-  pull_request:
-    branches: [ "work" ]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    runs-on: [ self-hosted, Windows, X64, auras-orbit ]
     steps:
     - uses: actions/checkout@v4
       with:
@@ -23,8 +25,40 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Run Tests and Build
-      run: ./gradlew :plugin-runtime:test :player-abstraction:test :desktop-app:test :desktop-app:assemble --no-daemon
+    - name: Download MPV runtime dependency
+      shell: pwsh
+      run: |
+        $mpvDirectory = Join-Path $env:GITHUB_WORKSPACE 'desktop-app/appResources/windows/mpv'
+        $mpvDll = Join-Path $mpvDirectory 'libmpv-2.dll'
+        if (-not (Test-Path -LiteralPath $mpvDll)) {
+          New-Item -ItemType Directory -Force -Path $mpvDirectory | Out-Null
+          $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/tags/20260610' -Headers @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'Auras-Orbit-CI' }
+          $asset = $release.assets | Where-Object { $_.name -like 'mpv-dev-x86_64-*.7z' } | Select-Object -First 1
+          if ($null -eq $asset) { throw 'Pinned MPV release has no x86_64 development archive.' }
+
+          $archive = Join-Path $env:RUNNER_TEMP $asset.name
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive
+          $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+          if ($null -eq $sevenZip) {
+            $sevenZipPath = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+            if (-not (Test-Path -LiteralPath $sevenZipPath)) { throw '7-Zip is required to extract the MPV runtime.' }
+          } else {
+            $sevenZipPath = $sevenZip.Source
+          }
+          & $sevenZipPath e $archive 'libmpv-2.dll' "-o$mpvDirectory" -r -y
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $mpvDll)) { throw 'Could not extract libmpv-2.dll.' }
+        }
+
+    - name: Run Tests and Build Portable App
+      run: .\gradlew.bat clean test :desktop-app:createDistributable --no-daemon
+
+    - name: Zip portable app
+      shell: pwsh
+      run: |
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $package = Join-Path $env:GITHUB_WORKSPACE 'desktop-app/build/compose/binaries/main/app/Auras-Orbit'
+        $archive = Join-Path $env:RUNNER_TEMP "Auras-Orbit-Portable-$env:GITHUB_SHA.zip"
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($package, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
     - name: Upload Test Reports
       if: always()
@@ -35,3 +69,11 @@ jobs:
           desktop-app/build/reports/tests/
           plugin-runtime/build/reports/tests/
           player-abstraction/build/reports/tests/
+
+    - name: Upload portable tester ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: Auras-Orbit-Portable-${{ github.sha }}
+        path: ${{ runner.temp }}/Auras-Orbit-Portable-${{ github.sha }}.zip
+        if-no-files-found: error
+        retention-days: 14

@@ -3,12 +3,12 @@ package com.lagradost.common.logging
 import org.slf4j.LoggerFactory
 
 /**
- * Centralized logging utility for CloudStream Desktop.
+ * Centralized logging utility for Auras Orbit.
  * Wraps SLF4J to provide an API similar to android.util.Log,
  * and simultaneously pipes logs into [LogBuffer] for live Dev Studio LogCat.
  */
 object AppLogger {
-    private val logger = LoggerFactory.getLogger("CloudStreamDesktop")
+    private val logger = LoggerFactory.getLogger("AurasOrbit")
 
     @JvmOverloads
     fun v(tag: String, message: String, t: Throwable? = null) {

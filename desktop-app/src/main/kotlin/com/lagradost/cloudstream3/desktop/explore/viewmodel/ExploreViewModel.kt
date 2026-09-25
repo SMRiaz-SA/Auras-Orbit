@@ -319,6 +319,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     catalogId = cat.id,
                     genre = genreArg,
                     skip = skip,
+                    manifestUrl = cat.addonManifestUrl,
                 )
 
                 val distinctFetched = fetched.distinctBy { it.id }
@@ -366,6 +367,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     catalogId = cat.id,
                     genre = genreArg,
                     skip = skip,
+                    manifestUrl = cat.addonManifestUrl,
                 )
 
                 if (fetched.isEmpty()) {

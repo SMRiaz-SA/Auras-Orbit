@@ -45,8 +45,13 @@ object PluginFileSecurityStub {
 
     fun getStorageRootForPlugin(pluginName: String): File {
         val base = customBaseDir ?: PlatformPaths.appDataDir
-        val safePluginDirName = pluginName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        val root = File(base, "Extensions/$safePluginDirName/storage").canonicalFile
+        val cleaned = pluginName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val safePluginDirName = if (cleaned.isBlank() || cleaned.all { it == '.' }) "_" else cleaned
+        val extensionsRoot = File(base, "Extensions").canonicalFile
+        val pluginDir = File(extensionsRoot, safePluginDirName).canonicalFile
+        require(pluginDir.parentFile == extensionsRoot) { "Plugin storage must be inside Extensions" }
+        val root = File(pluginDir, "storage").canonicalFile
+        require(root.parentFile == pluginDir) { "Plugin storage must be inside its plugin directory" }
         if (!root.exists()) {
             root.mkdirs()
         }
@@ -112,6 +117,22 @@ object PluginFileSecurityStub {
         val verifiedPath = checkPath(file.path)
         return File(verifiedPath)
     }
+
+    @JvmStatic
+    fun listRoots(): Array<File> {
+        val pluginName = ExtensionLoader.getCallingPluginName() ?: "UnknownPlugin"
+        return arrayOf(getStorageRootForPlugin(pluginName))
+    }
+
+    @JvmStatic
+    fun createTempFile(prefix: String, suffix: String?): File {
+        val pluginName = ExtensionLoader.getCallingPluginName() ?: "UnknownPlugin"
+        return File.createTempFile(prefix, suffix, getStorageRootForPlugin(pluginName))
+    }
+
+    @JvmStatic
+    fun createTempFile(prefix: String, suffix: String?, directory: File): File =
+        File.createTempFile(prefix, suffix, checkFile(directory))
 
     /**
      * Validates a parent-child path combination.

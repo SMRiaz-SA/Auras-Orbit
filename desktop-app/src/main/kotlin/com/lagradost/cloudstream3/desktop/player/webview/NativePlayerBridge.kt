@@ -132,7 +132,7 @@ object NativePlayerBridge {
                     .replace("{{INITIAL_BACKDROP_CLASS}}", "")
                     .replace("{{INITIAL_LOGO_URL}}", "")
                     .replace("{{INITIAL_LOGO_STYLE}}", "display: none;")
-                    .replace("{{INITIAL_TITLE}}", "CloudStream")
+                    .replace("{{INITIAL_TITLE}}", "Auras Orbit")
                     .replace("{{INITIAL_TITLE_STYLE}}", "display: block;")
                     .replace("{{INITIAL_SUBTITLE}}", "")
                     .replace("{{INITIAL_SUBTITLE_STYLE}}", "display: none;")

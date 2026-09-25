@@ -17,6 +17,10 @@ import com.lagradost.cloudstream3.syncproviders.AuthToken
 import com.lagradost.cloudstream3.syncproviders.AuthUser
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.syncproviders.SyncIdName
+import com.lagradost.cloudstream3.syncproviders.TrackerClientConfig
+import com.lagradost.cloudstream3.ui.SyncWatchType
+import com.lagradost.cloudstream3.ui.library.ListSorting
+import com.lagradost.cloudstream3.utils.UiText
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
@@ -29,25 +33,27 @@ class AniListApi : SyncAPI() {
     override var name = "AniList"
     override val idPrefix = "anilist"
 
-    private val key = "" // BuildConfig.ANILIST_KEY
+    private val key: String get() = TrackerClientConfig.aniListClientId()
     override val redirectUrlIdentifier = "anilistlogin"
     override var requireLibraryRefresh = true
     override val hasOAuth2 = true
     override var mainUrl = "https://anilist.co"
     override val icon = 0 // R.drawable.ic_anilist_icon
-    override val createAccountUrl = "$mainUrl/signup"
+    override val createAccountUrl = "$mainUrl/settings/developer"
     override val syncIdName = SyncIdName.Anilist
 
-    override fun loginRequest(): AuthLoginPage? =
-        AuthLoginPage("https://anilist.co/api/v2/oauth/authorize?client_id=$key&response_type=token")
+    override fun loginRequest(): AuthLoginPage? = key.takeIf(String::isNotBlank)?.let {
+        AuthLoginPage("https://anilist.co/api/v2/oauth/authorize?client_id=$it&response_type=token")
+    }
 
     override suspend fun login(redirectUrl: String, payload: String?): AuthToken? {
         val sanitizer = splitRedirectUrl(redirectUrl)
+        val rawToken = redirectUrl.trim().takeIf { !it.contains('?') && !it.contains('#') && !it.contains("://") }
         val token = AuthToken(
-            accessToken = sanitizer["access_token"]
+            accessToken = sanitizer["access_token"] ?: rawToken
                 ?: throw ErrorLoadingException("No access token"),
             // refreshToken = sanitizer["refresh_token"],
-            accessTokenLifetime = APIHolder.unixTime + sanitizer["expires_in"]!!.toLong(),
+            accessTokenLifetime = APIHolder.unixTime + (sanitizer["expires_in"]?.toLongOrNull() ?: 31_536_000L),
         )
         return token
     }
@@ -81,11 +87,15 @@ class AniListApi : SyncAPI() {
         val data = searchShows(query) ?: return null
         return data.data?.page?.media?.map {
             SyncAPI.SyncSearchResult(
-                it.title.romaji ?: return null,
-                this.name,
-                it.id.toString(),
-                getUrlFromId(it.id),
-                it.bannerImage,
+                name = it.title.romaji ?: it.title.english ?: it.title.native ?: return null,
+                apiName = this.name,
+                syncId = it.id.toString(),
+                url = getUrlFromId(it.id),
+                posterUrl = it.bannerImage,
+                type = TvType.Anime,
+                mediaType = SyncAPI.SyncMediaType.ANIME,
+                year = it.seasonYear.takeIf { year -> year > 0 } ?: it.startDate.year?.toIntOrNull(),
+                alternativeNames = (listOfNotNull(it.title.romaji, it.title.english, it.title.native) + it.synonyms).toSet(),
             )
         }
     }
@@ -154,7 +164,15 @@ class AniListApi : SyncAPI() {
     }
 
     override suspend fun status(auth: AuthData?, id: String): SyncAPI.AbstractSyncStatus? {
-        return null
+        val internalId = id.toIntOrNull() ?: return null
+        val data = getDataAboutId(auth ?: return null, internalId) ?: return null
+        return SyncAPI.SyncStatus(
+            score = Score.from100(data.score),
+            watchedEpisodes = data.progress,
+            status = data.type?.let(::toSyncWatchType) ?: SyncWatchType.NONE,
+            isFavorite = data.isFavourite,
+            maxEpisodes = data.episodes,
+        )
     }
 
     override suspend fun updateStatus(
@@ -162,7 +180,16 @@ class AniListApi : SyncAPI() {
         id: String,
         newStatus: AbstractSyncStatus,
     ): Boolean {
-        return false
+        if (newStatus.watchedEpisodeSelection != null) return false
+        val authData = auth ?: return false
+        val internalId = id.toIntOrNull() ?: return false
+        return postDataAboutId(
+            authData,
+            internalId,
+            fromSyncWatchType(newStatus.status),
+            newStatus.score,
+            newStatus.watchedEpisodes,
+        )
     }
 
     companion object {
@@ -189,7 +216,10 @@ class AniListApi : SyncAPI() {
                             startDate { year month day }
                             title {
                                 romaji
+                                english
+                                native
                             }
+                            synonyms
                             averageScore
                             meanScore
                             nextAiringEpisode {
@@ -325,6 +355,24 @@ class AniListApi : SyncAPI() {
             }
         }
 
+        private fun toSyncWatchType(status: AniListStatusType): SyncWatchType = when (status) {
+            AniListStatusType.Watching, AniListStatusType.ReWatching -> SyncWatchType.WATCHING
+            AniListStatusType.Completed -> SyncWatchType.COMPLETED
+            AniListStatusType.Paused -> SyncWatchType.ON_HOLD
+            AniListStatusType.Dropped -> SyncWatchType.DROPPED
+            AniListStatusType.Planning -> SyncWatchType.PLAN_TO_WATCH
+            AniListStatusType.None -> SyncWatchType.NONE
+        }
+
+        private fun fromSyncWatchType(status: SyncWatchType): AniListStatusType = when (status) {
+            SyncWatchType.NONE -> AniListStatusType.None
+            SyncWatchType.WATCHING -> AniListStatusType.Watching
+            SyncWatchType.COMPLETED -> AniListStatusType.Completed
+            SyncWatchType.ON_HOLD -> AniListStatusType.Paused
+            SyncWatchType.DROPPED -> AniListStatusType.Dropped
+            SyncWatchType.PLAN_TO_WATCH -> AniListStatusType.Planning
+        }
+
         private suspend fun getSeason(id: Int): SeasonResponse {
             val q = """
                query (${'$'}id: Int = $id) {
@@ -457,7 +505,7 @@ class AniListApi : SyncAPI() {
                 }
             }"""
 
-        val data = postApi(auth.token, q, true)
+        val data = postApi(auth.token, q)
         val d = parseJson<GetDataRoot>(data ?: return null)
 
         val main = d.data?.media
@@ -525,9 +573,9 @@ class AniListApi : SyncAPI() {
 
     @Serializable
     data class CompletedAt(
-        @JsonProperty("year") @SerialName("year") val year: Int,
-        @JsonProperty("month") @SerialName("month") val month: Int,
-        @JsonProperty("day") @SerialName("day") val day: Int,
+        @JsonProperty("year") @SerialName("year") val year: Int? = null,
+        @JsonProperty("month") @SerialName("month") val month: Int? = null,
+        @JsonProperty("day") @SerialName("day") val day: Int? = null,
     )
 
     @Serializable
@@ -567,13 +615,13 @@ class AniListApi : SyncAPI() {
 
     @Serializable
     data class Entries(
-        @JsonProperty("status") @SerialName("status") val status: String?,
-        @JsonProperty("completedAt") @SerialName("completedAt") val completedAt: CompletedAt,
-        @JsonProperty("startedAt") @SerialName("startedAt") val startedAt: StartedAt,
-        @JsonProperty("updatedAt") @SerialName("updatedAt") val updatedAt: Int,
-        @JsonProperty("progress") @SerialName("progress") val progress: Int,
-        @JsonProperty("score") @SerialName("score") val score: Int,
-        @JsonProperty("private") @SerialName("private") val private: Boolean,
+        @JsonProperty("status") @SerialName("status") val status: String? = null,
+        @JsonProperty("completedAt") @SerialName("completedAt") val completedAt: CompletedAt? = null,
+        @JsonProperty("startedAt") @SerialName("startedAt") val startedAt: StartedAt? = null,
+        @JsonProperty("updatedAt") @SerialName("updatedAt") val updatedAt: Int = 0,
+        @JsonProperty("progress") @SerialName("progress") val progress: Int = 0,
+        @JsonProperty("score") @SerialName("score") val score: Int = 0,
+        @JsonProperty("private") @SerialName("private") val private: Boolean = false,
         @JsonProperty("media") @SerialName("media") val media: Media,
     ) {
         fun toLibraryItem(): SyncAPI.LibraryItem {
@@ -618,7 +666,26 @@ class AniListApi : SyncAPI() {
     )
 
     override suspend fun library(auth: AuthData?): SyncAPI.LibraryMetadata? {
-        return null
+        val data = getFullAniListList(auth ?: return null) ?: return null
+        val itemsByStatus = data.data?.mediaListCollection?.lists.orEmpty()
+            .flatMap { list -> list.entries.map { entry -> (entry.status ?: list.status) to entry } }
+            .groupBy { (status, _) -> status?.let { aniListStatusString.indexOf(it) } ?: -1 }
+
+        val labels = listOf(
+            AniListStatusType.Watching.value to "Watching",
+            AniListStatusType.Completed.value to "Completed",
+            AniListStatusType.Paused.value to "On Hold",
+            AniListStatusType.Dropped.value to "Dropped",
+            AniListStatusType.Planning.value to "Plan to Watch",
+            AniListStatusType.ReWatching.value to "Re-watching",
+        )
+        return SyncAPI.LibraryMetadata(
+            allLibraryLists = labels.map { (status, label) ->
+                val entries = itemsByStatus[status].orEmpty().map { (_, entry) -> entry.toLibraryItem() }
+                SyncAPI.LibraryList(UiText.PlainText(label), entries)
+            },
+            supportedListSorting = ListSorting.entries.toSet(),
+        )
     }
 
     private suspend fun getFullAniListList(auth: AuthData): FullAnilistList? {
@@ -731,10 +798,18 @@ class AniListApi : SyncAPI() {
                     }
                 """
             } else {
-                """mutation (${'$'}id: Int = $id, ${'$'}status: MediaListStatus = ${
-                    type.name
-                }, ${if (score != null) "${'$'}scoreRaw: Int = ${score.toInt(100)}" else ""} , ${if (progress != null) "${'$'}progress: Int = $progress" else ""}) {
-                    SaveMediaListEntry (mediaId: ${'$'}id, status: ${'$'}status, scoreRaw: ${'$'}scoreRaw, progress: ${'$'}progress) {
+                val variables = mutableListOf("${'$'}id: Int = $id", "${'$'}status: MediaListStatus = ${type.name}")
+                val arguments = mutableListOf("mediaId: ${'$'}id", "status: ${'$'}status")
+                if (score != null) {
+                    variables += "${'$'}scoreRaw: Int = ${score.toInt(100)}"
+                    arguments += "scoreRaw: ${'$'}scoreRaw"
+                }
+                if (progress != null) {
+                    variables += "${'$'}progress: Int = $progress"
+                    arguments += "progress: ${'$'}progress"
+                }
+                """mutation (${variables.joinToString(", ")}) {
+                    SaveMediaListEntry (${arguments.joinToString(", ")}) {
                         id
                         status
                         progress
@@ -744,7 +819,7 @@ class AniListApi : SyncAPI() {
             }
 
         val data = postApi(auth.token, q)
-        return data != ""
+        return !data.isNullOrBlank() && !data.contains("\"errors\"")
     }
 
     private suspend fun getUser(token: AuthToken): AniListUser? {
@@ -1110,6 +1185,8 @@ class AniListApi : SyncAPI() {
     @Serializable
     data class GetSearchTitle(
         @JsonProperty("romaji") @SerialName("romaji") val romaji: String?,
+        @JsonProperty("english") @SerialName("english") val english: String? = null,
+        @JsonProperty("native") @SerialName("native") val native: String? = null,
     )
 
     @Serializable
@@ -1125,6 +1202,7 @@ class AniListApi : SyncAPI() {
         @JsonProperty("idMal") @SerialName("idMal") val idMal: Int?,
         @JsonProperty("seasonYear") @SerialName("seasonYear") val seasonYear: Int,
         @JsonProperty("title") @SerialName("title") val title: GetSearchTitle,
+        @JsonProperty("synonyms") @SerialName("synonyms") val synonyms: List<String> = emptyList(),
         @JsonProperty("startDate") @SerialName("startDate") val startDate: StartedAt,
         @JsonProperty("averageScore") @SerialName("averageScore") val averageScore: Int?,
         @JsonProperty("meanScore") @SerialName("meanScore") val meanScore: Int?,

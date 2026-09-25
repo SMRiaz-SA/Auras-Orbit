@@ -23,6 +23,11 @@ data class ManifestCatalogDescriptor(
     val name: String,
     val genres: List<String> = emptyList(),
     val supportsSearch: Boolean = false,
+    /**
+     * The normalized manifest URL, including any configuration query parameters.
+     * Configured Stremio addons require those parameters on catalog requests too.
+     */
+    val addonManifestUrl: String = "",
 )
 
 data class ProviderMatch(

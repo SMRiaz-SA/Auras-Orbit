@@ -20,6 +20,25 @@ internal object PluginFileUtils {
 
     fun getExtensionsDir(): File = PlatformPaths.extensionsDir
 
+    fun safeDirectoryName(value: String): String {
+        val cleaned = value.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        return if (cleaned.isBlank() || cleaned.all { it == '.' }) "_" else cleaned
+    }
+
+    fun repositoryDirectory(repoName: String): File {
+        val root = getExtensionsDir().canonicalFile
+        val directory = File(root, safeDirectoryName(repoName)).canonicalFile
+        require(directory.parentFile == root) { "Repository directory must be inside Extensions" }
+        return directory
+    }
+
+    fun pluginFile(repoName: String, internalName: String, suffix: String): File {
+        val directory = repositoryDirectory(repoName)
+        val file = File(directory, safeDirectoryName(internalName) + suffix).canonicalFile
+        require(file.parentFile == directory) { "Plugin file must be inside its repository" }
+        return file
+    }
+
     fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { fis ->
@@ -38,17 +57,22 @@ internal object PluginFileUtils {
      * Optionally fetches a pre-compiled JVM bytecode jar to bypass Dex2Jar.
      */
     suspend fun downloadPlugin(repoName: String, plugin: SitePlugin): File? = withContext(Dispatchers.IO) {
-        val repoDir = File(getExtensionsDir(), repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_"))
+        val repoDir = repositoryDirectory(repoName)
         if (!repoDir.exists()) repoDir.mkdirs()
 
-        val destFile = File(repoDir, "${plugin.internalName}.jar")
+        val destFile = pluginFile(repoName, plugin.internalName, ".jar")
         val tempFile = File.createTempFile(destFile.name, ".tmp", getExtensionsDir())
 
         try {
             // Primary download URL first, followed by any alternate repository mirrors for this plugin
             val candidateUrls = mutableListOf(plugin.url)
             DesktopRepositoryManager.getAllPlugins()
-                .filter { it.second.internalName == plugin.internalName && it.second.url != plugin.url && it.second.url.startsWith("http") }
+                .filter {
+                    plugin.fileHash != null &&
+                        it.second.internalName == plugin.internalName &&
+                        it.second.fileHash.equals(plugin.fileHash, ignoreCase = true) &&
+                        it.second.url != plugin.url && it.second.url.startsWith("http")
+                }
                 .forEach { candidateUrls.add(it.second.url) }
 
             var downloadSuccess = false
@@ -78,9 +102,9 @@ internal object PluginFileUtils {
                         }
                     }
 
-                    if (plugin.fileHash != null && candidateUrl == plugin.url) {
+                    if (plugin.fileHash != null) {
                         val downloadHash = sha256(tempFile)
-                        if (plugin.fileHash != downloadHash) {
+                        if (!plugin.fileHash.equals(downloadHash, ignoreCase = true)) {
                             throw IllegalStateException("Extension hash mismatch when validating '${destFile.name}'! Expected: '${plugin.fileHash}', got: '$downloadHash'.")
                         }
                     }
@@ -114,7 +138,7 @@ internal object PluginFileUtils {
             // [PERFORMANCE] If a pre-compiled JVM jar is provided, download it alongside the .cs3 file.
             // ExtensionLoader will detect this -jvm.jar file and completely skip the slow dex2jar conversion step!
             if (!plugin.jarUrl.isNullOrBlank() && !plugin.jarHash.isNullOrBlank()) {
-                val jvmDestFile = File(repoDir, "${plugin.internalName}-jvm.jar")
+                val jvmDestFile = pluginFile(repoName, plugin.internalName, "-jvm.jar")
                 val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", getExtensionsDir())
                 try {
                     val jvmRequest = Request.Builder().url(plugin.jarUrl).build()
@@ -179,7 +203,7 @@ internal object PluginFileUtils {
 
     /** Unloads jars and physically deletes the repo directory. */
     fun deleteRepositoryDirectory(repoName: String) {
-        val repoDir = File(getExtensionsDir(), repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_"))
+        val repoDir = repositoryDirectory(repoName)
         if (repoDir.exists()) {
             // Must explicitly unload all plugins from this repo first to release Windows file locks
             val jars = repoDir.listFiles { f -> f.isFile && (f.extension == "jar" || f.extension == "cs3") }

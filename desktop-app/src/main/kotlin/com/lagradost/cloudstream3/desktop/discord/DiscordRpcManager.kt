@@ -318,12 +318,12 @@ object DiscordRpcManager {
                     else -> "Doom-scrolling through movies"
                 }
                 activityMap["details"] = detailsText.limit(128)
-                activityMap["state"] = "CloudStream Desktop"
+                activityMap["state"] = "Auras Orbit"
                 // Timestamps: Discord expects UNIX seconds, not milliseconds
                 activityMap["timestamps"] = mapOf("start" to sessionStartEpochSec)
                 activityMap["assets"] = mapOf(
                     "large_image" to DEFAULT_ASSET_KEY,
-                    "large_text" to "CloudStream Desktop",
+                    "large_text" to "Auras Orbit",
                 )
             }
 
@@ -381,7 +381,7 @@ object DiscordRpcManager {
                         state.isLive -> "🔴 Live Broadcast"
                         state.isPaused -> "Paused"
                         state.isFullscreen -> "Watching in Fullscreen"
-                        else -> "CloudStream Desktop"
+                        else -> "Auras Orbit"
                     }
                     assetsMap["small_text"] = statusText
                 } else {

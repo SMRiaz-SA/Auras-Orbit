@@ -1,20 +1,20 @@
 [Setup]
 #include "version.iss"
 AppId={{C626E83F-8C3A-4D78-B5B3-FA19FE223E0C}}
-AppName=CloudStream
+AppName=Auras Orbit
 AppVersion={#AppVersion}
-AppPublisher=Ayu
+AppPublisher=Auras Prime Dynamics
 AppPublisherURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
 AppSupportURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
 AppUpdatesURL=https://github.com/errorcode26/CS3-desktop-client-unofficial
-DefaultDirName={autopf}\CloudStream
-DefaultGroupName=CloudStream
+DefaultDirName={autopf}\Auras Orbit
+DefaultGroupName=Auras Orbit
 AllowNoIcons=yes
 SetupIconFile=..\desktop-app\src\main\resources\app_icon.ico
-UninstallDisplayIcon={app}\CloudStream-Desktop.exe
+UninstallDisplayIcon={app}\Auras-Orbit.exe
 ; Output directory for the compiled installer
 OutputDir=..\desktop-app\build\outputs
-OutputBaseFilename=CloudStream-Setup
+OutputBaseFilename=Auras-Orbit-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
@@ -30,12 +30,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Copy all files and folders from the AppImage output
-Source: "..\desktop-app\build\compose\binaries\main\app\CloudStream-Desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\desktop-app\build\compose\binaries\main\app\Auras-Orbit\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\CloudStream"; Filename: "{app}\CloudStream-Desktop.exe"
-Name: "{group}\{cm:UninstallProgram,CloudStream}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\CloudStream"; Filename: "{app}\CloudStream-Desktop.exe"; Tasks: desktopicon
+Name: "{group}\Auras Orbit"; Filename: "{app}\Auras-Orbit.exe"
+Name: "{group}\{cm:UninstallProgram,Auras Orbit}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Auras Orbit"; Filename: "{app}\Auras-Orbit.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\CloudStream-Desktop.exe"; Description: "{cm:LaunchProgram,CloudStream}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\Auras-Orbit.exe"; Description: "{cm:LaunchProgram,Auras Orbit}"; Flags: nowait postinstall skipifsilent runasoriginaluser

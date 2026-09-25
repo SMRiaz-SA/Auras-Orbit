@@ -18,6 +18,9 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 object DesktopRepositoryManager {
+    private const val FIRST_RUN_REPOSITORY_URL =
+        "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
+
     private val reposFile by lazy { File(getExtensionsDir(), "repos.json") }
     private val repoCacheFile by lazy { File(getExtensionsDir(), "repo_cache.json") }
     private val pluginsCacheFile by lazy { File(getExtensionsDir(), "plugins_cache.json") }
@@ -73,8 +76,26 @@ object DesktopRepositoryManager {
     }
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
+        val isFirstRun = !reposFile.exists()
         refreshSavedRepositoriesFromDisk()
+        if (isFirstRun && _savedRepositories.value.isEmpty()) {
+            saveRepository(
+                RepositoryData(
+                    name = "Phisher Repo",
+                    url = FIRST_RUN_REPOSITORY_URL,
+                ),
+            )
+        }
         loadCachesFromDisk()
+        if (_savedRepositories.value.any { it.url == FIRST_RUN_REPOSITORY_URL } &&
+            repoCache[FIRST_RUN_REPOSITORY_URL] == null
+        ) {
+            try {
+                addRepositoryFromInput(FIRST_RUN_REPOSITORY_URL)
+            } catch (e: Exception) {
+                AppLogger.i("First-run Phisher repository sync deferred: ${e.message}")
+            }
+        }
     }
 
     private fun loadCachesFromDisk() {
@@ -341,7 +362,7 @@ object DesktopRepositoryManager {
             val localRepoDirName = jar.parentFile?.name
             val remoteMatch = allRemote.find { (repoName, sitePlugin) ->
                 sitePlugin.internalName == internalName &&
-                (localRepoDirName == null || repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_").equals(localRepoDirName, ignoreCase = true))
+                (localRepoDirName == null || PluginFileUtils.safeDirectoryName(repoName).equals(localRepoDirName, ignoreCase = true))
             } ?: if (localRepoDirName == null || localRepoDirName.equals("extensions", ignoreCase = true)) {
                 allRemote.find { it.second.internalName == internalName }
             } else null
@@ -358,9 +379,6 @@ object DesktopRepositoryManager {
                         }
                         val newJar = downloadPlugin(repoName, sitePlugin)
                         if (newJar != null) {
-                            if (wasTrusted) {
-                                com.lagradost.runtime.loader.ExtensionLoader.addTrusted(newJar, internalName, manifestName = name)
-                            }
                             withContext(Dispatchers.IO) {
                                 com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(newJar, forceBypassSecurity = wasTrusted)
                             }
@@ -497,13 +515,13 @@ object DesktopRepositoryManager {
                         repo.pluginLists.map { listUrl -> async { getCachedPlugins(listUrl) } }.awaitAll().flatten()
                     }.distinctBy { it.internalName }
 
-                    val repoDir = File(extensionsDir, repo.name.replace(Regex("[^a-zA-Z0-9.-]"), "_"))
+            val repoDir = PluginFileUtils.repositoryDirectory(repo.name)
                     if (!repoDir.exists()) repoDir.mkdirs()
 
                     remotePlugins.forEach { remotePlugin ->
-                        val localJar = File(repoDir, "${remotePlugin.internalName}.jar").takeIf { it.exists() }
-                            ?: File(repoDir, "${remotePlugin.internalName}.cs3").takeIf { it.exists() }
-                            ?: File(repoDir, "${remotePlugin.internalName}-jvm.jar").takeIf { it.exists() }
+                        val localJar = PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, ".jar").takeIf { it.exists() }
+                            ?: PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, ".cs3").takeIf { it.exists() }
+                            ?: PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, "-jvm.jar").takeIf { it.exists() }
                         if (localJar != null && localJar.exists()) {
                             val localManifest = readPluginManifest(localJar)
                             val localVersion = localManifest?.get("version")?.toString()?.toIntOrNull() ?: 0
@@ -514,9 +532,6 @@ object DesktopRepositoryManager {
                                     com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(localJar.absolutePath)
                                     val newJar = downloadPlugin(saved.name, remotePlugin)
                                     if (newJar != null) {
-                                        if (wasTrusted) {
-                                            com.lagradost.runtime.loader.ExtensionLoader.addTrusted(newJar, remotePlugin.internalName, manifestName = remotePlugin.name)
-                                        }
                                         com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(newJar, forceBypassSecurity = wasTrusted)
                                         updatedList.add(
                                             com.lagradost.common.storage.PluginUpdateRecord(

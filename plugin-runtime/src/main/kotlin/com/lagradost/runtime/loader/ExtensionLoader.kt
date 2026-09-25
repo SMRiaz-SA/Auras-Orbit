@@ -190,9 +190,6 @@ object ExtensionLoader {
         AppLogger.i("[PluginLoader] Initializing class $pluginClassName from ${jarToLoad.name}")
 
         val isPluginTrusted = forceBypassSecurity || isTrusted(jarToLoad, finalInternalName, pluginClassName, nameFromManifest)
-        if (forceBypassSecurity) {
-            addTrusted(jarToLoad, finalInternalName, pluginClassName, nameFromManifest)
-        }
 
         AppLogger.i("Running static bytecode security verification on ${jarToLoad.name} (Trusted: $isPluginTrusted)...")
         com.lagradost.runtime.security.PluginSecurityVerifier.verifyJar(jarToLoad, finalInternalName, isPluginTrusted)
@@ -485,13 +482,24 @@ object ExtensionLoader {
         return keys
     }
 
+    /** Trust follows the exact plugin file location, including its transformed variants. */
+    private fun getTrustedPathKeys(jarFile: File): Set<String> {
+        val parent = jarFile.parentFile.canonicalFile
+        val baseName = jarFile.nameWithoutExtension.removeSuffix("-secure").removeSuffix("-jvm")
+        val basePath = File(parent, baseName).canonicalPath.lowercase().replace('\\', '/')
+        val legacyFiles = listOf("$baseName.jar", "$baseName.cs3", "$baseName-secure.jar", "$baseName-jvm.jar")
+        return setOf("plugin-path:$basePath") + legacyFiles.map {
+            File(parent, it).canonicalPath.lowercase().replace('\\', '/')
+        }
+    }
+
     fun isTrusted(
         jarFile: File,
         internalName: String? = null,
         pluginClassName: String? = null,
         manifestName: String? = null,
     ): Boolean {
-        val candidateKeys = getPluginAliases(jarFile, internalName, pluginClassName, manifestName)
+        val candidateKeys = getTrustedPathKeys(jarFile)
         val list = getTrustedList().map { it.lowercase().trim() }
 
         val inList = candidateKeys.any { list.contains(it) }
@@ -505,7 +513,7 @@ object ExtensionLoader {
         pluginClassName: String? = null,
         manifestName: String? = null,
     ) {
-        val keysToAdd = getPluginAliases(jarFile, internalName, pluginClassName, manifestName)
+        val keysToAdd = getTrustedPathKeys(jarFile)
         val trusted = getTrustedList()
         var changed = false
 
@@ -535,7 +543,7 @@ object ExtensionLoader {
         pluginClassName: String? = null,
         manifestName: String? = null,
     ) {
-        val keysToRemove = getPluginAliases(jarFile, internalName, pluginClassName, manifestName)
+        val keysToRemove = jarFile?.let(::getTrustedPathKeys) ?: emptySet()
         val trusted = getTrustedList()
         var changed = false
 
@@ -561,6 +569,7 @@ object ExtensionLoader {
     fun loadAndInit(jarFile: File, fallbackPluginClassName: String? = null, forceBypassSecurity: Boolean = false): BasePlugin {
         val pluginInstance = loadJar(jarFile, fallbackPluginClassName, forceBypassSecurity)
         initializePlugin(pluginInstance)
+        if (forceBypassSecurity) addTrusted(jarFile)
         return pluginInstance
     }
 

@@ -47,7 +47,7 @@ fun SettingsUpdates(viewModel: SettingsViewModel) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "CS3 Desktop Client",
+                            text = "Auras Orbit",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium,

@@ -58,6 +58,7 @@ object ExploreCatalogDiscoverer {
                             name = name,
                             genres = genres,
                             supportsSearch = supportsSearch,
+                            addonManifestUrl = addon.manifestUrl,
                         )
                     )
                 }

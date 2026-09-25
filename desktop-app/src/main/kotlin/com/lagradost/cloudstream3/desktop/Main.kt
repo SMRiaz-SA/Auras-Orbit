@@ -58,16 +58,17 @@ import kotlinx.coroutines.launch
 import java.awt.Toolkit
 
 /**
- * Single unified entry point for CloudStream Desktop Client.
+ * Single unified entry point for Auras Orbit.
  */
 fun main(args: Array<String> = emptyArray()) {
+    System.setProperty("auras.logs.dir", PlatformPaths.logsDir.absolutePath.replace('\\', '/'))
     initCrashHandler()
     initWindowsEnvironment()
 
     val isDevMode = args.any { it.equals("--dev", ignoreCase = true) || it.equals("--dev-logger", ignoreCase = true) } ||
         System.getProperty("cloudstream.dev") != null
 
-    AppLogger.i("Launching CloudStream Desktop Client...")
+    AppLogger.i("Launching Auras Orbit...")
     AppLogger.i("Platform: ${PlatformPaths.currentOS}")
     AppLogger.i("App data directory: ${PlatformPaths.appDataDir.absolutePath}")
 
@@ -125,7 +126,7 @@ fun main(args: Array<String> = emptyArray()) {
                 com.lagradost.cloudstream3.desktop.discord.DiscordRpcManager.shutdown()
                 exitApplication()
             },
-            title = "CloudStream - Unofficial Desktop Client (Pre-Alpha)",
+            title = "Auras Orbit",
             state = state,
             icon = painterResource("app_icon_small.png"),
             onKeyEvent = fullscreenHelper.onKeyEvent,
@@ -235,7 +236,7 @@ fun main(args: Array<String> = emptyArray()) {
             )
             Window(
                 onCloseRequest = { DevStudioState.close() },
-                title = "CloudStream Dev Studio & Live LogCat",
+                title = "Auras Orbit Dev Studio & Live LogCat",
                 state = devWindowState,
                 icon = painterResource("app_icon_small.png"),
             ) {

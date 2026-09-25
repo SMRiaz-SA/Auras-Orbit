@@ -1,6 +1,8 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -74,17 +76,16 @@ fun HomeHistoryRow(
             },
         )
 
-        val dockPosition by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.dockPosition.collectAsState()
         val continueWatchingStyle by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.continueWatchingStyle.collectAsState()
         val posterWidthDp by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.posterWidthDp.collectAsState()
         val homeVerticalSpacingDp by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.homeVerticalSpacingDp.collectAsState()
-        val paddingStart = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) 88.dp else 22.dp
-        val paddingEnd = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) 88.dp else 22.dp
+        val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+        val paddingStart = safeArea.calculateStartPadding(layoutDirection)
+        val paddingEnd = safeArea.calculateEndPadding(layoutDirection)
 
         androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val isCompact = maxWidth < 600.dp
-            val effectivePaddingStart = if (isCompact) 8.dp else paddingStart
-            val effectivePaddingEnd = if (isCompact) 8.dp else paddingEnd
             val currentList = if (historyList.isNotEmpty()) historyList else retainedHistory
 
             val providerBadgeDisplayMode by AppearanceConfig.providerBadgeDisplayMode.collectAsState()
@@ -101,14 +102,14 @@ fun HomeHistoryRow(
                 itemCount = currentList.size,
                 onViewAll = onViewAllClick,
                 rowContentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = effectivePaddingStart,
-                    end = effectivePaddingEnd,
+                    start = paddingStart,
+                    end = paddingEnd,
                     top = if (isCompact) 4.dp else (4.dp + (homeVerticalSpacingDp * 0.25f).dp),
                     bottom = if (isCompact) 4.dp else (4.dp + (homeVerticalSpacingDp * 0.25f).dp),
                 ),
                 headerPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = effectivePaddingStart,
-                    end = effectivePaddingEnd,
+                    start = paddingStart,
+                    end = paddingEnd,
                     top = (4.dp + (homeVerticalSpacingDp * 0.35f).dp),
                     bottom = 4.dp,
                 ),

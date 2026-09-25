@@ -71,7 +71,7 @@ class LogBufferTest {
 
         val aiSnapshot = LogBuffer.buildAiDebugSnapshot(errEntry.id, precedingCount = 5)
 
-        assertTrue(aiSnapshot.contains("CloudStream Diagnostics & AI Debug Snapshot"))
+        assertTrue(aiSnapshot.contains("Auras Orbit Diagnostics & AI Debug Snapshot"))
         assertTrue(aiSnapshot.contains("Fatal crash occurred"))
         assertTrue(aiSnapshot.contains("NullPointerException"))
         assertTrue(aiSnapshot.contains("Step 10 initialized"))

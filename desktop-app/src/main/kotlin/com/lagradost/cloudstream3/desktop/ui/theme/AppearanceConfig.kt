@@ -71,8 +71,8 @@ enum class DockItemKey(
     ;
 
     companion object {
-        val DEFAULT_ORDER = listOf(HOME, EXPLORE, SEARCH, LIBRARY, DOWNLOADS, SETTINGS, HISTORY, EXTENSIONS)
-        val DEFAULT_DISABLED = setOf(HISTORY, EXTENSIONS)
+        val DEFAULT_ORDER = listOf(HOME, EXPLORE, SEARCH, LIBRARY, DOWNLOADS, HISTORY, EXTENSIONS, SETTINGS)
+        val DEFAULT_DISABLED = emptySet<DockItemKey>()
 
         fun parseOrder(raw: String?): List<DockItemKey> {
             if (raw.isNullOrBlank()) return DEFAULT_ORDER
@@ -172,6 +172,7 @@ object AppearanceConfig {
     private const val PREF_HERO_BACKDROP_BLUR_RADIUS = "pref_hero_backdrop_blur_radius"
     private const val PREF_HERO_BACKDROP_DARKENING = "pref_hero_backdrop_darkening"
     private const val PREF_DOCK_POSITION = "pref_dock_position"
+    private const val PREF_DOCK_COLLAPSED = "pref_dock_collapsed"
     private const val PREF_FONT = "pref_font"
     private const val PREF_SCREENSAVER_ENABLED = "pref_screensaver_enabled"
     private const val PREF_HERO_AUTO_SLIDE_DELAY = "pref_hero_auto_slide_delay"
@@ -289,6 +290,8 @@ object AppearanceConfig {
     val navigationStyle: StateFlow<NavigationStyle> = _navigationStyle.asStateFlow()
     private val _dockPosition = MutableStateFlow(DockPosition.fromString(DesktopDataStore.getKey<String>(PREF_DOCK_POSITION) ?: "Left"))
     val dockPosition: StateFlow<DockPosition> = _dockPosition.asStateFlow()
+    private val _dockCollapsed = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_DOCK_COLLAPSED) ?: false)
+    val dockCollapsed: StateFlow<Boolean> = _dockCollapsed.asStateFlow()
     private val _selectedFont = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_FONT) ?: "Plus Jakarta Sans")
     val selectedFont: StateFlow<String> = _selectedFont.asStateFlow()
     private val _screensaverEnabled = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_SCREENSAVER_ENABLED) ?: true)
@@ -538,6 +541,11 @@ object AppearanceConfig {
     fun setDockPosition(position: DockPosition) {
         _dockPosition.value = position
         persist(PREF_DOCK_POSITION, position.label)
+    }
+
+    fun setDockCollapsed(collapsed: Boolean) {
+        _dockCollapsed.value = collapsed
+        persist(PREF_DOCK_COLLAPSED, collapsed)
     }
 
     fun setSelectedFont(font: String) {
@@ -955,6 +963,7 @@ object AppearanceConfig {
         _globalUiScale.value = DesktopDataStore.getKey<Float>(PREF_GLOBAL_UI_SCALE) ?: 1.0f
         _navigationStyle.value = NavigationStyle.fromString(DesktopDataStore.getKey<String>(PREF_NAVIGATION_STYLE))
         _dockPosition.value = DockPosition.fromString(DesktopDataStore.getKey<String>(PREF_DOCK_POSITION) ?: "Left")
+        _dockCollapsed.value = DesktopDataStore.getKey<Boolean>(PREF_DOCK_COLLAPSED) ?: false
         _dockItemOrder.value = DockItemKey.parseOrder(DesktopDataStore.getKey<String>(PREF_DOCK_ITEM_ORDER))
         _dockDisabledItems.value = DockItemKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_DOCK_DISABLED_ITEMS))
         _selectedFont.value = DesktopDataStore.getKey<String>(PREF_FONT) ?: "Plus Jakarta Sans"

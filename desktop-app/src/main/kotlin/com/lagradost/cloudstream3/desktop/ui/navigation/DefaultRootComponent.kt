@@ -38,6 +38,12 @@ class DefaultRootComponent(
             is Config.Explore -> RootComponent.Child.Explore(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.ExploreComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
             )
+            is Config.GenreBrowse -> RootComponent.Child.GenreBrowse(
+                com.lagradost.cloudstream3.desktop.ui.navigation.components.GenreBrowseComponent(
+                    componentContext,
+                    rootInstanceKeeper = this.instanceKeeper,
+                ),
+            )
             is Config.History -> RootComponent.Child.History(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.HistoryComponent(componentContext),
             )

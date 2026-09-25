@@ -35,6 +35,15 @@ class ExploreComponent(
     val viewModel = rootInstanceKeeper.getOrCreate(key = "ExploreViewModel") { com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel() }
 }
 
+class GenreBrowseComponent(
+    componentContext: ComponentContext,
+    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
+) : ComponentContext by componentContext {
+    val viewModel = rootInstanceKeeper.getOrCreate(key = "GenreBrowseViewModel") {
+        com.lagradost.cloudstream3.desktop.genre.GenreBrowseViewModel()
+    }
+}
+
 class HistoryComponent(
     componentContext: ComponentContext,
     rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,

@@ -3,8 +3,8 @@ package com.lagradost.cloudstream3.desktop.explore.client
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.explore.models.ExploreItem
+import com.lagradost.cloudstream3.desktop.stremio.StremioTransport
 import com.lagradost.common.logging.AppLogger
-import java.net.URLEncoder
 
 object ExploreCatalogClient {
     private const val TAG = "ExploreCatalogClient"
@@ -16,25 +16,19 @@ object ExploreCatalogClient {
         catalogId: String,
         genre: String? = null,
         skip: Int = 0,
+        manifestUrl: String? = null,
     ): List<ExploreItem> {
         return try {
-            val queryParts = mutableListOf<String>()
-            if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
-                val encodedGenre = URLEncoder.encode(genre.trim(), "UTF-8")
-                queryParts.add("genre=$encodedGenre")
-            }
-            if (skip > 0) {
-                queryParts.add("skip=$skip")
-            }
-
-            val pathExtra = if (queryParts.isNotEmpty()) {
-                "/" + queryParts.joinToString("&")
-            } else {
-                ""
-            }
-
-            val cleanBase = baseUrl.trimEnd('/')
-            val url = "$cleanBase/catalog/$type/$catalogId$pathExtra.json"
+            // Stremio extras are route segments (for example /genre=Drama/skip=20),
+            // not a query string. Keep the manifest query so configured addons receive
+            // the same token/profile parameters as their manifest request.
+            val url = StremioTransport.buildCatalogUrl(
+                manifestOrBaseUrl = manifestUrl?.takeIf { it.isNotBlank() } ?: baseUrl,
+                type = type,
+                catalogId = catalogId,
+                genre = genre,
+                skip = skip,
+            )
             AppLogger.d(TAG, "Fetching catalog from: $url")
 
             val response = app.get(url, timeout = 10_000L, cacheTime = 60 * 6)

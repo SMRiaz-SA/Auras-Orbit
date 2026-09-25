@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.desktop.download
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,11 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.Locale
 
 enum class TaskStatus {
@@ -70,6 +76,7 @@ data class DownloadTask(
 
 object AppDownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mapper = jacksonObjectMapper()
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
@@ -81,6 +88,28 @@ object AppDownloadManager {
     fun getTask(id: String): DownloadTask? = _tasks.value.firstOrNull { it.id == id }
 
     fun isTaskActive(id: String): Boolean = _tasks.value.any { it.id == id && it.status == TaskStatus.RUNNING }
+
+    private fun expectedReleaseDigest(downloadUrl: String): String {
+        val uri = URI(downloadUrl)
+        val segments = uri.path.trim('/').split('/')
+        require(uri.scheme == "https" && uri.host.equals("github.com", ignoreCase = true) &&
+            segments.size == 6 && segments[2] == "releases" && segments[3] == "latest" &&
+            segments[4] == "download") { "Executable download must be a GitHub latest release asset" }
+
+        val apiUrl = "https://api.github.com/repos/${segments[0]}/${segments[1]}/releases/latest"
+        val request = Request.Builder().url(apiUrl).header("Accept", "application/vnd.github+json").build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("Could not verify release asset: HTTP ${response.code}")
+            val body = response.body ?: throw IllegalStateException("Empty release metadata")
+            val assets = mapper.readTree(body.string()).path("assets")
+            val asset = assets.firstOrNull { it.path("name").asText() == segments[5] }
+                ?: throw IllegalStateException("Release asset not found in GitHub metadata")
+            val digest = asset.path("digest").asText()
+            val match = Regex("sha256:([0-9a-fA-F]{64})").matchEntire(digest)
+                ?: throw IllegalStateException("Release asset has no SHA-256 digest")
+            return match.groupValues[1].lowercase()
+        }
+    }
 
     fun startDownload(
         id: String,
@@ -118,6 +147,8 @@ object AppDownloadManager {
 
             try {
                 AppLogger.i("AppDownloadManager: Starting download '$title' from $url")
+                val expectedDigest = expectedReleaseDigest(url)
+                val digest = MessageDigest.getInstance("SHA-256")
                 val request = Request.Builder().url(url).build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
@@ -136,6 +167,7 @@ object AppDownloadManager {
 
                             while (input.read(buffer).also { read = it } != -1) {
                                 output.write(buffer, 0, read)
+                                digest.update(buffer, 0, read)
                                 downloaded += read
                                 bytesSinceSample += read
 
@@ -157,15 +189,19 @@ object AppDownloadManager {
                         }
                     }
 
-                    // Verify size
-                    if (contentLength > 0 && tempFile.length() < (contentLength * 0.95)) {
+                    if (contentLength > 0 && tempFile.length() != contentLength) {
                         throw IllegalStateException("Downloaded file incomplete (${tempFile.length()} / $contentLength bytes)")
                     }
+                    val actualDigest = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (actualDigest != expectedDigest) {
+                        throw IllegalStateException("Release asset SHA-256 mismatch")
+                    }
 
-                    if (targetFile.exists()) targetFile.delete()
-                    if (!tempFile.renameTo(targetFile)) {
-                        tempFile.copyTo(targetFile, overwrite = true)
-                        tempFile.delete()
+                    try {
+                        Files.move(tempFile.toPath(), targetFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    } catch (_: AtomicMoveNotSupportedException) {
+                        Files.move(tempFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
                     }
 
                     targetFile.setExecutable(true)

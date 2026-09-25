@@ -115,6 +115,10 @@ object PluginSecurityPolicy {
         "java.util.concurrent.ScheduledThreadPoolExecutor",
         "java.util.ServiceLoader",
         "java.util.jar.JarFile",
+        "java.util.zip.ZipFile",
+        "java.util.Formatter",
+        "java.util.Scanner",
+        "java.util.logging.FileHandler",
     )
 
     private val CLOUDSTREAM_ECOSYSTEM = setOf(
@@ -321,7 +325,7 @@ object PluginSecurityPolicy {
         }
 
         if (className.startsWith("java.util.")) {
-            if (DANGEROUS_UTIL_CLASSES.contains(className)) {
+            if (DANGEROUS_UTIL_CLASSES.contains(className) || className.startsWith("java.util.prefs.")) {
                 return false
             }
         }

@@ -1,6 +1,11 @@
 package com.lagradost.cloudstream3.syncproviders
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 
 data class AuthLoginPage(
     /** The website to open to authenticate */
@@ -144,13 +149,41 @@ abstract class AuthAPI {
             get() = System.currentTimeMillis()
 
         fun splitRedirectUrl(redirectUrl: String): Map<String, String> {
-            return emptyMap()
+            val query = redirectUrl.substringAfter('?', "").substringBefore('#')
+            val fragment = redirectUrl.substringAfter('#', "")
+            val values = linkedMapOf<String, String>()
+
+            fun parse(parameters: String) {
+                parameters.split('&').forEach { pair ->
+                    if (pair.isBlank()) return@forEach
+                    val key = pair.substringBefore('=').decodeFormComponent()
+                    if (key.isBlank()) return@forEach
+                    values[key] = pair.substringAfter('=', "").decodeFormComponent()
+                }
+            }
+
+            parse(query)
+            parse(fragment)
+            return values
         }
 
         fun generateCodeVerifier(): String {
             // It is recommended to use a URL-safe string as code_verifier.
             // See section 4 of RFC 7636 for more details.
-            return "stub"
+            val bytes = ByteArray(32).also(SecureRandom()::nextBytes)
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        }
+
+        fun generateS256CodeChallenge(codeVerifier: String): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(codeVerifier.toByteArray(StandardCharsets.US_ASCII))
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
+        }
+
+        private fun String.decodeFormComponent(): String = try {
+            URLDecoder.decode(this, StandardCharsets.UTF_8)
+        } catch (_: IllegalArgumentException) {
+            this
         }
     }
 
@@ -195,7 +228,8 @@ abstract class AuthAPI {
      * and as such any network issues it will fail silently, and the token will not be revoked.
      **/
     @Throws
-    open suspend fun invalidateToken(token: AuthToken): Nothing = throw NotImplementedError()
+    /** Returns true when a remote invalidation request completed; providers may not confirm token validity. */
+    open suspend fun invalidateToken(token: AuthToken): Boolean = false
 
     @Throws
     @Deprecated("Please use the new API for AuthAPI", level = DeprecationLevel.ERROR)

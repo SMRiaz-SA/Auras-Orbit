@@ -89,7 +89,6 @@ object SettingsSearchIndex {
         SettingsSearchEntry("AniList Tracker", LeafTab.ACCOUNTS, listOf("anilist", "tracker", "anime", "sync", "scrobble", "login"), uiLabel = "AniList"),
         SettingsSearchEntry("MAL / MyAnimeList Tracker", LeafTab.ACCOUNTS, listOf("mal", "myanimelist", "tracker", "anime", "sync", "login"), uiLabel = "MAL"),
         SettingsSearchEntry("SIMKL Tracker", LeafTab.ACCOUNTS, listOf("simkl", "tracker", "anime", "shows", "movies", "sync"), uiLabel = "SIMKL"),
-        SettingsSearchEntry("Trakt Tracker", LeafTab.ACCOUNTS, listOf("trakt", "tracker", "movies", "shows", "sync", "scrobble"), uiLabel = "Trakt"),
         SettingsSearchEntry("Discord Rich Presence", LeafTab.ACCOUNTS, listOf("discord", "rpc", "rich presence", "status", "activity"), uiLabel = "Discord Rich Presence"),
 
         // Metadata & Integrations tab & Sub-screens
@@ -129,6 +128,6 @@ object SettingsSearchIndex {
 
         // About tab
         SettingsSearchEntry("Check for App Updates", LeafTab.ABOUT, listOf("update", "version", "check", "new", "release", "download"), uiLabel = "Check for Updates"),
-        SettingsSearchEntry("About CloudStream Desktop", LeafTab.ABOUT, listOf("about", "version", "info", "license", "credits", "github"), uiLabel = "About"),
+        SettingsSearchEntry("About Auras Orbit", LeafTab.ABOUT, listOf("about", "version", "info", "license", "credits", "github"), uiLabel = "About"),
     )
 }

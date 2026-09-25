@@ -175,8 +175,14 @@ fun ComposeHomeScreen(
                                     {}
                                 },
                                 isHistoryVisible = isFirstPage && showContinueWatching && historyList.isNotEmpty(),
-                                onViewAll = { provider, title, items ->
-                                    CategoryGridCache.put(provider.name, title, items)
+                                onViewAll = { provider, pageData, title, items, hasNext ->
+                                    CategoryGridCache.putHomeCategory(
+                                        provider.name,
+                                        title,
+                                        items,
+                                        com.lagradost.cloudstream3.MainPageRequest(pageData.name, pageData.data, pageData.horizontalImages),
+                                        hasNext,
+                                    )
                                     onNavigate(Config.CategoryGrid(provider.name, title))
                                 },
                                 onItemClick = { provider, item, backdrop, autoPlay ->

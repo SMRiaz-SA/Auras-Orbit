@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.library.ListSorting
 import com.lagradost.cloudstream3.utils.UiText
 import java.util.Date
+import java.util.Locale
 
 /**
  * Stateless synchronization class, used for syncing status about a specific movie/show.
@@ -29,6 +30,12 @@ abstract class SyncAPI : AuthAPI() {
      * This should specify what sync watch types can be used with this service. */
     open val supportedWatchTypes: Set<SyncWatchType> = SyncWatchType.entries.toSet()
 
+    /** Whether this provider can preserve a set of individually watched episodes. */
+    open val supportsExactEpisodeProgress: Boolean = false
+
+    /** Whether this provider can accept exact, additive playback watch events. */
+    open val supportsWatchedEpisodeEvents: Boolean = false
+
     /**
      * Allows certain providers to open pages from
      * library links.
@@ -43,6 +50,13 @@ abstract class SyncAPI : AuthAPI() {
         id: String,
         newStatus: AbstractSyncStatus,
     ): Boolean = throw NotImplementedError()
+
+    /** Record playback as an additive watch event when the provider supports episode-level history. */
+    open suspend fun recordWatchedEpisodes(
+        auth: AuthData?,
+        media: SyncMediaIdentity,
+        episodes: List<WatchedEpisodeEvent>,
+    ): Boolean = false
 
     /** Get the current status of an item */
     @Throws
@@ -81,7 +95,38 @@ abstract class SyncAPI : AuthAPI() {
         override var posterHeaders: Map<String, String>? = null,
         override var id: Int? = null,
         override var score: Score? = null,
+        var mediaType: SyncMediaType? = null,
+        var year: Int? = null,
+        var alternativeNames: Set<String> = emptySet(),
     ) : SearchResponse
+
+    enum class SyncMediaType {
+        ANIME,
+        SHOW,
+        MOVIE,
+    }
+
+    /** Canonical episode coordinate; anime may omit season for sequential numbering. */
+    data class SyncEpisode(val season: Int?, val number: Int) {
+        init {
+            require(season == null || season >= 0) { "Season cannot be negative" }
+            require(number > 0) { "Episode number must be positive" }
+        }
+    }
+
+    data class SyncMediaIdentity(
+        val mediaType: SyncMediaType,
+        val title: String,
+        val year: Int? = null,
+        /** Provider-neutral external IDs such as simkl, mal, anilist, imdb, tmdb, or tvdb. */
+        val externalIds: Map<String, String> = emptyMap(),
+    )
+
+    data class WatchedEpisodeEvent(
+        val episode: SyncEpisode,
+        /** Epoch milliseconds. Null lets the provider use the time it receives the event. */
+        val watchedAt: Long? = null,
+    )
 
     abstract class AbstractSyncStatus {
         abstract var status: SyncWatchType
@@ -89,6 +134,15 @@ abstract class SyncAPI : AuthAPI() {
         abstract var watchedEpisodes: Int?
         abstract var isFavorite: Boolean?
         abstract var maxEpisodes: Int?
+
+        /**
+         * Optional exact selection. Count-only providers must reject non-null selections they
+         * cannot represent instead of silently flattening them to a count.
+         */
+        open var watchedEpisodeSelection: Set<SyncEpisode>? = null
+
+        /** Required when adding a title that is not already present in a provider library. */
+        open var mediaType: SyncMediaType? = null
     }
 
     data class SyncStatus(
@@ -97,6 +151,8 @@ abstract class SyncAPI : AuthAPI() {
         override var watchedEpisodes: Int?,
         override var isFavorite: Boolean? = null,
         override var maxEpisodes: Int? = null,
+        override var watchedEpisodeSelection: Set<SyncEpisode>? = null,
+        override var mediaType: SyncMediaType? = null,
     ) : AbstractSyncStatus()
 
     data class SyncResult(
@@ -135,7 +191,38 @@ abstract class SyncAPI : AuthAPI() {
         var items: List<LibraryItem>,
     ) {
         fun sort(method: ListSorting?, query: String? = null) {
-            // Stubbed
+            val normalizedQuery = query?.trim()?.takeIf(String::isNotEmpty)
+            val filtered = if (normalizedQuery == null) items else items.filter {
+                it.name.contains(normalizedQuery, ignoreCase = true)
+            }
+            val alphabetical = compareBy<LibraryItem> { it.name.lowercase(Locale.ROOT) }
+            val comparator = when (method) {
+                null -> null
+                ListSorting.Query -> normalizedQuery?.let { value ->
+                    compareBy<LibraryItem> { it.name.indexOf(value, ignoreCase = true) }
+                        .then(alphabetical)
+                }
+                ListSorting.RatingHigh -> compareByDescending<LibraryItem> { it.personalRating?.toDouble(100) }
+                    .then(alphabetical)
+                ListSorting.RatingLow -> compareBy<LibraryItem> { it.personalRating == null }
+                    .thenBy { it.personalRating?.toDouble(100) ?: 0.0 }
+                    .then(alphabetical)
+                ListSorting.AlphabeticalA -> alphabetical
+                ListSorting.AlphabeticalZ -> compareByDescending<LibraryItem> { it.name.lowercase(Locale.ROOT) }
+                ListSorting.UpdatedNew -> compareBy<LibraryItem> { it.lastUpdatedUnixTime == null }
+                    .thenByDescending { it.lastUpdatedUnixTime ?: 0L }
+                    .then(alphabetical)
+                ListSorting.UpdatedOld -> compareBy<LibraryItem> { it.lastUpdatedUnixTime == null }
+                    .thenBy { it.lastUpdatedUnixTime ?: 0L }
+                    .then(alphabetical)
+                ListSorting.ReleaseDateNew -> compareBy<LibraryItem> { it.releaseDate == null }
+                    .thenByDescending { it.releaseDate?.time ?: 0L }
+                    .then(alphabetical)
+                ListSorting.ReleaseDateOld -> compareBy<LibraryItem> { it.releaseDate == null }
+                    .thenBy { it.releaseDate?.time ?: 0L }
+                    .then(alphabetical)
+            }
+            items = comparator?.let(filtered::sortedWith) ?: filtered
         }
     }
 

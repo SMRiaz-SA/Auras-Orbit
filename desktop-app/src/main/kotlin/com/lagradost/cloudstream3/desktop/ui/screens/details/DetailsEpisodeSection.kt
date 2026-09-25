@@ -845,11 +845,11 @@ private fun RenderEpisodesSection(
             val cardWidth = remember(maxWidth) {
                 val netWidth = maxWidth - (hPadding * 2)
                 when {
-                    maxWidth < 600.dp -> (netWidth * 0.85f).coerceIn(280.dp, 340.dp)
-                    maxWidth < 1100.dp -> ((netWidth - itemSpacing * 2) / 2.3f).coerceIn(320.dp, 390.dp)
-                    maxWidth < 1600.dp -> ((netWidth - itemSpacing * 3) / 3.4f).coerceIn(360.dp, 440.dp)
-                    maxWidth < 2200.dp -> ((netWidth - itemSpacing * 4) / 4.4f).coerceIn(380.dp, 460.dp)
-                    else -> ((netWidth - itemSpacing * 5) / 5.4f).coerceIn(400.dp, 480.dp)
+                    maxWidth < 600.dp -> (netWidth * 0.85f).coerceIn(260.dp, 300.dp)
+                    maxWidth < 1100.dp -> ((netWidth - itemSpacing * 2) / 2.8f).coerceIn(280.dp, 320.dp)
+                    maxWidth < 1600.dp -> ((netWidth - itemSpacing * 3) / 4f).coerceIn(300.dp, 340.dp)
+                    maxWidth < 2200.dp -> ((netWidth - itemSpacing * 4) / 5f).coerceIn(300.dp, 340.dp)
+                    else -> ((netWidth - itemSpacing * 5) / 6f).coerceIn(320.dp, 360.dp)
                 }
             }
             LazyRow(
@@ -875,6 +875,7 @@ private fun RenderEpisodesSection(
                         thumbnailVersion = uiState?.episodeThumbnailVersion ?: 0,
                         lockUnreleasedEpisodes = lockUnreleasedEpisodes,
                         posterHoverGlowEnabled = posterHoverGlowEnabled,
+                        compactLayout = true,
                         modifier = Modifier.width(cardWidth),
                         enableDownloadButtons = enableDownloadButtons,
                         onPlay = onPlay,

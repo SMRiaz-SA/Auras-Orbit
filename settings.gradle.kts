@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "cloudstream-windows"
+rootProject.name = "auras-orbit-windows"
 
 include(":library")
 project(":library").projectDir = file("android-reference/library")

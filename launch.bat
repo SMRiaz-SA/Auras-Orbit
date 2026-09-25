@@ -13,10 +13,10 @@ if /i "%~1"=="start" goto :run_normal
 :menu
 cls
 echo ===================================================
-echo           CloudStream Desktop Launcher
+echo               Auras Orbit Launcher
 echo ===================================================
 echo.
-echo   [1] Start CloudStream (Default Dev Mode)
+echo   [1] Start Auras Orbit (Default Dev Mode)
 echo   [2] Start with Dev Studio ^& Live LogCat (--dev)
 echo   [3] Launch Packaged Release EXE
 echo   [4] Build / Compile Standalone EXE
@@ -58,7 +58,7 @@ if %errorlevel% neq 0 (
         echo ===================================================
         echo   [FATAL ERROR] Java is not installed or not in PATH
         echo ===================================================
-        echo   CloudStream Desktop requires JDK 21 or higher.
+        echo   Auras Orbit requires JDK 21 or higher.
         echo   Please install Eclipse Adoptium Temurin 21:
         echo     https://adoptium.net/temurin/releases/?version=21
         echo   and ensure 'java' is in your PATH or JAVA_HOME is set.
@@ -145,7 +145,7 @@ exit /b 0
 call :check_prerequisites
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [INFO] Starting CloudStream Desktop Client...
+echo [INFO] Starting Auras Orbit...
 echo [TIP] Press F12 in-app anytime to open the Dev Studio LogCat.
 echo.
 call gradlew :desktop-app:run
@@ -156,7 +156,7 @@ goto :after_run
 call :check_prerequisites
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
-echo [INFO] Starting CloudStream Desktop with Dev Studio ^& Live LogCat...
+echo [INFO] Starting Auras Orbit with Dev Studio ^& Live LogCat...
 echo.
 call gradlew :desktop-app:run --args="--dev"
 goto :after_run
@@ -165,7 +165,7 @@ goto :after_run
 :run_release
 call :check_prerequisites
 if %errorlevel% neq 0 exit /b %errorlevel%
-set "EXE_PATH=desktop-app\build\compose\binaries\main\app\CloudStream-Desktop\CloudStream-Desktop.exe"
+set "EXE_PATH=desktop-app\build\compose\binaries\main\app\Auras-Orbit\Auras-Orbit.exe"
 
 if not exist "%EXE_PATH%" (
     echo.
@@ -182,7 +182,7 @@ if not exist "%EXE_PATH%" (
 )
 
 echo.
-echo [INFO] Starting CloudStream-Desktop.exe...
+echo [INFO] Starting Auras-Orbit.exe...
 start "" "%EXE_PATH%"
 exit /b 0
 
@@ -192,7 +192,7 @@ call :check_prerequisites
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo ===================================================
-echo   Compiling CloudStream Desktop (Standalone EXE)
+echo   Compiling Auras Orbit (Standalone EXE)
 echo ===================================================
 echo.
 call gradlew clean :desktop-app:createDistributable
@@ -205,7 +205,7 @@ if %errorlevel% neq 0 (
 echo.
 echo [SUCCESS] Standalone EXE compilation complete!
 echo Executable located at:
-echo desktop-app\build\compose\binaries\main\app\CloudStream-Desktop\CloudStream-Desktop.exe
+echo desktop-app\build\compose\binaries\main\app\Auras-Orbit\Auras-Orbit.exe
 echo.
 pause
 exit /b 0
@@ -217,8 +217,9 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo [INFO] Running all unit test suites and verifications...
 echo.
-call gradlew :common:test :plugin-runtime:test :desktop-app:compileKotlin
-if %errorlevel% equ 0 (
+call gradlew :common:test :plugin-runtime:test :desktop-app:test
+set "TEST_EXIT=%errorlevel%"
+if !TEST_EXIT! equ 0 (
     echo.
     echo [SUCCESS] All test suites and builds passed!
 ) else (
@@ -227,7 +228,7 @@ if %errorlevel% equ 0 (
 )
 echo.
 pause
-exit /b 0
+exit /b !TEST_EXIT!
 
 :after_run
 echo.

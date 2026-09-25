@@ -210,11 +210,11 @@ class ExtensionsViewModel(
                     // Exact repository matching based on folder structure on disk
                     val folderName = jar.parentFile?.name ?: ""
                     val matchingSavedRepo = savedRepos.find {
-                        val cleanName = it.name.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                        val cleanName = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.safeDirectoryName(it.name)
                         cleanName.equals(folderName, ignoreCase = true)
                     }
                     val remoteMatch = allRemote.find { (rName, p) ->
-                        val cleanRName = rName.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                        val cleanRName = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.safeDirectoryName(rName)
                         p.internalName == internalName && cleanRName.equals(folderName, ignoreCase = true)
                     }
 
@@ -240,11 +240,9 @@ class ExtensionsViewModel(
     private fun installPlugin(repoName: String, plugin: SitePlugin) {
         viewModelScope.launch {
             updateState { copy(installingPlugins = installingPlugins + plugin.internalName) }
-            val repoCleanName = repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_")
-            val targetDir = File(pluginRepo.getExtensionsDir(), repoCleanName)
-            val jarFile = File(targetDir, "${plugin.internalName}.jar")
-            val jvmJarFile = File(targetDir, "${plugin.internalName}-jvm.jar")
-            val dexFile = File(targetDir, "${plugin.internalName}.dex")
+            val jarFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, ".jar")
+            val jvmJarFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, "-jvm.jar")
+            val dexFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, ".dex")
 
             val cleanupFailedArtifacts = {
                 try {
@@ -298,11 +296,9 @@ class ExtensionsViewModel(
     private fun bypassSecurityAndInstall(repoName: String, plugin: SitePlugin) {
         viewModelScope.launch {
             updateState { copy(isDialogInstalling = true, installingPlugins = installingPlugins + plugin.internalName) }
-            val repoCleanName = repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_")
-            val targetDir = File(pluginRepo.getExtensionsDir(), repoCleanName)
-            val jarFile = File(targetDir, "${plugin.internalName}.jar")
-            val jvmJarFile = File(targetDir, "${plugin.internalName}-jvm.jar")
-            val dexFile = File(targetDir, "${plugin.internalName}.dex")
+            val jarFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, ".jar")
+            val jvmJarFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, "-jvm.jar")
+            val dexFile = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.pluginFile(repoName, plugin.internalName, ".dex")
 
             val cleanupFailedArtifacts = {
                 try {
@@ -314,9 +310,6 @@ class ExtensionsViewModel(
             }
 
             try {
-                // Persist trust with repository namespacing and all alias variants
-                ExtensionLoader.addTrusted(jarFile, plugin.internalName, manifestName = plugin.name)
-
                 val downloadedFile = withContext(Dispatchers.IO) {
                     installPluginUseCase.await(repoName, plugin)
                 }
@@ -422,7 +415,7 @@ class ExtensionsViewModel(
 
     private fun uninstallPlugin(repoName: String, internalName: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val cleanRepo = repoName.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+            val cleanRepo = com.lagradost.cloudstream3.desktop.repo.PluginFileUtils.safeDirectoryName(repoName)
             val installedMatch = uiState.value.installedPlugins.find {
                 it.internalName == internalName && (
                     it.file.parentFile?.name?.equals(cleanRepo, ignoreCase = true) == true ||

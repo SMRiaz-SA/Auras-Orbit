@@ -1720,7 +1720,7 @@
                     niceTitle = parts.join(' - ');
                 }
             }
-            titleDisplay.innerText = niceTitle || "CloudStream Player";
+            titleDisplay.innerText = niceTitle || "Auras Orbit Player";
             document.title = meta.title;
             if (typeof window.updateClockDisplay === 'function') window.updateClockDisplay();
         }

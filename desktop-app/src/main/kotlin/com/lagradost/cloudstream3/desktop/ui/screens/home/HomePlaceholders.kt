@@ -23,9 +23,17 @@ fun HomeHeroCarouselPlaceholder() {
     val isWindowCompact = rawWidth < 600.dp
     val dynamicHeight = if (isWindowCompact) 460.dp else with(density) { (windowInfo.containerSize.height * 0.85f).toDp() }.coerceIn(400.dp, 1000.dp)
 
-    val dockPosition by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.dockPosition.collectAsState()
-    val paddingStart = if (isWindowCompact) 12.dp else if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) 98.dp else 32.dp
-    val paddingEnd = if (isWindowCompact) 12.dp else if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) 98.dp else 32.dp
+    val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+    val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val compactPadding = if (isWindowCompact) 12.dp else 0.dp
+    val paddingStart = maxOf(
+        safeArea.calculateStartPadding(layoutDirection),
+        compactPadding,
+    )
+    val paddingEnd = maxOf(
+        safeArea.calculateEndPadding(layoutDirection),
+        compactPadding,
+    )
 
     Box(
         modifier = Modifier
@@ -78,10 +86,12 @@ fun HomeHeroCarouselPlaceholder() {
 fun CategoryRowPlaceholder(
     title: String,
     showLargeHeader: Boolean = false,
+    outerPadding: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    val dockPosition by com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.dockPosition.collectAsState()
-    val paddingStart = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.LEFT) 88.dp else 22.dp
-    val paddingEnd = if (dockPosition == com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT) 88.dp else 22.dp
+    val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
+    val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+    val paddingStart = maxOf(safeArea.calculateStartPadding(layoutDirection), outerPadding)
+    val paddingEnd = maxOf(safeArea.calculateEndPadding(layoutDirection), outerPadding)
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(start = paddingStart, end = paddingEnd)) {
         val availableWidth = this.maxWidth

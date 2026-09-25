@@ -27,7 +27,7 @@ object StremioTransport {
 
     fun getBaseUrl(manifestUrl: String): String {
         val clean = manifestUrl.substringBefore("?")
-        return clean.removeSuffix("/manifest.json").removeSuffix("/")
+        return clean.replace(Regex("/manifest\\.json$", RegexOption.IGNORE_CASE), "").removeSuffix("/")
     }
 
     fun getQueryParams(manifestUrl: String): String {
@@ -55,4 +55,34 @@ object StremioTransport {
         val encodedId = URLEncoder.encode(id, "UTF-8").replace("+", "%20")
         return "$baseUrl/stream/$type/$encodedId.json$query"
     }
+
+    /**
+     * Build a Stremio catalog route with optional extras and manifest configuration.
+     * Catalog extras are path segments, not URL query parameters.
+     */
+    fun buildCatalogUrl(
+        manifestOrBaseUrl: String,
+        type: String,
+        catalogId: String,
+        genre: String? = null,
+        skip: Int = 0,
+    ): String {
+        val baseUrl = getBaseUrl(manifestOrBaseUrl)
+        val query = getQueryParams(manifestOrBaseUrl)
+        val encodedType = encodePathSegment(type)
+        val encodedCatalogId = encodePathSegment(catalogId)
+        val extras = buildList {
+            if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
+                add("genre=${encodePathSegment(genre.trim())}")
+            }
+            if (skip > 0) add("skip=$skip")
+        }
+        val extraPath = extras.joinToString(separator = "/", prefix = "/")
+            .takeIf { extras.isNotEmpty() }
+            ?: ""
+        return "$baseUrl/catalog/$encodedType/$encodedCatalogId$extraPath.json$query"
+    }
+
+    private fun encodePathSegment(value: String): String =
+        URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 }

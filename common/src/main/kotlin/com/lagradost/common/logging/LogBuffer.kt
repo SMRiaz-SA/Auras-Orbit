@@ -123,7 +123,7 @@ object LogBuffer {
         val targetEntry = all[targetIndex]
 
         return buildString {
-            appendLine("### CloudStream Diagnostics & AI Debug Snapshot")
+            appendLine("### Auras Orbit Diagnostics & AI Debug Snapshot")
             appendLine("- **Timestamp (UTC):** ${targetEntry.formattedTime}")
             appendLine("- **Focus Level:** ${targetEntry.level.name}")
             appendLine("- **Subsystem:** ${targetEntry.subsystem.displayName}")

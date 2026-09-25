@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.arkivanov.decompose.extensions.compose.stack.Children
 import com.arkivanov.decompose.extensions.compose.stack.animation.fade
 import com.arkivanov.decompose.extensions.compose.stack.animation.plus
@@ -242,6 +241,7 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                         val title = when (activeInstance) {
                             is RootComponent.Child.Home -> "Home"
                             is RootComponent.Child.Explore -> "Explore & Catalogs"
+                            is RootComponent.Child.GenreBrowse -> "Genre Browser"
                             is RootComponent.Child.History -> "Watch History"
                             is RootComponent.Child.Search -> "Search"
                             is RootComponent.Child.Extensions -> "Extensions"
@@ -383,8 +383,18 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                             }
                                             is RootComponent.Child.Explore -> {
                                                 com.lagradost.cloudstream3.desktop.explore.ui.ExploreScreen(
-                                                    onNavigate = { config -> rootComponent.bringToFront(config) },
+                                                    onNavigate = { config ->
+                                                        if (config == Config.GenreBrowse) rootComponent.push(config)
+                                                        else rootComponent.bringToFront(config)
+                                                    },
                                                     viewModel = child.component.viewModel,
+                                                )
+                                            }
+                                            is RootComponent.Child.GenreBrowse -> {
+                                                com.lagradost.cloudstream3.desktop.genre.GenreBrowseScreen(
+                                                    viewModel = child.component.viewModel,
+                                                    onBack = { rootComponent.pop() },
+                                                    onNavigate = { rootComponent.bringToFront(it) },
                                                 )
                                             }
                                             is RootComponent.Child.History -> {
@@ -478,8 +488,9 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                             is RootComponent.Child.CategoryGrid -> {
                                                 val api = com.lagradost.cloudstream3.APIHolder.getApiFromNameNull(child.component.providerName)
                                                 if (api != null) {
-                                                    val items = com.lagradost.cloudstream3.desktop.ui.screens.CategoryGridCache.get(child.component.providerName, child.component.title) ?: emptyList()
-                                                    com.lagradost.cloudstream3.desktop.ui.screens.ComposeCategoryGridScreen(onNavigate = { rootComponent.bringToFront(it) }, onBack = { rootComponent.pop() }, api, child.component.title, items)
+                                                    val content = com.lagradost.cloudstream3.desktop.ui.screens.CategoryGridCache.getContent(child.component.providerName, child.component.title)
+                                                        ?: com.lagradost.cloudstream3.desktop.ui.screens.CategoryGridContent(emptyList())
+                                                    com.lagradost.cloudstream3.desktop.ui.screens.ComposeCategoryGridScreen(onNavigate = { rootComponent.bringToFront(it) }, onBack = { rootComponent.pop() }, api, child.component.title, content)
                                                 } else {
                                                     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                                                         androidx.compose.material3.Text("Plugin unloaded. Cannot load category.")
@@ -534,13 +545,6 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                 }
             }
 
-            // Global Development Unit Watermark (Visible across every Compose screen)
-            GlobalDevelopmentWatermark(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 14.dp, bottom = 10.dp)
-                    .zIndex(99f),
-            )
         }
     }
 }
@@ -548,7 +552,7 @@ fun CloudstreamApp(rootComponent: RootComponent) {
 }
 
 @Composable
-private fun GlobalDevelopmentWatermark(modifier: Modifier = Modifier) {
+internal fun GlobalDevelopmentWatermark(modifier: Modifier = Modifier) {
     val dateStr = remember {
         java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy.MM.dd"))
     }

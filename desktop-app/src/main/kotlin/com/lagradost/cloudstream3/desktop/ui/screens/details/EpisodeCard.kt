@@ -58,6 +58,7 @@ fun EpisodeCard(
     thumbnailVersion: Int = 0,
     lockUnreleasedEpisodes: Boolean = true,
     posterHoverGlowEnabled: Boolean = true,
+    compactLayout: Boolean = false,
     modifier: Modifier = Modifier,
     enableDownloadButtons: Boolean = true,
     isContextMenuEnabled: Boolean = true,
@@ -115,7 +116,7 @@ fun EpisodeCard(
 
     Box(
         modifier = modifier
-            .aspectRatio(16f / 13.5f)
+            .aspectRatio(if (compactLayout) 16f / 9f else 16f / 13.5f)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -207,12 +208,13 @@ fun EpisodeCard(
 
             // Card background image
             val context = coil3.compose.LocalPlatformContext.current
-            var bakedBitmap by remember(targetUrl, shouldHideSpoilers) {
-                mutableStateOf(targetUrl?.let { EpisodeCardBaker.getFromCache(it, shouldHideSpoilers) })
+            val bakedHeight = if (compactLayout) 270 else 405
+            var bakedBitmap by remember(targetUrl, shouldHideSpoilers, compactLayout) {
+                mutableStateOf(targetUrl?.let { EpisodeCardBaker.getFromCache(it, shouldHideSpoilers, height = bakedHeight) })
             }
 
             if (targetUrl != null) {
-                LaunchedEffect(targetUrl, shouldHideSpoilers) {
+                LaunchedEffect(targetUrl, shouldHideSpoilers, compactLayout) {
                     if (bakedBitmap == null) {
                         withContext(Dispatchers.IO) {
                             try {
@@ -224,7 +226,7 @@ fun EpisodeCard(
                                 if (result is coil3.request.SuccessResult) {
                                     val skiaBitmap = (result.image as? coil3.BitmapImage)?.bitmap
                                     if (skiaBitmap != null) {
-                                        bakedBitmap = EpisodeCardBaker.getOrBake(targetUrl, skiaBitmap, shouldHideSpoilers)
+                                        bakedBitmap = EpisodeCardBaker.getOrBake(targetUrl, skiaBitmap, shouldHideSpoilers, height = bakedHeight)
                                     }
                                 }
                             } catch (_: Throwable) {}
@@ -428,8 +430,19 @@ fun EpisodeCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(start = if (isNarrow) 12.dp else 18.dp, end = if (isNarrow) 12.dp else 18.dp, bottom = if (progress > 0f) (if (isNarrow) 14.dp else 20.dp) else (if (isNarrow) 8.dp else 14.dp)),
-                verticalArrangement = Arrangement.spacedBy(if (isNarrow) 2.dp else 4.dp),
+                    .padding(
+                        start = if (compactLayout || isNarrow) 12.dp else 18.dp,
+                        end = if (compactLayout || isNarrow) 12.dp else 18.dp,
+                        bottom = when {
+                            progress > 0f && compactLayout -> 10.dp
+                            progress > 0f && isNarrow -> 14.dp
+                            progress > 0f -> 20.dp
+                            compactLayout -> 8.dp
+                            isNarrow -> 8.dp
+                            else -> 14.dp
+                        },
+                    ),
+                verticalArrangement = Arrangement.spacedBy(if (compactLayout || isNarrow) 2.dp else 4.dp),
             ) {
                 // Row 0: Episode Code Badge (e.g. S4 • EPISODE 1)
                 val epNum = ep.episode
@@ -440,7 +453,7 @@ fun EpisodeCard(
                 Text(
                     text = epText,
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = if (isNarrow) 11.sp else 12.5.sp,
+                        fontSize = if (compactLayout || isNarrow) 10.5.sp else 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.8.sp,
                     ),
@@ -451,8 +464,12 @@ fun EpisodeCard(
                 Text(
                     text = if (shouldHideSpoilers) "Episode title hidden" else finalTitle,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = if (isNarrow) 16.sp else 19.5.sp,
-                        lineHeight = if (isNarrow) 20.sp else 24.sp,
+                        fontSize = when {
+                            compactLayout -> 16.sp
+                            isNarrow -> 16.sp
+                            else -> 19.5.sp
+                        },
+                        lineHeight = if (compactLayout || isNarrow) 20.sp else 24.sp,
                     ),
                     fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
@@ -464,23 +481,25 @@ fun EpisodeCard(
                 )
 
                 // Row 2: Synopsis / Plot
-                Text(
-                    text = when {
-                        shouldHideSpoilers -> "Description hidden."
-                        hasDesc -> cleanDesc
-                        runTimeStr != null -> "Runtime: $runTimeStr"
-                        else -> "No description available."
-                    },
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = if (isNarrow) 12.5.sp else 14.5.sp,
-                        lineHeight = if (isNarrow) 16.sp else 20.sp,
-                    ),
-                    color = Color(0xFFD1D5DB).copy(alpha = if (hasDesc && !shouldHideSpoilers) 0.88f else 0.45f),
-                    minLines = 2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.run { if (shouldHideSpoilers && hasDesc) this.blur(5.dp) else this },
-                )
+                if (!compactLayout) {
+                    Text(
+                        text = when {
+                            shouldHideSpoilers -> "Description hidden."
+                            hasDesc -> cleanDesc
+                            runTimeStr != null -> "Runtime: $runTimeStr"
+                            else -> "No description available."
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = if (isNarrow) 12.5.sp else 14.5.sp,
+                            lineHeight = if (isNarrow) 16.sp else 20.sp,
+                        ),
+                        color = Color(0xFFD1D5DB).copy(alpha = if (hasDesc && !shouldHideSpoilers) 0.88f else 0.45f),
+                        minLines = 2,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.run { if (shouldHideSpoilers && hasDesc) this.blur(5.dp) else this },
+                    )
+                }
 
                 // Row 3: Duration on Left & Air Date on Right
                 Row(
@@ -494,7 +513,7 @@ fun EpisodeCard(
                         Text(
                             text = durationText,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = if (isNarrow) 11.sp else 12.5.sp,
+                                fontSize = if (compactLayout || isNarrow) 10.5.sp else 12.5.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
                             color = Color.White.copy(alpha = 0.65f),
@@ -507,7 +526,7 @@ fun EpisodeCard(
                         Text(
                             text = formattedDate,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = if (isNarrow) 11.sp else 12.5.sp,
+                            fontSize = if (compactLayout || isNarrow) 10.5.sp else 12.5.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
                             color = Color.White.copy(alpha = 0.55f),

@@ -19,12 +19,12 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    - name: Verify Tag is on Release Branch
+    - name: Verify Tag is on main
       shell: bash
       run: |
-        git fetch origin work
-        if ! git branch -r --contains ${{ github.sha }} | grep -q 'origin/work'; then
-          echo "❌ Error: Release tags must be on work branch! Aborting release."
+        git fetch origin main
+        if ! git branch -r --contains ${{ github.sha }} | grep -q 'origin/main'; then
+          echo "Release tags must point to a commit on main. Aborting release."
           exit 1
         fi
 

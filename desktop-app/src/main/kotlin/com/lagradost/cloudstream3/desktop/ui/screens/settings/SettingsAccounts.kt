@@ -3,38 +3,41 @@ package com.lagradost.cloudstream3.desktop.ui.screens.settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog
-import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamCustomDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.SettingsUiEvent
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.syncproviders.AuthAPI
 import com.lagradost.cloudstream3.syncproviders.AuthData
+import com.lagradost.cloudstream3.syncproviders.SyncAPI
+import com.lagradost.cloudstream3.syncproviders.TrackerClientConfig
+import com.lagradost.cloudstream3.syncproviders.providers.SimklApi
+import com.lagradost.cloudstream3.desktop.sync.OAuthLocalServer
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.awt.Desktop
+import java.net.URI
 
 @Composable
 fun SettingsAccounts(viewModel: SettingsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
-    var selectedApiForLogin by remember { mutableStateOf<AuthAPI?>(null) }
+    var configuringTracker by remember { mutableStateOf<SyncAPI?>(null) }
+    var pendingTrackerLogin by remember { mutableStateOf<PendingTrackerLogin?>(null) }
+    var trackerLoginBusy by remember { mutableStateOf(false) }
+    var trackerLoginMessage by remember { mutableStateOf<String?>(null) }
+    var trackerAccountMessage by remember { mutableStateOf<String?>(null) }
     val cachedAccounts by AccountManager.accountsFlow.collectAsState()
 
     val scrollState = rememberScrollState()
@@ -197,32 +200,135 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
             }
 
             SettingsGroupCard(title = "Trackers & Integrations") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Info",
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        )
-                        Text(
-                            text = "Trackers Are Not Supported Yet",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                        )
-                        Text(
-                            text = "External tracker and sync logins (MAL, AniList, Simkl) are currently disabled for the Desktop Client.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp),
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Optional: Auras Orbit keeps your watch history and playback progress locally. Connect a tracker only if you want to sync your list and supported playback progress with that service. Credentials are stored separately for each profile.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    listOf(AccountManager.malApi, AccountManager.aniListApi, AccountManager.simklApi).forEach { api ->
+                        val account = cachedAccounts[api.idPrefix]?.firstOrNull()
+                        val clientIdSet = trackerClientId(api).isNotBlank()
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(api.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            text = account?.user?.name?.let { "Connected as $it" }
+                                                ?: if (clientIdSet) "Client ID configured" else "Set up a client ID to connect",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (account != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(onClick = { configuringTracker = api }) { Text("Configure") }
+                                        if (account == null) {
+                                            Button(
+                                                enabled = clientIdSet && !trackerLoginBusy,
+                                                onClick = {
+                                                    trackerLoginMessage = null
+                                                    trackerAccountMessage = null
+                                                    scope.launch {
+                                                        trackerLoginBusy = true
+                                                        try {
+                                                            if (api is SimklApi) {
+                                                                val verifier = AuthAPI.generateCodeVerifier()
+                                                                val state = AuthAPI.generateCodeVerifier()
+                                                                var payload: String? = null
+                                                                val callback = OAuthLocalServer.authenticate(
+                                                                    authorizationUrl = { redirectUri ->
+                                                                        val page = api.loginRequest(redirectUri, state, verifier)
+                                                                            ?: error("Set a Simkl client ID first")
+                                                                        payload = page.payload
+                                                                        page.url
+                                                                    },
+                                                                    expectedState = state,
+                                                                    expectedIssuer = "https://simkl.com",
+                                                                ) ?: error("Sign-in was cancelled or timed out")
+                                                                val token = api.login(callback, payload) ?: error("Simkl sign-in did not return a token")
+                                                                val user = api.user(token) ?: error("Could not verify the Simkl account")
+                                                                AccountManager.updateAccounts(api.idPrefix, arrayOf(AuthData(user, token)))
+                                                            } else {
+                                                                val page = api.loginRequest() ?: error("Set a ${api.name} client ID first")
+                                                                if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                                                                    error("Opening a browser is not supported on this system")
+                                                                }
+                                                                Desktop.getDesktop().browse(URI(page.url))
+                                                                pendingTrackerLogin = PendingTrackerLogin(api, page.payload, page.url)
+                                                            }
+                                                        } catch (error: Exception) {
+                                                            trackerLoginMessage = error.message ?: "Sign-in failed"
+                                                        } finally {
+                                                            trackerLoginBusy = false
+                                                        }
+                                                    }
+                                                },
+                                            ) {
+                                                Text(if (trackerLoginBusy) "Signing in…" else "Connect")
+                                            }
+                                        } else {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    trackerAccountMessage = null
+                                                    scope.launch(Dispatchers.IO) {
+                                                        val revokeRequested = try {
+                                                            api.invalidateToken(account.token)
+                                                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                                            throw cancelled
+                                                        } catch (_: Exception) {
+                                                            false
+                                                        }
+                                                        try {
+                                                            AccountManager.updateAccounts(api.idPrefix, emptyArray())
+                                                            trackerAccountMessage = when {
+                                                                api is SimklApi && revokeRequested ->
+                                                                    "Local credentials cleared. A Simkl revoke request was sent; Simkl intentionally does not confirm whether a grant was active."
+                                                                api is SimklApi ->
+                                                                    "Local credentials cleared, but Simkl could not be reached to request revocation. Revoke this app in Simkl Connected Apps settings."
+                                                                else ->
+                                                                    "Local credentials cleared. Remote access remains active until revoked in ${api.name} account settings."
+                                                            }
+                                                        } catch (_: Exception) {
+                                                            trackerLoginMessage = "Could not clear the saved tracker credentials."
+                                                        }
+                                                    }
+                                                },
+                                            ) { Text("Remove account") }
+                                        }
+                                    }
+                                }
+                                if (account != null) {
+                                    Text(
+                                        if (api is SimklApi) {
+                                            "Disconnect requests remote token revocation and clears the protected local credentials. Simkl does not confirm whether a grant was active."
+                                        } else {
+                                            "This clears the protected local credentials; revoke the app separately in ${api.name} account settings to cancel remote access."
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (trackerLoginBusy && api.idPrefix == "simkl") {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                    Text("Finish sign-in in the browser window…", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
                     }
+                    trackerLoginMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    trackerAccountMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                 }
             }
 
@@ -270,110 +376,154 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
         }
     }
 
-    if (selectedApiForLogin != null) {
-        InAppLoginDialog(
-            api = selectedApiForLogin!!,
-            onDismiss = { selectedApiForLogin = null },
-            onSuccess = { authData ->
-                AccountManager.updateAccounts(selectedApiForLogin!!.idPrefix, arrayOf(authData))
-                selectedApiForLogin = null
+    configuringTracker?.let { api ->
+        TrackerClientIdDialog(
+            api = api,
+            currentValue = trackerClientId(api),
+            onDismiss = { configuringTracker = null },
+            onSave = { value ->
+                saveTrackerClientId(api, value)
+                configuringTracker = null
+            },
+        )
+    }
+    pendingTrackerLogin?.let { pending ->
+        TrackerRedirectDialog(
+            api = pending.api,
+            busy = trackerLoginBusy,
+            errorMessage = trackerLoginMessage,
+            onOpenSignIn = {
+                runCatching { Desktop.getDesktop().browse(URI(pending.authorizationUrl)) }
+                    .onFailure { trackerLoginMessage = "Could not open the browser. Check your system browser and retry." }
+            },
+            onDismiss = { pendingTrackerLogin = null },
+            onSubmit = { redirect ->
+                trackerLoginMessage = null
+                scope.launch {
+                    trackerLoginBusy = true
+                    try {
+                        val token = pending.api.login(redirect, pending.payload)
+                            ?: error("The service did not accept this sign-in response")
+                        val user = pending.api.user(token)
+                            ?: error("The service did not return a valid account")
+                        AccountManager.updateAccounts(pending.api.idPrefix, arrayOf(AuthData(user, token)))
+                        pendingTrackerLogin = null
+                    } catch (_: Exception) {
+                        trackerLoginMessage = "Sign-in could not be completed. Check the pasted redirect URL and client ID, then try again."
+                    } finally {
+                        trackerLoginBusy = false
+                    }
+                }
             },
         )
     }
 }
 
+private data class PendingTrackerLogin(val api: SyncAPI, val payload: String?, val authorizationUrl: String)
+
 @Composable
-fun InAppLoginDialog(api: AuthAPI, onDismiss: () -> Unit, onSuccess: (AuthData) -> Unit) {
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var server by remember { mutableStateOf("") }
-    var apiKeyStr by remember { mutableStateOf("") }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-
-    val req = api.inAppLoginRequirement
-    val isApiKeyOnly = req != null && req.apiKey && !req.username && !req.password && !req.email && !req.server
-
-    CloudstreamCustomDialog(
+private fun TrackerClientIdDialog(
+    api: SyncAPI,
+    currentValue: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var value by remember(api.idPrefix) { mutableStateOf(currentValue) }
+    CloudstreamAlertDialog(
         show = true,
         onDismissRequest = onDismiss,
-    ) {
-        Column(modifier = Modifier.padding(24.dp).width(400.dp)) {
-            Text(if (isApiKeyOnly) "Enter API Key for ${api.name}" else "Login to ${api.name}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (req?.username == true) {
+        title = { Text("Configure ${api.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Create an OAuth client for this app, then paste its public client ID below. No client secret is needed.")
+                Text(
+                    when (api.idPrefix) {
+                        "anilist" -> "For AniList, set the app redirect URL to https://anilist.co/api/v2/oauth/pin."
+                        "simkl" -> "For Simkl AUTH V2, choose Mobile, desktop & browser apps and register http://127.0.0.1/oauth/callback without a port. A free local port is selected for each sign-in."
+                        else -> "For MyAnimeList, register a redirect URL in its developer settings. After approval, copy the full returned address-bar URL back into Auras Orbit."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Username") },
+                    value = value,
+                    onValueChange = { value = it },
+                    label = { Text("Client ID") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Text(api.createAccountUrl.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            if (req?.email == true) {
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (req?.password == true) {
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (req?.server == true) {
-                OutlinedTextField(
-                    value = server,
-                    onValueChange = { server = it },
-                    label = { Text("Server") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (req?.apiKey == true) {
-                OutlinedTextField(
-                    value = apiKeyStr,
-                    onValueChange = { apiKeyStr = it },
-                    label = { Text("API Key") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (errorMsg != null) {
-                Text(errorMsg!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        },
+        confirmButton = { TextButton(onClick = { onSave(value.trim()) }) { Text("Save") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    api.createAccountUrl?.let { runCatching { Desktop.getDesktop().browse(URI(it)) } }
+                }) { Text("Open developer settings") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = {
-                    val authData = AuthData(
-                        user = com.lagradost.cloudstream3.syncproviders.AuthUser(name = if (username.isNotBlank()) username else "User", id = 0, profilePicture = ""),
-                        token = com.lagradost.cloudstream3.syncproviders.AuthToken(accessToken = apiKeyStr.ifBlank { "dummy_token" }),
-                    )
-                    onSuccess(authData)
-                }) { Text(if (isApiKeyOnly) "Save Key" else "Login") }
             }
-        }
+        },
+    )
+}
+
+@Composable
+private fun TrackerRedirectDialog(
+    api: SyncAPI,
+    busy: Boolean,
+    errorMessage: String?,
+    onOpenSignIn: () -> Unit,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var redirect by remember(api.idPrefix) { mutableStateOf("") }
+    CloudstreamAlertDialog(
+        show = true,
+        onDismissRequest = onDismiss,
+        title = { Text("Finish ${api.name} sign-in") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    if (api.idPrefix == "anilist") {
+                        "Sign in in the browser. Paste the full redirected URL (or the access token from its address bar) below."
+                    } else {
+                        "Sign in in the browser, then copy the full redirected URL containing the authorization code and state. Paste it below."
+                    },
+                )
+                OutlinedTextField(
+                    value = redirect,
+                    onValueChange = { redirect = it },
+                    label = { Text("Redirect URL${if (api.idPrefix == "anilist") " or token" else ""}") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = onOpenSignIn, enabled = !busy) { Text("Open sign-in page") }
+                if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && redirect.isNotBlank(), onClick = { onSubmit(redirect.trim()) }) {
+                Text(if (busy) "Checking…" else "Verify and connect")
+            }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+private fun trackerClientId(api: SyncAPI): String = when (api.idPrefix) {
+    "mal" -> TrackerClientConfig.malClientId()
+    "anilist" -> TrackerClientConfig.aniListClientId()
+    "simkl" -> TrackerClientConfig.simklClientId()
+    else -> ""
+}
+
+private fun saveTrackerClientId(api: SyncAPI, value: String) {
+    when (api.idPrefix) {
+        "mal" -> TrackerClientConfig.setMalClientId(value)
+        "anilist" -> TrackerClientConfig.setAniListClientId(value)
+        "simkl" -> TrackerClientConfig.setSimklClientId(value)
     }
 }
