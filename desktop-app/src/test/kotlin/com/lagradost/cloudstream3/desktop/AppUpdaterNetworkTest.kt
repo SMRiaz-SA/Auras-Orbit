@@ -68,7 +68,7 @@ class AppUpdaterNetworkTest {
             .build(),
         endpoint = { "http://127.0.0.1:$port/releases" },
         includePrereleases = { false },
-        currentVersion = { "0.2.0.00" },
+        currentVersion = { AppConfig.APP_VERSION },
     )
 
     private fun fixture(response: AtomicReference<Pair<Int, String>>): HttpServer =
