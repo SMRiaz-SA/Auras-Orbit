@@ -116,7 +116,10 @@ object PluginProviderWorkerRegistry {
         val pluginDescriptors = requestPluginDescriptors(worker, canonicalPath)
         val providerDescriptors = pluginDescriptors.path("providers").map(ProviderRpcJson::decodeProviderDescriptor)
         val extractorDescriptors = pluginDescriptors.path("extractors").map(ProviderRpcJson::decodeExtractorDescriptor)
-        val hostPlugin = ExtensionLoader.getPlugin(canonicalPath) as? Plugin
+        val hostPlugin = (
+            ExtensionLoader.getPlugin(pluginFile.absolutePath)
+                ?: ExtensionLoader.getPlugin(canonicalPath)
+            ) as? Plugin
         hostPlugin?.openSettings = if (pluginDescriptors.path("plugin").path("hasOpenSettings").asBoolean(false)) {
             { _ -> invokePluginCallback(worker, canonicalPath, "openPluginSettings") }
         } else {
