@@ -15,15 +15,15 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
     implementation(libs.slf4j.api)
 
     implementation(libs.sqldelight.sqlite.driver)
     implementation(libs.sqldelight.coroutines.extensions)
 
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
 tasks.withType<Test> {

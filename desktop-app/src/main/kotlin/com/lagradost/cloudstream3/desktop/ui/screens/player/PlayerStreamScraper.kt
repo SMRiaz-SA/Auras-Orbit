@@ -81,7 +81,7 @@ class PlayerStreamScraper(
         targetEpisodeData: Episode?,
         onSubtitle: (SubtitleFile) -> Unit,
         onLink: (ExtractorLink) -> Unit,
-        onSeekableConfirmed: (ExtractorLink) -> Unit,
+        onSeekabilityResolved: (ExtractorLink) -> Unit,
     ): Result<Unit> {
         val sharedSubtitleCallback = SafePluginInvoker.wrapCallback("SubtitleCallback") { sub: SubtitleFile ->
             val cleanUrl = sub.url.trim()
@@ -98,9 +98,9 @@ class PlayerStreamScraper(
             // Probe range seekability for non-HLS/DASH streams in background
             if (!link.isM3u8 && !link.isDash && link.type != ExtractorLinkType.M3U8 && link.type != ExtractorLinkType.DASH) {
                 scope.launch(Dispatchers.IO) {
-                    val isSeekable = QualityDataHelper.probeRangeSeekability(link)
-                    if (isSeekable) {
-                        onSeekableConfirmed(link)
+                    val seekability = QualityDataHelper.probeRangeSeekability(link)
+                    if (seekability != QualityDataHelper.Seekability.UNKNOWN) {
+                        onSeekabilityResolved(link)
                     }
                 }
             }
@@ -166,7 +166,7 @@ class PlayerStreamScraper(
                     ) {
                         this.extractorData = "yt-dlp"
                         this.quality = qVal
-                    }
+                    },
                 )
             }
             return Result.success(Unit)

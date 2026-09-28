@@ -1,11 +1,11 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.tracker
 
+import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.syncproviders.AuthData
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.syncproviders.TrackerAccountAccess
 import com.lagradost.cloudstream3.syncproviders.TrackerAuthResult
-import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.library.ListSorting
 import com.lagradost.cloudstream3.utils.UiText
@@ -151,7 +151,9 @@ class TrackerLibraryViewModel : BaseMviViewModel<TrackerLibraryUiState, TrackerL
                 )
                 val exact = if (api.supportsExactEpisodeProgress) {
                     api.watchedEpisodeSelection(auth, entry.item.syncId).orEmpty()
-                } else emptySet()
+                } else {
+                    emptySet()
+                }
                 updateState {
                     copy(
                         editor = TrackerEditorState(
@@ -193,7 +195,9 @@ class TrackerLibraryViewModel : BaseMviViewModel<TrackerLibraryUiState, TrackerL
                 updateState { copy(error = "Episodes must use values such as 1, 2 or 1x3, separated by commas") }
                 return
             }
-        } else null
+        } else {
+            null
+        }
         val status = SyncAPI.SyncStatus(
             status = editor.status,
             score = score?.let(com.lagradost.cloudstream3.Score::from10),

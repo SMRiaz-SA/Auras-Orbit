@@ -2,6 +2,8 @@ package com.lagradost.cloudstream3.desktop.init
 
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.desktop.core.preference.PreferenceKeys
+import com.lagradost.cloudstream3.desktop.pluginworker.IsolatedDesktopPluginHandle
+import com.lagradost.cloudstream3.desktop.pluginworker.PluginProviderWorkerRegistry
 import com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager
 import com.lagradost.cloudstream3.desktop.utils.appScope
 import com.lagradost.cloudstream3.metaproviders.CrossTmdbProvider
@@ -10,6 +12,7 @@ import com.lagradost.cloudstream3.metaproviders.TraktProvider
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import com.lagradost.runtime.loader.ExtensionLoader
+import com.lagradost.runtime.loader.PluginArchiveFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -36,6 +39,9 @@ fun initProviders() {
  * Load installed plugins and cloned sites.
  */
 fun initPlugins() {
+    ExtensionLoader.isolatedPluginFactory = { _, _ -> IsolatedDesktopPluginHandle() }
+    ExtensionLoader.onPluginLoaded = { pluginFile -> PluginProviderWorkerRegistry.movePluginProvidersToWorkers(pluginFile) }
+    ExtensionLoader.onPluginUnloaded = PluginProviderWorkerRegistry::closeForPlugin
     loadInstalledPlugins()
     loadClonedSites()
 }
@@ -51,8 +57,7 @@ private fun loadInstalledPlugins() {
     }
 
     val jarFiles = extensionsDir.walkTopDown()
-        .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
-        .filter { !it.name.endsWith("-jvm.jar") }
+        .filter(PluginArchiveFilter::isLoadablePluginArchive)
         .sortedBy { it.lastModified() }
         .toList()
 
@@ -116,7 +121,10 @@ fun loadClonedSites() {
             synchronized(com.lagradost.cloudstream3.APIHolder.allProviders) {
                 list.distinctBy { "${it.name}_${it.url.trimEnd('/')}" }.forEach { custom ->
                     val cleanUrl = custom.url.trimEnd('/')
-                    com.lagradost.cloudstream3.APIHolder.allProviders.firstOrNull { it.javaClass.simpleName == custom.parentJavaClass }?.let { baseProvider ->
+                    com.lagradost.cloudstream3.APIHolder.allProviders.firstOrNull { provider ->
+                        (provider as? com.lagradost.cloudstream3.desktop.pluginworker.WorkerBackedMainAPI)?.originalClassSimpleName == custom.parentJavaClass ||
+                            provider.javaClass.simpleName == custom.parentJavaClass
+                    }?.let { baseProvider ->
                         // If the clone points to the exact same URL as the base provider, skip it!
                         if (baseProvider.mainUrl.trimEnd('/') == cleanUrl) {
                             AppLogger.i("Skipping redundant clone '${custom.name}' (matches base provider URL: $cleanUrl)")
@@ -126,11 +134,16 @@ fun loadClonedSites() {
                             it.name == custom.name && it.mainUrl.trimEnd('/') == cleanUrl
                         }
                         if (!alreadyExists) {
-                            val clone = baseProvider.javaClass.getDeclaredConstructor().newInstance()
-                            clone.name = custom.name
-                            clone.lang = custom.lang
-                            clone.mainUrl = cleanUrl
-                            clone.canBeOverridden = false
+                            val clone = if (baseProvider is com.lagradost.cloudstream3.desktop.pluginworker.WorkerBackedMainAPI) {
+                                baseProvider.cloneRemote(custom.name, cleanUrl, custom.lang)
+                            } else {
+                                (baseProvider.javaClass.getDeclaredConstructor().newInstance() as com.lagradost.cloudstream3.MainAPI).also { clone ->
+                                    clone.name = custom.name
+                                    clone.lang = custom.lang
+                                    clone.mainUrl = cleanUrl
+                                    clone.canBeOverridden = false
+                                }
+                            }
                             com.lagradost.cloudstream3.APIHolder.allProviders.add(clone)
                             com.lagradost.cloudstream3.APIHolder.addPluginMapping(clone)
                         }

@@ -96,6 +96,22 @@
         return false;
     };
 
+    const formatResolutionLabel = (resolution) => {
+        if (!resolution) return 'Auto';
+        const [widthText, heightText] = String(resolution).split('x');
+        const width = Number.parseInt(widthText, 10) || 0;
+        const height = Number.parseInt(heightText, 10) || 0;
+        if (height <= 0) return String(resolution);
+        if (height >= 2100 || (width >= 3840 && height >= 1500)) return '4K';
+        if (height >= 1400) return '1440p';
+        if (height >= 1000 || (width >= 1920 && height >= 700)) return '1080p';
+        if (height >= 700 || (width >= 1280 && height >= 480)) return '720p';
+        if (height >= 500) return `${height}p`;
+        if (height >= 450) return '480p';
+        if (height >= 330) return '360p';
+        return `${height}p`;
+    };
+
     // State
     let currentSpeed = 1.0;
     window.currentSpeed = 1.0;
@@ -110,6 +126,8 @@
     let lastShownAdvisoryMedia = '';
     let currentLinkIndex = -1;
     let seekLockTimer = null;
+    let seekWheelRemainder = 0;
+    let seekWheelRemainderTimer = null;
     let episodesData = [];
     let loadingTimer = null;
     let isCurrentlyLoading = false;
@@ -815,21 +833,17 @@
     }
 
     // Seek Bar
-    seekBar.addEventListener('mousedown', () => { 
-        if (durationMs <= 0) return;
-        isSeeking = true; 
-    });
     seekBar.addEventListener('input', e => {
         if (durationMs <= 0) return;
+        isSeeking = true;
         let pct = e.target.value / 10;
         pct = Math.max(0, Math.min(100, pct));
         seekFill.style.width = `${pct}%`;
         currentPosMs = (pct / 100) * durationMs;
         timeDisplay.innerText = `${fmt(currentPosMs)} / ${fmt(durationMs)}`;
     });
-    seekBar.addEventListener('mouseup', e => {
+    seekBar.addEventListener('change', e => {
         if (durationMs <= 0) {
-            // Live stream or unknown duration. Ignore seek!
             isSeeking = false;
             return;
         }
@@ -838,15 +852,13 @@
         const targetMs = Math.round((pct / 100) * durationMs);
         currentPosMs = targetMs;
         send('seekTo', targetMs);
-        // Hold the lock — release via incoming state update, not a timer
         clearTimeout(seekLockTimer);
-        seekLockTimer = setTimeout(() => { isSeeking = false; }, 800);
+        seekLockTimer = setTimeout(() => { isSeeking = false; }, 10000);
     });
-    seekBar.addEventListener('change', () => {
-        // Fallback release if mouseup didn't fire (e.g. touch or drag-out)
-        if (durationMs > 0) {
+    seekBar.addEventListener('pointercancel', () => {
+        if (isSeeking) {
             clearTimeout(seekLockTimer);
-            seekLockTimer = setTimeout(() => { isSeeking = false; }, 1500);
+            isSeeking = false;
         }
     });
 
@@ -866,6 +878,23 @@
         updateVolumeTrack(displayVal);
     };
 
+    const adjustVolumeFromWheel = (deltaY) => {
+        if (deltaY === 0) return;
+        const newVol = deltaY < 0
+            ? Math.min(100, currentVolume + 5)
+            : Math.max(0, currentVolume - 5);
+        if (newVol === currentVolume) return;
+
+        currentVolume = newVol;
+        if (isMuted && newVol > 0) {
+            isMuted = false;
+            send('toggleMute');
+        }
+        applyMuteVisuals(isMuted);
+        send('setVolume', newVol);
+        showVolumeOsd(newVol, isMuted);
+    };
+
     updateVolumeTrack(100); // Initialize
 
     volumeBar.addEventListener('input', e => {
@@ -881,28 +910,17 @@
         showVolumeOsd(v, isMuted);
     });
 
+    volumeBar.addEventListener('wheel', e => {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        adjustVolumeFromWheel(e.deltaY);
+    }, { passive: false });
+
     document.addEventListener('wheel', e => {
         const isCtxOpen = ctxMenu && ctxMenu.style.display === 'block';
         if (isMenuOpen || isCtxOpen || (e.target && e.target.closest('#contextMenuOverlay'))) return;
-
-        let newVol = currentVolume;
-        // Scroll up increases volume, scroll down decreases
-        if (e.deltaY < 0) {
-            newVol = Math.min(100, newVol + 5);
-        } else if (e.deltaY > 0) {
-            newVol = Math.max(0, newVol - 5);
-        }
-
-        if (newVol !== currentVolume) {
-            currentVolume = newVol;
-            if (isMuted && newVol > 0) {
-                isMuted = false;
-                send('toggleMute');
-            }
-            applyMuteVisuals(isMuted);
-            send('setVolume', newVol);
-            showVolumeOsd(newVol, isMuted);
-        }
+        if (e.target instanceof Element && e.target.closest('#seekWrap, #volumeBar, .desktop-slider')) return;
+        adjustVolumeFromWheel(e.deltaY);
     });
 
     // Mute Icon
@@ -961,10 +979,41 @@
         if (document.body.classList.contains('hidden-controls')) {
             triggerKeyboardSeekingHud();
         }
-        send('seekBy', deltaMs);
+        // Send an absolute target so rapid wheel/trackpad steps remain deterministic.
+        // The native bridge handles seekTo immediately and keeps Kotlin state in sync.
+        send('seekTo', currentPosMs);
         clearTimeout(seekLockTimer);
-        seekLockTimer = setTimeout(() => { isSeeking = false; }, 800);
+        seekLockTimer = setTimeout(() => { isSeeking = false; }, 10000);
     };
+
+    // Wheel scrubbing belongs to the seek control, not the document-wide volume control.
+    // Normalize browser-specific delta units and accumulate high-resolution trackpad input
+    // into one 5-second seek per conventional wheel notch.
+    if (seekWrap) {
+        seekWrap.addEventListener('wheel', e => {
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+            if (durationMs <= 0 || !Number.isFinite(e.deltaY) || e.deltaY === 0) return;
+
+            const unitScale = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+                ? (100 / 3)
+                : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+                    ? 100
+                    : 1;
+            const normalizedDelta = Math.max(-300, Math.min(300, e.deltaY * unitScale));
+            seekWheelRemainder += normalizedDelta;
+
+            clearTimeout(seekWheelRemainderTimer);
+            seekWheelRemainderTimer = setTimeout(() => { seekWheelRemainder = 0; }, 250);
+
+            const notches = Math.trunc(seekWheelRemainder / 100);
+            if (notches === 0) return;
+            seekWheelRemainder -= notches * 100;
+
+            // Scroll up moves forward; scroll down moves backward.
+            doRelativeSeek(-notches * 5000);
+        }, { passive: false });
+    }
 
     // Backend Messages
     const updateAudioPlayPauseIcon = () => {
@@ -1315,7 +1364,7 @@
         const pOverlay = document.getElementById('linkProbingOverlay');
         if (pOverlay && pOverlay.classList.contains('active') && !pOverlay.classList.contains('dismissing')) {
             if ((typeof s.positionMs === 'number' && s.positionMs > 50) || s.isPlaying === true) {
-                dismissProbingOverlay();
+                dismissProbingOverlay(false, true);
             }
         }
 
@@ -2230,14 +2279,15 @@
                 pPlayBtn.style.display = 'inline-flex';
             }
         } else if (meta.isProbing === false) {
-            // Kotlin finished scraping/link selection.
+            // The explicit readiness flag distinguishes playback from idle/exhausted states.
+            const hasPlaybackReady = meta.isPlaybackReady === true && meta.isExhausted !== true;
             const pStatus = document.getElementById('linkProbingStatus');
             if (pStatus) {
-                pStatus.innerText = 'Connected • Launching player…';
+                pStatus.innerText = hasPlaybackReady ? 'Playback ready' : 'Waiting for playback…';
             }
-            if (currentPosMs > 50 || globalIsPlaying || meta.isAudioMode) {
-                dismissProbingOverlay();
-            } else {
+            if (hasPlaybackReady || currentPosMs > 50 || globalIsPlaying || meta.isAudioMode) {
+                dismissProbingOverlay(false, true);
+            } else if (meta.isExhausted !== true) {
                 if (!window.probingDismissTimer) {
                     window.probingDismissTimer = setTimeout(() => {
                         dismissProbingOverlay();
@@ -2248,7 +2298,7 @@
             
             // Highlight the successfully resolved link
             const pList = document.getElementById('linkProbingList');
-            if (pList) {
+            if (hasPlaybackReady && pList) {
                 const activeProb = pList.querySelector('.link-probing-item.active');
                 if (activeProb) {
                     activeProb.classList.remove('active');
@@ -2516,14 +2566,16 @@
         // Update the capsule button badge with the active resolution or 'Auto'
         let activeQualityLabel = 'Auto';
         if (meta.resolution) {
-            const parts = meta.resolution.split('x');
-            activeQualityLabel = parts.length > 1 ? parts[1] + 'p' : meta.resolution;
+            activeQualityLabel = formatResolutionLabel(meta.resolution);
         } else if (meta.videoTracks && meta.videoTracks.length > 0) {
             const sel = meta.videoTracks.find(t => t.isSelected);
             if (sel && sel.name) activeQualityLabel = sel.name;
         }
         const qBadge = document.getElementById('qualityServerBadge');
-        if (qBadge) qBadge.innerText = activeQualityLabel;
+        if (qBadge) {
+            qBadge.innerText = activeQualityLabel;
+            qBadge.title = meta.resolution || activeQualityLabel;
+        }
 
         // Subtitle Tracks
         let subHtml = '';
@@ -2708,7 +2760,7 @@
             if (typeof updateAudioRepeatUI === 'function') updateAudioRepeatUI();
             if (typeof updateAudioPlayPauseIcon === 'function') updateAudioPlayPauseIcon();
             if (globalIsPlaying || currentPosMs > 50 || meta.isProbing === false) {
-                dismissProbingOverlay();
+                dismissProbingOverlay(false, true);
             }
 
             // Always allow "Return to Video" if video tracks exist or if stream is not exclusively audio
@@ -2955,10 +3007,10 @@
         });
     }
 
-    const dismissProbingOverlay = (userInitiated = false) => {
+    const dismissProbingOverlay = (userInitiated = false, playbackReady = false) => {
         // Once dismissed (by user click OR by onPlaybackReady), it stays dismissed
         // for the entire session. Only hardResetAllOverlays() on a new episode can bring it back.
-        userDismissedProbing = true;
+        if (userInitiated || playbackReady) userDismissedProbing = true;
         if (window.probingDismissTimer) {
             clearTimeout(window.probingDismissTimer);
             window.probingDismissTimer = null;
@@ -2998,7 +3050,7 @@
         }, minBufferWait);
     };
     // Expose globally so Kotlin can call via executeScript("window.__dismissProbingOverlay()")
-    window.__dismissProbingOverlay = dismissProbingOverlay;
+    window.__dismissProbingOverlay = () => dismissProbingOverlay(false, true);
 
     // Handles volume/mute/app-loading-status sent by Kotlin (separate from C++ state_update)
     const handleAppStateUpdate = (s) => {
@@ -3244,7 +3296,7 @@
             else if (p.type === 'stats_update') handleStatsUpdate(p);
             else if (p.type === 'p2p_stats_update') handleP2pStatsUpdate(p);
             else if (p.type === 'metadata_update') handleMetadataUpdate(p.value);
-            else if (p.type === 'dismiss_probing') dismissProbingOverlay();
+            else if (p.type === 'dismiss_probing') dismissProbingOverlay(false, true);
             else if (p.type === 'subtitle_search_results') handleSubtitleSearchResults(p);
             else if (p.type === 'show_toast') showToast(p.message);
         } catch(e) {
@@ -3255,7 +3307,7 @@
             // If JSON.parse fails on raw string, try treating it as JSON directly
             try {
                 if (typeof data === 'string' && data.includes('dismiss_probing')) {
-                    dismissProbingOverlay();
+                    dismissProbingOverlay(false, true);
                 }
             } catch(_) {}
         }
@@ -3989,7 +4041,6 @@
 
     const triggerNextEpisode = () => {
         if (endCountdownTimer) clearInterval(endCountdownTimer);
-        send('hideVideoEnded', '1');
         videoEndedOverlay.style.display = 'none';
         evaluateUIStates();
         document.getElementById('overlay').style.opacity = '';
@@ -4640,7 +4691,8 @@
         updateDesktopSliderFill(slider);
         slider.addEventListener('input', () => updateDesktopSliderFill(slider));
         slider.addEventListener('wheel', e => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
             const step = parseFloat(slider.step) || 1;
             const min = parseFloat(slider.min);
             const max = parseFloat(slider.max);
@@ -4653,7 +4705,7 @@
             slider.value = current;
             updateDesktopSliderFill(slider);
             slider.dispatchEvent(new Event('input'));
-        });
+        }, { passive: false });
     });
 
     // Subtitle Override toggle
@@ -4992,7 +5044,7 @@
         const qualSub = document.getElementById('ctxSubmenuQuality');
         if (qualSub) {
             let html = '<div class="ctx-sub-header">Stream Quality</div>';
-            let activeRes = meta.resolution ? meta.resolution.split('x')[1] + 'p' : 'Auto';
+            let activeRes = formatResolutionLabel(meta.resolution);
 
             if (meta.lazyVideoTracks && meta.lazyVideoTracks.length > 0) {
                 const anyMatched = meta.lazyVideoTracks.some(t => isTrackMatchingResolution(t.name, t.url, meta));
@@ -5756,7 +5808,6 @@
                     clearInterval(endCountdownTimer);
                     endCountdownTimer = null;
                 }
-                send('hideVideoEnded', '1');
                 videoEndedOverlay.style.display = 'none';
                 evaluateUIStates();
                 document.getElementById('overlay').style.opacity = '';
@@ -5768,7 +5819,6 @@
                 clearInterval(endCountdownTimer);
                 endCountdownTimer = null;
             }
-            send('hideVideoEnded', '1');
             videoEndedOverlay.style.display = 'none';
             evaluateUIStates();
             document.getElementById('overlay').style.opacity = '';

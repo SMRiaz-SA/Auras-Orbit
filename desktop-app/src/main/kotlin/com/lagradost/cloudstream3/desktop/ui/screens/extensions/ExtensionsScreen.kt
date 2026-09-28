@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Sync
@@ -218,124 +217,6 @@ fun ComposeExtensionScreen(
                     4 -> UpdateHistoryTab(viewModel = viewModel)
                 }
             }
-        }
-
-        // ── Global Security & Permission Dialogs (Available on all tabs) ─────
-        uiState.pluginRequiringBypass?.let { (bypassRepo, bypassPlugin, reason) ->
-            val isDialogInstalling = uiState.isDialogInstalling
-            val cleanReason = reason
-                .removePrefix("Plugin Security Notice: ")
-                .removePrefix("Plugin Security: ")
-                .trim()
-
-            com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog(
-                show = true,
-                onDismissRequest = { if (!isDialogInstalling) viewModel.onEvent(ExtensionsUiEvent.OnClearBypass) },
-                title = { Text("Trust & Install Extension?") },
-                text = {
-                    if (isDialogInstalling) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 12.dp),
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(16.dp))
-                            Text("Installing, please wait...")
-                        }
-                    } else {
-                        val devInfo = bypassPlugin.authorName?.let { " by $it" } ?: ""
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                text = "You are installing '${bypassPlugin.name}'$devInfo from repository '$bypassRepo'.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-
-                            if (cleanReason.isNotBlank()) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
-                                ) {
-                                    Text(
-                                        text = cleanReason,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(10.dp),
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = "Only install extensions from sources you trust. Untrusted plugins may read app data.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    if (!isDialogInstalling) {
-                        Button(
-                            onClick = {
-                                viewModel.onEvent(
-                                    ExtensionsUiEvent.OnBypassSecurityAndInstall(bypassRepo, bypassPlugin)
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        ) {
-                            Text("Trust & Install")
-                        }
-                    }
-                },
-                dismissButton = {
-                    if (!isDialogInstalling) {
-                        OutlinedButton(onClick = { viewModel.onEvent(ExtensionsUiEvent.OnClearBypass) }) {
-                            Text("Cancel")
-                        }
-                    }
-                },
-            )
-        }
-
-        uiState.pluginRequiringPermission?.let { (reqRepo, reqPlugin, reqPermission) ->
-            val isDialogInstalling = uiState.isDialogInstalling
-            com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog(
-                show = true,
-                onDismissRequest = { if (!isDialogInstalling) viewModel.onEvent(ExtensionsUiEvent.OnClearPermissionRequest) },
-                title = { Text("Permission Required") },
-                text = {
-                    if (isDialogInstalling) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(16.dp))
-                            Text("Installing, please wait...")
-                        }
-                    } else {
-                        Text("The plugin '${reqPlugin.name}' requires the following permission to function:\n\n• $reqPermission\n\nDo you want to grant this permission and install the plugin?")
-                    }
-                },
-                confirmButton = {
-                    if (!isDialogInstalling) {
-                        TextButton(
-                            onClick = {
-                                viewModel.onEvent(
-                                    ExtensionsUiEvent.OnGrantPermissionAndInstall(reqRepo, reqPlugin, reqPermission)
-                                )
-                            },
-                        ) {
-                            Text("Grant & Install", color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                },
-                dismissButton = {
-                    if (!isDialogInstalling) {
-                        TextButton(onClick = { viewModel.onEvent(ExtensionsUiEvent.OnClearPermissionRequest) }) {
-                            Text("Cancel")
-                        }
-                    }
-                },
-            )
         }
     }
 }

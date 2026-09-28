@@ -1,12 +1,8 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.details
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +18,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -34,11 +28,8 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.fixUrlNull
-import com.lagradost.cloudstream3.desktop.ui.components.applyShadowMultiplier
 import com.lagradost.cloudstream3.desktop.ui.components.shimmerBackground
 import com.lagradost.common.storage.WatchHistory
-import com.lagradost.player.impl.PlayerLinkHandler
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -164,7 +155,7 @@ fun EpisodeListItem(
                             val dateText = releaseStatus.formattedDate ?: releaseStatus.statusBadgeText ?: "a future date"
                             com.lagradost.cloudstream3.desktop.ui.components.AppToastManager.showInfo("Episode is unreleased (Scheduled for $dateText)")
                         }
-                    }
+                    },
                 )
             },
     ) {
@@ -181,8 +172,11 @@ fun EpisodeListItem(
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(12.dp))
                     .then(
-                        if (targetUrl == null && uiState?.isEnriching == true) Modifier.shimmerBackground()
-                        else Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                        if (targetUrl == null && uiState?.isEnriching == true) {
+                            Modifier.shimmerBackground()
+                        } else {
+                            Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                        },
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -308,7 +302,13 @@ fun EpisodeListItem(
                     Text(
                         text = if (shouldHideSpoilers) "Episode title hidden" else finalTitle,
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                        color = if (isEpisodeLocked) Color.White.copy(alpha = 0.75f) else if (isHovered) heroColor else Color.White,
+                        color = if (isEpisodeLocked) {
+                            Color.White.copy(alpha = 0.75f)
+                        } else if (isHovered) {
+                            heroColor
+                        } else {
+                            Color.White
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),

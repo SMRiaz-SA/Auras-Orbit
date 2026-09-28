@@ -70,7 +70,7 @@ class ProviderBrowseViewModel(
     private fun refreshCatalogs() {
         val providers = synchronized(APIHolder.allProviders) { APIHolder.allProviders.toList() }
             .plus(activeProviderRepository.allRealProviders.value)
-            .filter(::supportsStreamPlayCatalogs)
+            .filter { it.hasMainPage && supportsStreamPlayCatalogs(it) }
             .distinctBy { "${it.sourcePlugin.orEmpty()}::${it.name}::${it.mainUrl}" }
 
         sourceJob?.cancel()

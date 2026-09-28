@@ -1,6 +1,6 @@
 # CloudStream Plugin Sandbox
 
-This module is a dedicated Sandbox Analyzer environment for testing Cloudstream plugins (`.cs3` files) locally. 
+This module is a compatibility analyzer for Cloudstream plugins (`.cs3` files). It scans and exercises plugins with the app's class-loading rules; it is not an operating-system security sandbox. Only analyze plugins you trust.
 
 Because Cloudstream plugins are built for Android, they often try to call Android-specific APIs (like `android.widget.Toast` or `android.util.Base64`). The Sandbox analyzes these plugins and runs them to tell you exactly which Android APIs are missing, which ones are safely faked (stubbed), and which ones are properly implemented for the Desktop port.
 

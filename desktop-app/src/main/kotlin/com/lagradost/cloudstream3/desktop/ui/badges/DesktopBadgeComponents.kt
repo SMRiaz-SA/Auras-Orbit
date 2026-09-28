@@ -13,8 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
@@ -96,10 +94,16 @@ object DesktopBadgeComponents {
 
         val is4k = hasQuality && (
             quality.equals("4K", ignoreCase = true) ||
-            quality.equals("2160p", ignoreCase = true) ||
-            quality.contains("UHD", ignoreCase = true)
-        )
-        val qualityLabel = if (is4k) "4K" else if (quality?.contains("1080", ignoreCase = true) == true) "1080p" else quality
+                quality.equals("2160p", ignoreCase = true) ||
+                quality.contains("UHD", ignoreCase = true)
+            )
+        val qualityLabel = if (is4k) {
+            "4K"
+        } else if (quality?.contains("1080", ignoreCase = true) == true) {
+            "1080p"
+        } else {
+            quality
+        }
 
         val langText = when {
             hasSub && hasDub -> "SUB • DUB"
@@ -194,7 +198,13 @@ object DesktopBadgeComponents {
         if (quality.isNullOrBlank()) return
 
         val is4k = quality.equals("4K", ignoreCase = true) || quality.equals("2160p", ignoreCase = true) || quality.contains("UHD", ignoreCase = true)
-        val text = if (is4k) "4K" else if (quality.contains("1080", ignoreCase = true)) "1080p" else quality
+        val text = if (is4k) {
+            "4K"
+        } else if (quality.contains("1080", ignoreCase = true)) {
+            "1080p"
+        } else {
+            quality
+        }
 
         val borderColor = if (is4k) GoldBorder else GlassBorder
         val textColor = if (is4k) GoldText else TextSilver

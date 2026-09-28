@@ -3,7 +3,6 @@ package com.lagradost.cloudstream3.desktop.ui.screens.player
 import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.SimklSyncServices
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.UpsertWatchHistory
 import com.lagradost.cloudstream3.syncproviders.SyncAPI

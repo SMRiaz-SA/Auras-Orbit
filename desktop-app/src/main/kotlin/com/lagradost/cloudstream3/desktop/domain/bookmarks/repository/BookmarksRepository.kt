@@ -5,9 +5,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface BookmarksRepository {
     fun subscribeAll(): StateFlow<Map<String, DesktopBookmark>>
-    suspend fun getAll(): List<DesktopBookmark>
-    suspend fun getById(id: String): DesktopBookmark?
-    suspend fun isBookmarked(id: String): Boolean
-    suspend fun addBookmark(bookmark: DesktopBookmark)
-    suspend fun removeBookmark(id: String)
+    suspend fun getAll(profileId: Int? = null): List<DesktopBookmark>
+    suspend fun getById(id: String, profileId: Int? = null): DesktopBookmark?
+    suspend fun isBookmarked(id: String, profileId: Int? = null): Boolean
+    suspend fun addBookmark(bookmark: DesktopBookmark, profileId: Int? = null)
+    suspend fun removeBookmark(id: String, profileId: Int? = null)
 }

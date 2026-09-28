@@ -11,5 +11,10 @@ data class RepositoryData(
     @JsonProperty("name") val name: String,
     @JsonProperty("url") val url: String,
 ) {
+    /** Stable local directory identity; kept outside the constructor for plugin ABI compatibility. */
+    @get:JsonProperty("storageName")
+    @set:JsonProperty("storageName")
+    var storageName: String = name
+
     constructor(name: String, url: String) : this(null, name, url)
 }

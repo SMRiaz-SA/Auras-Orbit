@@ -10,7 +10,6 @@ import com.sun.jna.Pointer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -54,6 +53,7 @@ class DesktopMpvEngine(
     /**
      * Initializes the native MPV instance and configures options before initialization.
      */
+    @Synchronized
     fun createAndInitialize(
         canvasWid: Long,
         width: Int,
@@ -575,6 +575,7 @@ class DesktopMpvEngine(
         }
     }
 
+    @Synchronized
     fun executeCommand(command: String): Int {
         val handle = mpvHandle ?: return -1
         if (isDestroyed.get()) return -1
@@ -586,6 +587,7 @@ class DesktopMpvEngine(
         }
     }
 
+    @Synchronized
     fun executeCommandArray(args: Array<String?>): Int {
         val handle = mpvHandle ?: return -1
         if (isDestroyed.get()) return -1
@@ -597,6 +599,7 @@ class DesktopMpvEngine(
         }
     }
 
+    @Synchronized
     fun setPropertyString(property: String, value: String): Int {
         val handle = mpvHandle ?: return -1
         if (isDestroyed.get()) return -1
@@ -608,6 +611,7 @@ class DesktopMpvEngine(
         }
     }
 
+    @Synchronized
     fun getPropertyString(property: String): String? {
         val handle = mpvHandle ?: return null
         if (isDestroyed.get()) return null
@@ -618,6 +622,7 @@ class DesktopMpvEngine(
         }
     }
 
+    @Synchronized
     fun getPropertyDouble(property: String, def: Double = 0.0): Double {
         val handle = mpvHandle ?: return def
         if (isDestroyed.get()) return def
@@ -646,120 +651,101 @@ class DesktopMpvEngine(
         headers: Map<String, String>? = null,
         subtitles: List<SubtitleFile> = emptyList(),
     ) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
-
         scope.launch(Dispatchers.IO) {
             waitingForTimePosReset = true
             hasEverPlayed = false
 
             headers?.forEach { (key, value) ->
-                MpvLibrary.INSTANCE.mpv_set_property_string(handle, "http-header-fields", "$key: $value")
+                setPropertyString("http-header-fields", "$key: $value")
             }
 
             if (startPositionMs > 0) {
-                MpvLibrary.INSTANCE.mpv_set_property_string(handle, "start", "${startPositionMs / 1000.0}")
+                setPropertyString("start", "${startPositionMs / 1000.0}")
             }
 
             val command = "loadfile \"$url\" replace"
-            MpvLibrary.INSTANCE.mpv_command_string(handle, command)
+            executeCommand(command)
 
             subtitles.forEach { sub ->
                 if (sub.url.isNotBlank()) {
                     val subCommand = "sub-add \"${sub.url}\" auto \"${sub.lang ?: ""}\""
-                    MpvLibrary.INSTANCE.mpv_command_string(handle, subCommand)
+                    executeCommand(subCommand)
                 }
             }
         }
     }
 
     fun seekTo(positionMs: Long) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
             val sec = (positionMs / 1000.0).toString()
-            MpvLibrary.INSTANCE.mpv_command_string(handle, "seek $sec absolute")
+            executeCommand("seek $sec absolute")
         }
     }
 
     fun seekBy(offsetMs: Long) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
             val offsetSec = offsetMs / 1000.0
-            MpvLibrary.INSTANCE.mpv_command_string(handle, "seek $offsetSec relative")
+            executeCommand("seek $offsetSec relative")
         }
     }
 
     fun togglePause() {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
             val current = _isPaused.value
-            MpvLibrary.INSTANCE.mpv_set_property_string(handle, "pause", if (current) "no" else "yes")
+            setPropertyString("pause", if (current) "no" else "yes")
         }
     }
 
     fun pause() {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            val res = MpvLibrary.INSTANCE.mpv_set_property_string(handle, "pause", "yes")
+            val res = setPropertyString("pause", "yes")
             if (res < 0) {
-                MpvLibrary.INSTANCE.mpv_command_string(handle, "set pause yes")
+                executeCommand("set pause yes")
             }
         }
     }
 
     fun play() {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            val res = MpvLibrary.INSTANCE.mpv_set_property_string(handle, "pause", "no")
+            val res = setPropertyString("pause", "no")
             if (res < 0) {
-                MpvLibrary.INSTANCE.mpv_command_string(handle, "set pause no")
+                executeCommand("set pause no")
             }
         }
     }
 
     fun setSpeed(newSpeed: Double) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            MpvLibrary.INSTANCE.mpv_set_property_string(handle, "speed", newSpeed.toString())
+            setPropertyString("speed", newSpeed.toString())
         }
     }
 
     fun setVolume(newVolume: Double) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            MpvLibrary.INSTANCE.mpv_set_property_string(handle, "volume", newVolume.toString())
+            setPropertyString("volume", newVolume.toString())
         }
     }
 
     fun toggleMute() {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            MpvLibrary.INSTANCE.mpv_command_string(handle, "cycle mute")
+            executeCommand("cycle mute")
         }
     }
 
     fun setMute(isMuted: Boolean) {
-        val handle = mpvHandle ?: return
-        if (isDestroyed.get()) return
         scope.launch(Dispatchers.IO) {
-            MpvLibrary.INSTANCE.mpv_set_property_string(handle, "mute", if (isMuted) "yes" else "no")
+            setPropertyString("mute", if (isMuted) "yes" else "no")
         }
     }
 
+    @Synchronized
     fun destroy() {
         if (!isDestroyed.compareAndSet(false, true)) return
 
         val handle = mpvHandle
         mpvHandle = null
-        eventJob?.cancel()
+        val stoppedEventJob = eventJob
+        stoppedEventJob?.cancel()
 
         // Clear C++ sync pointer first so it never polls a destroyed handle
         try {
@@ -772,6 +758,7 @@ class DesktopMpvEngine(
             // Teardown asynchronously off the Compose EDT
             Thread({
                 try {
+                    runBlocking { stoppedEventJob?.join() }
                     AppLogger.i("DesktopMpvEngine", "Terminating native MPV instance off EDT...")
                     MpvLibrary.INSTANCE.mpv_command_string(handle, "stop")
                     MpvLibrary.INSTANCE.mpv_terminate_destroy(handle)

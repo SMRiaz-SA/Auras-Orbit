@@ -5,8 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -18,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -31,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -45,9 +41,6 @@ import com.lagradost.cloudstream3.desktop.explore.viewmodel.EXPLORE_YEAR_OPTIONS
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreUiEffect
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreUiEvent
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel
-import kotlinx.coroutines.launch
-import com.lagradost.cloudstream3.desktop.ui.LocalVideoPlayer
-import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.badges.CardMetadataConfig
 import com.lagradost.cloudstream3.desktop.ui.badges.CardTitleSanitizer
 import com.lagradost.cloudstream3.desktop.ui.badges.DesktopBadgeComponents
@@ -55,7 +48,7 @@ import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
 import com.lagradost.cloudstream3.desktop.ui.components.posterHoverEffect
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
-import com.lagradost.common.storage.WatchHistory
+import kotlinx.coroutines.launch
 
 @Composable
 fun ExploreScreen(
@@ -80,7 +73,7 @@ fun ExploreScreen(
                             providerName = effect.providerName,
                             url = effect.url,
                             preloadedName = effect.title,
-                        )
+                        ),
                     )
                 }
             }
@@ -203,7 +196,7 @@ fun ExploreScreen(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
                                             .background(
-                                                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                                                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                             )
                                             .clickable { viewModel.onEvent(ExploreUiEvent.SelectType(type)) }
                                             .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -445,7 +438,7 @@ fun ExploreScreen(
                         providerName = providerName,
                         url = url,
                         preloadedName = title,
-                    )
+                    ),
                 )
             },
         )

@@ -50,7 +50,8 @@ class RateLimitInterceptor(private val minDelayMs: Long = 500L) : okhttp3.Interc
             hostLower.contains("strem.io") || hostLower.contains("anilist.co") ||
             hostLower.contains("kitsu.io") || hostLower.contains("fanart.tv") ||
             hostLower.contains("github.com") || hostLower.contains("githubusercontent.com") ||
-            hostLower.contains("127.0.0.1") || hostLower.contains("localhost")) {
+            hostLower.contains("127.0.0.1") || hostLower.contains("localhost")
+        ) {
             return chain.proceed(request)
         }
 
@@ -301,38 +302,40 @@ object NetworkConfig {
             .apply {
                 interceptors().removeAll { it is RateLimitInterceptor || it is DevNetworkInterceptor }
             }
-            .addInterceptor(okhttp3.Interceptor { chain ->
-                var request = chain.request()
-                val urlStr = request.url.toString()
-                if (urlStr.startsWith("//")) {
-                    request = request.newBuilder().url("https:$urlStr").build()
-                }
-                val ua = request.header("User-Agent")
-                val reqBuilder = request.newBuilder()
-                if (ua.isNullOrBlank() || ua.startsWith("okhttp", ignoreCase = true)) {
-                    reqBuilder.header("User-Agent", com.lagradost.cloudstream3.USER_AGENT)
-                }
-                if (request.header("Accept").isNullOrBlank()) {
-                    reqBuilder.header("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-                }
-                if (request.header("Referer").isNullOrBlank()) {
-                    val host = request.url.host
-                    val activeSession = SystemBrowserCdpBypass.getSessionForHost(host)
-                    val refererDomain = activeSession?.settledDomain
-                        ?: activeSession?.domain
-                        ?: run {
-                            val hostParts = host.split(".")
-                            if (hostParts.size > 2) hostParts.takeLast(2).joinToString(".") else host
-                        }
-                    reqBuilder.header("Referer", "https://$refererDomain/")
-                }
-                val finalReq = reqBuilder.build()
-                val response = chain.proceed(finalReq)
-                if (!response.isSuccessful && response.code !in listOf(404)) {
-                    AppLogger.w("ImageLoader: HTTP ${response.code} for ${request.url}")
-                }
-                response
-            })
+            .addInterceptor(
+                okhttp3.Interceptor { chain ->
+                    var request = chain.request()
+                    val urlStr = request.url.toString()
+                    if (urlStr.startsWith("//")) {
+                        request = request.newBuilder().url("https:$urlStr").build()
+                    }
+                    val ua = request.header("User-Agent")
+                    val reqBuilder = request.newBuilder()
+                    if (ua.isNullOrBlank() || ua.startsWith("okhttp", ignoreCase = true)) {
+                        reqBuilder.header("User-Agent", com.lagradost.cloudstream3.USER_AGENT)
+                    }
+                    if (request.header("Accept").isNullOrBlank()) {
+                        reqBuilder.header("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                    }
+                    if (request.header("Referer").isNullOrBlank()) {
+                        val host = request.url.host
+                        val activeSession = SystemBrowserCdpBypass.getSessionForHost(host)
+                        val refererDomain = activeSession?.settledDomain
+                            ?: activeSession?.domain
+                            ?: run {
+                                val hostParts = host.split(".")
+                                if (hostParts.size > 2) hostParts.takeLast(2).joinToString(".") else host
+                            }
+                        reqBuilder.header("Referer", "https://$refererDomain/")
+                    }
+                    val finalReq = reqBuilder.build()
+                    val response = chain.proceed(finalReq)
+                    if (!response.isSuccessful && response.code !in listOf(404)) {
+                        AppLogger.w("ImageLoader: HTTP ${response.code} for ${request.url}")
+                    }
+                    response
+                },
+            )
         _imageClient = imgBuilder.build()
 
         java.util.logging.Logger.getLogger(OkHttpClient::class.java.name).level = java.util.logging.Level.ALL

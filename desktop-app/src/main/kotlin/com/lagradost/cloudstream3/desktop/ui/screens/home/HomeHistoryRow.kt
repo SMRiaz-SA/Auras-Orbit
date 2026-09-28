@@ -1,10 +1,9 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ButtonDefaults
@@ -119,12 +118,14 @@ fun HomeHistoryRow(
                             Text("Clear History", color = DesktopUi.TextMuted)
                         }
                     }
-                } else null,
+                } else {
+                    null
+                },
             ) {
                 items(currentList.size, key = { index -> currentList[index].parentId }) { index ->
                     val history = currentList[index]
                     val provider = providerMap[history.parentId]
-                    
+
                     when (continueWatchingStyle) {
                         com.lagradost.cloudstream3.desktop.ui.theme.ContinueWatchingStyle.PREMIUM -> {
                             val cardWidth = if (isCompact) 280.dp else (posterWidthDp * 2.4f).coerceAtLeast(360f).dp

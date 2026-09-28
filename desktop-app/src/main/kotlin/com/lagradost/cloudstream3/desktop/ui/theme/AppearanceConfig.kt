@@ -224,27 +224,27 @@ object AppearanceConfig {
     private const val PREF_SHOW_CONTINUE_WATCHING = "pref_show_continue_watching"
 
     private val _dockItemOrder = MutableStateFlow(
-        DockItemKey.parseOrder(DesktopDataStore.getKey<String>(PREF_DOCK_ITEM_ORDER))
+        DockItemKey.parseOrder(DesktopDataStore.getKey<String>(PREF_DOCK_ITEM_ORDER)),
     )
     val dockItemOrder: StateFlow<List<DockItemKey>> = _dockItemOrder.asStateFlow()
 
     private val _dockDisabledItems = MutableStateFlow(
-        DockItemKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_DOCK_DISABLED_ITEMS))
+        DockItemKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_DOCK_DISABLED_ITEMS)),
     )
     val dockDisabledItems: StateFlow<Set<DockItemKey>> = _dockDisabledItems.asStateFlow()
 
     private val _topBarShowProfile = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE) ?: true
+        DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE) ?: true,
     )
     val topBarShowProfile: StateFlow<Boolean> = _topBarShowProfile.asStateFlow()
 
     private val _topBarShowProfileName = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE_NAME) ?: true
+        DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE_NAME) ?: true,
     )
     val topBarShowProfileName: StateFlow<Boolean> = _topBarShowProfileName.asStateFlow()
 
     private val _showContinueWatching = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(PREF_SHOW_CONTINUE_WATCHING) ?: true
+        DesktopDataStore.getKey<Boolean>(PREF_SHOW_CONTINUE_WATCHING) ?: true,
     )
     val showContinueWatching: StateFlow<Boolean> = _showContinueWatching.asStateFlow()
 
@@ -256,14 +256,14 @@ object AppearanceConfig {
     val lockUnreleasedEpisodes: StateFlow<Boolean> = _lockUnreleasedEpisodes.asStateFlow()
     private val _detailsSectionOrder = MutableStateFlow(
         com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey.parseOrder(
-            DesktopDataStore.getKey<String>(PREF_DETAILS_SECTION_ORDER)
-        )
+            DesktopDataStore.getKey<String>(PREF_DETAILS_SECTION_ORDER),
+        ),
     )
     val detailsSectionOrder: StateFlow<List<com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey>> = _detailsSectionOrder.asStateFlow()
     private val _detailsDisabledSections = MutableStateFlow(
         com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey.parseDisabled(
-            DesktopDataStore.getKey<String>(PREF_DETAILS_DISABLED_SECTIONS)
-        )
+            DesktopDataStore.getKey<String>(PREF_DETAILS_DISABLED_SECTIONS),
+        ),
     )
     val detailsDisabledSections: StateFlow<Set<com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey>> = _detailsDisabledSections.asStateFlow()
     private val _amoledMode = MutableStateFlow(DesktopDataStore.getKey<Boolean>(PREF_AMOLED_MODE) ?: false)

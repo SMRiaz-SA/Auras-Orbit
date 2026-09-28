@@ -6,14 +6,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Extension
-import com.lagradost.cloudstream3.desktop.ui.PremiumIcons
 import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,28 +16,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
-import com.lagradost.cloudstream3.desktop.profile.Profile
-import com.lagradost.cloudstream3.desktop.profile.ProfileManager
-import com.lagradost.cloudstream3.desktop.profile.ProfilePalette
 import com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager
 import com.lagradost.cloudstream3.desktop.ui.LocalFullscreenController
 import com.lagradost.cloudstream3.desktop.ui.LocalWindowState
+import com.lagradost.cloudstream3.desktop.ui.PremiumIcons
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.desktop.ui.theme.TopBarProviderStyle
 import kotlinx.coroutines.launch
@@ -89,7 +79,6 @@ fun WindowControlsPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-
         if (isHome && providers.isNotEmpty()) {
             if (!isCompact) {
                 // 1. Refresh Button Pill (Desktop only)
@@ -99,27 +88,27 @@ fun WindowControlsPill(
                     border = BorderStroke(1.dp, theme.Divider.copy(alpha = 0.5f)),
                     shadowElevation = 8.dp.applyShadowMultiplier(),
                 ) {
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            refreshRotation.snapTo(0f)
-                            refreshRotation.animateTo(360f, animationSpec = tween(600))
-                        }
-                        homeActionDispatcher?.invoke(com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent.OnProviderRefresh)
-                    },
-                    modifier = Modifier.size(42.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh Home",
-                        tint = theme.TextPrimary,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .rotate(refreshRotation.value),
-                    )
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                refreshRotation.snapTo(0f)
+                                refreshRotation.animateTo(360f, animationSpec = tween(600))
+                            }
+                            homeActionDispatcher?.invoke(com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent.OnProviderRefresh)
+                        },
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh Home",
+                            tint = theme.TextPrimary,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(refreshRotation.value),
+                        )
+                    }
                 }
             }
-        }
 
             // 2. Provider Selector Pill (with Logo + Name or Icon Only)
             val activeApis = homeUiState?.activeProviderApis ?: emptyList()

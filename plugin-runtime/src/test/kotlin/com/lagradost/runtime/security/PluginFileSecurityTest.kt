@@ -7,20 +7,16 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class PluginFileSecurityTest {
-
     @TempDir
     lateinit var tempDir: File
-
-    private lateinit var storageRoot: File
 
     @BeforeEach
     fun setup() {
         PluginFileSecurityStub.customBaseDir = tempDir
-        storageRoot = PluginFileSecurityStub.getStorageRootForPlugin("UnknownPlugin")
     }
 
     @AfterEach
@@ -30,85 +26,35 @@ class PluginFileSecurityTest {
     }
 
     @Test
-    fun `relative path resolves safely inside plugin storage root`() {
-        val resolved = PluginFileSecurityStub.checkPath("cache/sub/data.json")
-        val expected = File(storageRoot, "cache/sub/data.json").canonicalPath
-        assertEquals(expected, resolved)
+    fun `relative and absolute paths retain normal JVM semantics`() {
+        val relative = "cache/sub/data.json"
+        val absolute = File(tempDir, "outside/video.mp4")
+
+        assertEquals(File(relative).path, PluginFileSecurityStub.checkPath(relative))
+        assertEquals(absolute.path, PluginFileSecurityStub.checkPath(absolute.path))
     }
 
     @Test
-    fun `absolute path inside storage root is permitted`() {
-        val safeFile = File(storageRoot, "downloads/test.txt")
-        val resolved = PluginFileSecurityStub.checkPath(safeFile.absolutePath)
-        assertEquals(safeFile.canonicalPath, resolved)
+    fun `file objects and file URIs pass through unchanged`() {
+        val file = File(tempDir, "outside.bin")
+        val uri = file.toURI()
+
+        assertSame(file, PluginFileSecurityStub.checkFile(file))
+        assertEquals(uri, PluginFileSecurityStub.checkUri(uri))
     }
 
     @Test
-    fun `path traversal attack escaping storage root is blocked`() {
-        val ex = assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.checkPath("../../another_plugin/storage/secrets.json")
-        }
-        assertTrue(ex.message!!.contains("Plugin File Security: Access to"))
-        assertTrue(ex.message!!.contains("is blocked"))
+    fun `roots and temporary files use standard JVM locations`() {
+        assertEquals(File.listRoots().toList(), PluginFileSecurityStub.listRoots().toList())
+
+        val tempFile = PluginFileSecurityStub.createTempFile("plugin", ".tmp", tempDir)
+        assertEquals(tempDir.canonicalFile, tempFile.parentFile.canonicalFile)
+        assertTrue(tempFile.delete())
     }
 
     @Test
-    fun `arbitrary system path is blocked`() {
-        val outsideFile = File(tempDir, "unauthorized_outside_file.txt")
-        val ex = assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.checkPath(outsideFile.absolutePath)
-        }
-        assertTrue(ex.message!!.contains("is blocked"))
-    }
-
-    @Test
-    fun `user granted path allows access and revoking blocks it`() {
-        val customGrantedDir = File(tempDir, "UserGrantedDownloads").apply { mkdirs() }
-        val targetFile = File(customGrantedDir, "video.mp4")
-
-        // 1. Initially ungranted -> blocked
-        assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.checkPath(targetFile.absolutePath)
-        }
-
-        // 2. Grant access -> permitted
-        PluginFileSecurityStub.grantAllowedPath("UnknownPlugin", customGrantedDir)
-        val allowedPath = PluginFileSecurityStub.checkPath(targetFile.absolutePath)
-        assertEquals(targetFile.canonicalPath, allowedPath)
-
-        // 3. Revoke access -> blocked again
-        PluginFileSecurityStub.revokeAllowedPath("UnknownPlugin", customGrantedDir)
-        assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.checkPath(targetFile.absolutePath)
-        }
-    }
-
-    @Test
-    fun `checkFile validates file object properly`() {
-        val safeFile = File(storageRoot, "valid.bin")
-        val result = PluginFileSecurityStub.checkFile(safeFile)
-        assertEquals(safeFile.canonicalPath, result.canonicalPath)
-
-        val badFile = File(tempDir, "outside.bin")
-        assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.checkFile(badFile)
-        }
-    }
-
-    @Test
-    fun `temporary files and listed roots stay inside plugin storage`() {
-        assertEquals(listOf(storageRoot), PluginFileSecurityStub.listRoots().toList())
-        val tempFile = PluginFileSecurityStub.createTempFile("sandbox", ".tmp")
-        assertEquals(storageRoot, tempFile.parentFile.canonicalFile)
-        tempFile.delete()
-        assertFailsWith<SecurityException> {
-            PluginFileSecurityStub.createTempFile("sandbox", ".tmp", tempDir)
-        }
-    }
-
-    @Test
-    fun `plugin name traversal cannot move its storage outside Extensions`() {
+    fun `plugin storage helper stays under its configured Extensions directory`() {
         val root = PluginFileSecurityStub.getStorageRootForPlugin("..")
-        assertEquals(File(tempDir, "Extensions/_/storage").canonicalFile, root)
+        assertEquals(File(tempDir, "Extensions/_/storage").path, root.path)
     }
 }

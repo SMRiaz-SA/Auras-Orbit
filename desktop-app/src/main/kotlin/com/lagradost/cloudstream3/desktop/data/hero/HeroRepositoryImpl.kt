@@ -86,8 +86,8 @@ class HeroRepositoryImpl : HeroRepository {
 
         try {
             backgroundSemaphore.withPermit {
-                val isSeriesPattern = Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|complete|all-episodes|web-series|tv-series)\b""").containsMatchIn(item.name)
-                    || Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|all-episodes|web-series|tv-series)\b""").containsMatchIn(item.url)
+                val isSeriesPattern = Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|complete|all-episodes|web-series|tv-series)\b""").containsMatchIn(item.name) ||
+                    Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|all-episodes|web-series|tv-series)\b""").containsMatchIn(item.url)
                 val isAnime = item.type == com.lagradost.cloudstream3.TvType.Anime || item.type == com.lagradost.cloudstream3.TvType.AnimeMovie
                 val actualType = when {
                     isAnime -> com.lagradost.cloudstream3.TvType.Anime

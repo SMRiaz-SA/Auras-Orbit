@@ -2,8 +2,8 @@ package com.lagradost.cloudstream3.desktop.ui.screens.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,8 +14,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lagradost.cloudstream3.desktop.sync.OAuthLocalServer
 import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog
-import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.SettingsUiEvent
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.syncproviders.AuthAPI
 import com.lagradost.cloudstream3.syncproviders.AuthData
@@ -25,7 +25,6 @@ import com.lagradost.cloudstream3.syncproviders.TrackerSyncHealth
 import com.lagradost.cloudstream3.syncproviders.TrackerSyncOutcome
 import com.lagradost.cloudstream3.syncproviders.TrackerSyncPreferences
 import com.lagradost.cloudstream3.syncproviders.providers.SimklApi
-import com.lagradost.cloudstream3.desktop.sync.OAuthLocalServer
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,6 +45,7 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
     val syncHealth by TrackerSyncHealth.states.collectAsState()
 
     fun startTrackerLogin(api: SyncAPI) {
+        val loginProfileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
         trackerLoginMessage = null
         trackerAccountMessage = null
         scope.launch {
@@ -67,14 +67,14 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                     ) ?: error("Sign-in was cancelled or timed out")
                     val token = api.login(callback, payload) ?: error("Simkl sign-in did not return a token")
                     val user = api.user(token) ?: error("Could not verify the Simkl account")
-                    AccountManager.updateAccounts(api.idPrefix, arrayOf(AuthData(user, token)))
+                    AccountManager.updateAccounts(api.idPrefix, arrayOf(AuthData(user, token)), loginProfileId)
                 } else {
                     val page = api.loginRequest() ?: error("Set a ${api.name} client ID first")
                     if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                         error("Opening a browser is not supported on this system")
                     }
                     Desktop.getDesktop().browse(URI(page.url))
-                    pendingTrackerLogin = PendingTrackerLogin(api, page.payload, page.url)
+                    pendingTrackerLogin = PendingTrackerLogin(api, page.payload, page.url, loginProfileId)
                 }
             } catch (error: Exception) {
                 trackerLoginMessage = error.message ?: "Sign-in failed"
@@ -114,12 +114,17 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                         isCreatingNew = false
                     },
                     onSave = { name, colorIndex, customAvatar, pin, isKids ->
+                        // The dialog calls onDismiss immediately after onSave. Capture its
+                        // mode and target before launching so the background coroutine does
+                        // not observe the cleared Compose state and silently skip the save.
+                        val shouldCreateProfile = isCreatingNew
+                        val profileToEdit = editingProfile
                         scope.launch(Dispatchers.IO) {
-                            if (isCreatingNew) {
+                            if (shouldCreateProfile) {
                                 com.lagradost.cloudstream3.desktop.profile.ProfileManager.createProfile(name, colorIndex, customAvatar, pin, isKids)
-                            } else if (editingProfile != null) {
+                            } else if (profileToEdit != null) {
                                 com.lagradost.cloudstream3.desktop.profile.ProfileManager.updateProfile(
-                                    editingProfile!!.copy(
+                                    profileToEdit.copy(
                                         name = name,
                                         avatarColorIndex = colorIndex,
                                         customAvatarPath = customAvatar,
@@ -472,7 +477,7 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
                             ?: error("The service did not accept this sign-in response")
                         val user = pending.api.user(token)
                             ?: error("The service did not return a valid account")
-                        AccountManager.updateAccounts(pending.api.idPrefix, arrayOf(AuthData(user, token)))
+                        AccountManager.updateAccounts(pending.api.idPrefix, arrayOf(AuthData(user, token)), pending.profileId)
                         pendingTrackerLogin = null
                     } catch (_: Exception) {
                         trackerLoginMessage = "Sign-in could not be completed. Check the pasted redirect URL and client ID, then try again."
@@ -485,7 +490,7 @@ fun SettingsAccounts(viewModel: SettingsViewModel) {
     }
 }
 
-private data class PendingTrackerLogin(val api: SyncAPI, val payload: String?, val authorizationUrl: String)
+private data class PendingTrackerLogin(val api: SyncAPI, val payload: String?, val authorizationUrl: String, val profileId: Int)
 
 @Composable
 private fun TrackerClientIdDialog(

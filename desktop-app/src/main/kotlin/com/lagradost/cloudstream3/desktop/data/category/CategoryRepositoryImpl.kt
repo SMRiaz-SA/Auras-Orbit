@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.desktop.data.bookmarks.BookmarksRepositoryImpl
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.repository.BookmarksRepository
 import com.lagradost.cloudstream3.desktop.domain.category.model.Category
 import com.lagradost.cloudstream3.desktop.domain.category.repository.CategoryRepository
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.repo.PluginNetworkClient
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
@@ -67,11 +68,14 @@ class CategoryRepositoryImpl(
         true
     }
 
-    override suspend fun setItemCategory(bookmarkId: String, categoryId: Int): Boolean = withContext(Dispatchers.IO) {
-        val existing = bookmarksRepo.getById(bookmarkId) ?: return@withContext false
-        val updated = existing.copy(watchType = categoryId)
-        bookmarksRepo.addBookmark(updated)
-        true
+    override suspend fun setItemCategory(bookmarkId: String, categoryId: Int, profileId: Int?): Boolean {
+        val requestedProfileId = profileId ?: ProfileManager.activeProfileId
+        return withContext(Dispatchers.IO) {
+            val existing = bookmarksRepo.getById(bookmarkId, requestedProfileId) ?: return@withContext false
+            val updated = existing.copy(watchType = categoryId)
+            bookmarksRepo.addBookmark(updated, requestedProfileId)
+            true
+        }
     }
 
     private fun loadInitialCategories(): List<Category> {

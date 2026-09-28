@@ -82,8 +82,11 @@ internal object TrackerPlaybackSyncCoordinator {
                         TrackerSyncOutcome.SKIPPED to "No unambiguous episode coordinates were available"
                     } else {
                         val ok = api.recordWatchedEpisodes(auth, media, mappedEvents)
-                        if (ok) TrackerSyncOutcome.SYNCED to "Playback history accepted"
-                        else TrackerSyncOutcome.PROVIDER_REJECTED to "Provider rejected playback history"
+                        if (ok) {
+                            TrackerSyncOutcome.SYNCED to "Playback history accepted"
+                        } else {
+                            TrackerSyncOutcome.PROVIDER_REJECTED to "Provider rejected playback history"
+                        }
                     }
                 } else {
                     syncCountBased(api, auth, media, response, watched)
@@ -174,5 +177,4 @@ internal object TrackerPlaybackSyncCoordinator {
     private fun normalizeTitle(value: String): String = value
         .lowercase(Locale.ROOT)
         .filter(Char::isLetterOrDigit)
-
 }

@@ -3,6 +3,8 @@ package com.lagradost.cloudstream3.desktop.repo
 import com.fasterxml.jackson.core.type.TypeReference
 import com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
+import com.lagradost.runtime.loader.PluginArchiveFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -177,7 +179,7 @@ object DesktopRepositoryManager {
     private fun normalizeRepositoryData(data: RepositoryData): RepositoryData {
         val icon = data.iconUrl?.trim()?.takeIf { it.isNotEmpty() }
         val name = data.name.trim().ifEmpty { data.url }
-        return data.copy(iconUrl = icon, name = name)
+        return data.copy(iconUrl = icon, name = name).also { it.storageName = data.storageName }
     }
 
     suspend fun saveRepository(repository: RepositoryData) = syncMutex.withLock {
@@ -189,7 +191,7 @@ object DesktopRepositoryManager {
             current[index] = existing.copy(
                 name = if (incoming.name.isNotBlank() && incoming.name != incoming.url) incoming.name else existing.name,
                 iconUrl = incoming.iconUrl ?: existing.iconUrl,
-            )
+            ).also { it.storageName = existing.storageName }
         } else {
             current.add(incoming)
         }
@@ -211,9 +213,14 @@ object DesktopRepositoryManager {
         }
         saveCachesToDisk()
 
-        val nameToUse = repo?.name ?: repoToRemove?.name
+        val nameToUse = repoToRemove?.storageName ?: repo?.name
         if (!nameToUse.isNullOrBlank()) {
-            PluginFileUtils.deleteRepositoryDirectory(nameToUse)
+            val folderKey = PluginFileUtils.repositoryDirectoryCollisionKey(nameToUse)
+            if (current.none { PluginFileUtils.repositoryDirectoryCollisionKey(it.storageName) == folderKey }) {
+                PluginFileUtils.deleteRepositoryDirectory(nameToUse)
+            } else {
+                AppLogger.w("Keeping shared plugin folder for a repository that still uses '$nameToUse'.")
+            }
         }
     }
 
@@ -227,7 +234,7 @@ object DesktopRepositoryManager {
         var body: String? = null
         try {
             PluginNetworkClient.redirectClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) body = response.body.string()
+                if (response.isSuccessful) body = response.body.byteStream().readBoundedBytes(8 * 1024 * 1024).toString(Charsets.UTF_8)
             }
         } catch (e: Exception) {
             AppLogger.i("Failed to fetch $resolvedUrl: ${e.message}")
@@ -263,6 +270,18 @@ object DesktopRepositoryManager {
         val resolvedUrl = PluginNetworkClient.parseRepoUrl(url) ?: url
         val manifest = PluginNetworkClient.fetchRepository(resolvedUrl) ?: return null
 
+        val directoryKey = PluginFileUtils.repositoryDirectoryCollisionKey(manifest.name)
+        val conflictingRepository = getSavedRepositories().firstOrNull {
+            it.url != resolvedUrl && PluginFileUtils.repositoryDirectoryCollisionKey(it.name) == directoryKey
+        }
+        if (conflictingRepository != null) {
+            AppLogger.w(
+                "Rejected repository '${manifest.name}' because it shares a Windows-safe plugin folder with " +
+                    "'${conflictingRepository.name}'. Remove or rename one repository before adding it.",
+            )
+            return null
+        }
+
         repoCache[resolvedUrl] = manifest
         saveRepository(RepositoryData(iconUrl = manifest.iconUrl, name = manifest.name, url = resolvedUrl))
 
@@ -293,7 +312,7 @@ object DesktopRepositoryManager {
         val mutex = fetchMutexes.computeIfAbsent(listUrl) { Mutex() }
         val plugins = mutex.withLock {
             pluginsCache[listUrl]?.let { return@withLock it }
-            val fetched = PluginNetworkClient.fetchPlugins(listUrl)
+            val fetched = PluginNetworkClient.fetchPlugins(listUrl) ?: return@withLock emptyList()
             pluginsCache[listUrl] = fetched
             saveCachesToDisk()
             fetched
@@ -337,7 +356,47 @@ object DesktopRepositoryManager {
     fun getExtensionsDir(): File = PluginFileUtils.getExtensionsDir()
 
     suspend fun downloadPlugin(repoName: String, plugin: SitePlugin): File? =
-        PluginFileUtils.downloadPlugin(repoName, plugin)
+        if (hasRepositoryFolderCollision(repoName)) {
+            AppLogger.w("Blocked plugin install from '$repoName' because its folder is shared by another repository.")
+            null
+        } else {
+            PluginFileUtils.downloadPlugin(repoName, plugin)
+        }
+
+    private fun hasRepositoryFolderCollision(repoName: String): Boolean {
+        val matches = getSavedRepositories().filter { it.name == repoName }
+        if (matches.size > 1) return true
+        val key = PluginFileUtils.repositoryDirectoryCollisionKey(matches.singleOrNull()?.storageName ?: repoName)
+        return getSavedRepositories().count { PluginFileUtils.repositoryDirectoryCollisionKey(it.storageName) == key } > 1
+    }
+
+    private suspend fun installPluginUpdateWithRollback(
+        repoName: String,
+        plugin: SitePlugin,
+        currentJar: File,
+    ): File {
+        val primaryJar = PluginFileUtils.pluginFile(repoName, plugin.internalName, ".jar")
+        val jvmJar = PluginFileUtils.pluginFile(repoName, plugin.internalName, "-jvm.jar")
+        val dexPackage = PluginFileUtils.pluginFile(repoName, plugin.internalName, ".cs3")
+        var replacement: File? = null
+
+        return PluginFileUtils.withFileRollback(
+            files = listOf(primaryJar, jvmJar, dexPackage),
+            onBeforeRestore = {
+                replacement?.let { com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(it.absolutePath) }
+            },
+            onAfterRestore = {
+                com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(currentJar)
+            },
+        ) {
+            com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(currentJar.absolutePath)
+            val downloaded = downloadPlugin(repoName, plugin)
+                ?: throw java.io.IOException("Plugin update download failed")
+            replacement = downloaded
+            com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(downloaded)
+            downloaded
+        }
+    }
 
     fun clearCaches() {
         repoCache.clear()
@@ -349,9 +408,12 @@ object DesktopRepositoryManager {
         if (!extensionsDir.exists()) return
 
         val allRemote = getAllPlugins()
+        val collidingRepositoryKeys = getSavedRepositories()
+            .groupBy { PluginFileUtils.repositoryDirectoryCollisionKey(it.storageName) }
+            .filterValues { it.size > 1 }
+            .keys
         val localJars = extensionsDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
-            .filter { !it.name.endsWith("-jvm.jar") }
+            .filter(PluginArchiveFilter::isLoadablePluginArchive)
             .toList()
 
         var updatedCount = 0
@@ -362,12 +424,18 @@ object DesktopRepositoryManager {
             val localVersion = manifest["version"]?.toString()?.toIntOrNull() ?: 0
 
             val localRepoDirName = jar.parentFile?.name
+            if (localRepoDirName != null && localRepoDirName.lowercase(java.util.Locale.ROOT) in collidingRepositoryKeys) {
+                AppLogger.w("Skipping plugin update in ambiguous shared repository folder '$localRepoDirName'.")
+                continue
+            }
             val remoteMatch = allRemote.find { (repoName, sitePlugin) ->
                 sitePlugin.internalName == internalName &&
-                (localRepoDirName == null || PluginFileUtils.safeDirectoryName(repoName).equals(localRepoDirName, ignoreCase = true))
+                    (localRepoDirName == null || PluginFileUtils.repositoryDirectory(repoName).name.equals(localRepoDirName, ignoreCase = true))
             } ?: if (localRepoDirName == null || localRepoDirName.equals("extensions", ignoreCase = true)) {
                 allRemote.find { it.second.internalName == internalName }
-            } else null
+            } else {
+                null
+            }
 
             if (remoteMatch != null) {
                 val repoName = remoteMatch.first
@@ -375,22 +443,11 @@ object DesktopRepositoryManager {
                 if (sitePlugin.version > localVersion) {
                     AppLogger.i("Auto-updating plugin: $internalName in $localRepoDirName from v$localVersion to v${sitePlugin.version}")
                     try {
-                        val wasTrusted = com.lagradost.runtime.loader.ExtensionLoader.isTrusted(jar, internalName, manifestName = name)
-                        withContext(Dispatchers.IO) {
-                            com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(jar.absolutePath)
-                        }
-                        val newJar = downloadPlugin(repoName, sitePlugin)
-                        if (newJar != null) {
-                            withContext(Dispatchers.IO) {
-                                com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(newJar, forceBypassSecurity = wasTrusted)
-                            }
-                            updatedCount++
-                        }
+                        installPluginUpdateWithRollback(repoName, sitePlugin, jar)
+                        updatedCount++
                     } catch (e: Throwable) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
                         AppLogger.e("Failed to auto-update plugin $internalName in $localRepoDirName", e)
-                        try {
-                            com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(jar)
-                        } catch (_: Throwable) {}
                     }
                 }
             }
@@ -406,8 +463,7 @@ object DesktopRepositoryManager {
         val extensionsDir = getExtensionsDir()
         if (!extensionsDir.exists()) return icons
         extensionsDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
-            .filter { !it.name.endsWith("-jvm.jar") }
+            .filter(PluginArchiveFilter::isLoadablePluginArchive)
             .forEach { jar ->
                 val manifest = readPluginManifest(jar) ?: return@forEach
                 val iconUrl = manifest["iconUrl"] as? String ?: return@forEach
@@ -442,7 +498,7 @@ object DesktopRepositoryManager {
                         current[index] = existing.copy(
                             name = if (name.isNotBlank() && name != url) name else existing.name,
                             iconUrl = iconUrl ?: existing.iconUrl,
-                        )
+                        ).also { it.storageName = existing.storageName }
                     }
                 }
                 writeRepositoriesToDisk(current.distinctBy { it.url })
@@ -467,7 +523,7 @@ object DesktopRepositoryManager {
                             repo.pluginLists.map { listUrl ->
                                 async {
                                     try {
-                                        val plugins = PluginNetworkClient.fetchPlugins(listUrl)
+                                        val plugins = PluginNetworkClient.fetchPlugins(listUrl) ?: pluginsCache[listUrl].orEmpty()
                                         pluginsCache[listUrl] = plugins
                                         plugins.forEach { plugin ->
                                             val icon = plugin.iconUrl
@@ -512,52 +568,41 @@ object DesktopRepositoryManager {
 
             savedRepos.forEach { saved ->
                 try {
+                    if (hasRepositoryFolderCollision(saved.name)) {
+                        AppLogger.w("Skipping plugin updates from '${saved.name}' because its folder is shared by another repository.")
+                        return@forEach
+                    }
                     val repo = PluginNetworkClient.fetchRepository(saved.url) ?: return@forEach
                     val remotePlugins = coroutineScope {
                         repo.pluginLists.map { listUrl -> async { getCachedPlugins(listUrl) } }.awaitAll().flatten()
                     }.distinctBy { it.internalName }
 
-            val repoDir = PluginFileUtils.repositoryDirectory(repo.name)
+                    val repoDir = PluginFileUtils.repositoryDirectory(saved.name)
                     if (!repoDir.exists()) repoDir.mkdirs()
 
                     remotePlugins.forEach { remotePlugin ->
-                        val localJar = PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, ".jar").takeIf { it.exists() }
-                            ?: PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, ".cs3").takeIf { it.exists() }
-                            ?: PluginFileUtils.pluginFile(repo.name, remotePlugin.internalName, "-jvm.jar").takeIf { it.exists() }
+                        val localJar = PluginFileUtils.pluginFile(saved.name, remotePlugin.internalName, ".jar").takeIf { it.exists() }
+                            ?: PluginFileUtils.pluginFile(saved.name, remotePlugin.internalName, ".cs3").takeIf { it.exists() }
+                            ?: PluginFileUtils.pluginFile(saved.name, remotePlugin.internalName, "-jvm.jar").takeIf { it.exists() }
                         if (localJar != null && localJar.exists()) {
                             val localManifest = readPluginManifest(localJar)
                             val localVersion = localManifest?.get("version")?.toString()?.toIntOrNull() ?: 0
                             if (remotePlugin.version > localVersion) {
                                 AppLogger.i("Auto-updating ${remotePlugin.internalName} in ${saved.name} from v$localVersion to v${remotePlugin.version}...")
                                 try {
-                                    val wasTrusted = com.lagradost.runtime.loader.ExtensionLoader.isTrusted(localJar, remotePlugin.internalName, manifestName = remotePlugin.name)
-                                    com.lagradost.runtime.loader.ExtensionLoader.unloadPlugin(localJar.absolutePath)
-                                    val newJar = downloadPlugin(saved.name, remotePlugin)
-                                    if (newJar != null) {
-                                        com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(newJar, forceBypassSecurity = wasTrusted)
-                                        updatedList.add(
-                                            com.lagradost.common.storage.PluginUpdateRecord(
-                                                pluginName = remotePlugin.name,
-                                                version = remotePlugin.version,
-                                                iconUrl = remotePlugin.iconUrl,
-                                                timestamp = System.currentTimeMillis(),
-                                                isSuccess = true,
-                                                errorMessage = null,
-                                            )
-                                        )
-                                    } else {
-                                        updatedList.add(
-                                            com.lagradost.common.storage.PluginUpdateRecord(
-                                                pluginName = remotePlugin.name,
-                                                version = remotePlugin.version,
-                                                iconUrl = remotePlugin.iconUrl,
-                                                timestamp = System.currentTimeMillis(),
-                                                isSuccess = false,
-                                                errorMessage = "Download failed (network or server error)",
-                                            )
-                                        )
-                                    }
+                                    installPluginUpdateWithRollback(saved.name, remotePlugin, localJar)
+                                    updatedList.add(
+                                        com.lagradost.common.storage.PluginUpdateRecord(
+                                            pluginName = remotePlugin.name,
+                                            version = remotePlugin.version,
+                                            iconUrl = remotePlugin.iconUrl,
+                                            timestamp = System.currentTimeMillis(),
+                                            isSuccess = true,
+                                            errorMessage = null,
+                                        ),
+                                    )
                                 } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
                                     AppLogger.e("Failed to auto-update ${remotePlugin.internalName}", e)
                                     updatedList.add(
                                         com.lagradost.common.storage.PluginUpdateRecord(
@@ -567,7 +612,7 @@ object DesktopRepositoryManager {
                                             timestamp = System.currentTimeMillis(),
                                             isSuccess = false,
                                             errorMessage = e.message ?: "Failed to install update",
-                                        )
+                                        ),
                                     )
                                 }
                             }

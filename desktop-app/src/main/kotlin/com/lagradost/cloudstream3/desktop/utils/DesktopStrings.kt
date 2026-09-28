@@ -9,11 +9,11 @@ object DesktopStrings {
     const val SETTINGS = "Settings"
 
     // Home Screen
-    const val HOME_START_TITLE = "Start with CloudStream extensions"
-    const val HOME_START_DESCRIPTION = "Browse community repositories, then review and install only the extensions you choose. Adding a repository does not install extensions."
+    const val HOME_START_TITLE = "Get started with extensions"
+    const val HOME_START_DESCRIPTION = "Browse community repositories, then review and install compatible extensions. Adding a repository does not install extensions."
     const val HOME_BROWSE_PLUGINS = "Browse Plugins"
     const val HOME_STREMIO_CTA = "Set up Stremio add-ons"
-    const val HOME_STREMIO_DESCRIPTION = "A separate manifest-based integration; it does not install CloudStream extensions."
+    const val HOME_STREMIO_DESCRIPTION = "A separate manifest-based integration; it does not install provider extensions."
 
     // Extensions Screen
     const val INSTALLED = "Installed"
@@ -40,7 +40,7 @@ object DeveloperModeManager {
     private const val KEY = "developer_mode_enabled"
 
     private val _isEnabled = androidx.compose.runtime.mutableStateOf(
-        com.lagradost.common.storage.DesktopDataStore.getKey<Boolean>(KEY) ?: false
+        com.lagradost.common.storage.DesktopDataStore.getKey<Boolean>(KEY) ?: false,
     )
     val isEnabled: Boolean get() = _isEnabled.value
 

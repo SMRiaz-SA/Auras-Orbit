@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.search
 
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.DesktopErrorReporter
+import com.lagradost.cloudstream3.desktop.core.preference.PreferenceKeys
 import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
 import com.lagradost.cloudstream3.desktop.domain.plugins.repository.PluginRepository
 import com.lagradost.cloudstream3.desktop.domain.providers.repository.ActiveProviderRepository
@@ -9,7 +10,6 @@ import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiState
-import com.lagradost.cloudstream3.desktop.core.preference.PreferenceKeys
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 
 private const val PREF_SEARCH_HISTORY = PreferenceKeys.PREF_SEARCH_HISTORY
 private const val MAX_HISTORY_SIZE = 20

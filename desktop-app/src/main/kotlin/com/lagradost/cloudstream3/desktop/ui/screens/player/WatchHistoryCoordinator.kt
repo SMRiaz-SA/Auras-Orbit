@@ -6,9 +6,32 @@ import com.lagradost.cloudstream3.desktop.domain.history.interactor.UpsertWatchH
 import com.lagradost.cloudstream3.desktop.domain.player.interactor.SavePlaybackProgress
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal object WatchHistoryCoordinator {
+
+    /** A failed native screenshot must never prevent the durable playback-progress write. */
+    internal suspend fun saveWithOptionalScreenshot(
+        history: WatchHistory,
+        captureScreenshot: suspend () -> String?,
+        saveHistory: suspend (WatchHistory) -> Unit,
+        onScreenshotFailure: (Exception) -> Unit = {},
+    ) {
+        // Commit progress before an optional native operation can fail or be cancelled.
+        saveHistory(history)
+        val screenshotUrl = try {
+            captureScreenshot()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            onScreenshotFailure(failure)
+            null
+        }
+        if (screenshotUrl != null && screenshotUrl != history.screenshotUrl) {
+            saveHistory(history.copy(screenshotUrl = screenshotUrl))
+        }
+    }
 
     /**
      * Saves the current episode watch progress.

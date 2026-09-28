@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.desktop.network.AutoRetryInterceptor
 import com.lagradost.cloudstream3.desktop.network.DevNetworkInterceptor
 import com.lagradost.cloudstream3.desktop.network.RateLimitInterceptor
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -99,7 +100,7 @@ internal object PluginNetworkClient {
         try {
             redirectClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
-                val body = response.body.string()
+                val body = response.body.byteStream().readBoundedBytes(8 * 1024 * 1024).toString(Charsets.UTF_8)
                 if (body.trimStart().startsWith("<")) {
                     AppLogger.i("Repo fetch from $url returned HTML — likely behind a WAF.")
                     return@withContext null
@@ -129,7 +130,7 @@ internal object PluginNetworkClient {
                             finalUrl
                         } else {
                             "${finalUrl.trimEnd('/')}/builds/plugins.json"
-                        }
+                        },
                     )
                 } else {
                     rawRepo.pluginLists
@@ -150,16 +151,16 @@ internal object PluginNetworkClient {
         }
     }
 
-    /** Fetches and parses a list of [SitePlugin] entries from [pluginListUrl]. Returns empty on failure. */
-    suspend fun fetchPlugins(pluginListUrl: String): List<SitePlugin> = withContext(Dispatchers.IO) {
+    /** Null means failure; an empty list is a successful empty catalog. */
+    suspend fun fetchPlugins(pluginListUrl: String): List<SitePlugin>? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url(pluginListUrl).build()
             redirectClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext emptyList()
-                val body = response.body.string()
+                if (!response.isSuccessful) return@withContext null
+                val body = response.body.byteStream().readBoundedBytes(8 * 1024 * 1024).toString(Charsets.UTF_8)
                 if (body.trimStart().startsWith("<")) {
                     AppLogger.i("Plugin list from $pluginListUrl returned HTML — likely behind a WAF.")
-                    return@withContext emptyList()
+                    return@withContext null
                 }
                 val rawPlugins = mapper.readValue(body, object : TypeReference<List<SitePlugin>>() {})
                 return@withContext rawPlugins
@@ -177,7 +178,7 @@ internal object PluginNetworkClient {
             }
         } catch (e: Exception) {
             AppLogger.i("Failed to fetch or parse plugins from $pluginListUrl: ${e.message}")
-            emptyList()
+            null
         }
     }
 }

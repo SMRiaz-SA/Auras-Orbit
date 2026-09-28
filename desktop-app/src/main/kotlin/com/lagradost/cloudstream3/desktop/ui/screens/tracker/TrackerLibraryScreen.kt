@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.tracker
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
@@ -52,12 +52,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.library.ListSorting
-import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 
 @Composable
 fun TrackerLibraryScreen(
@@ -150,10 +149,10 @@ fun TrackerLibraryScreen(
                 Text(
                     "Supports: ${provider.capabilities.joinToString { it.name.lowercase().replaceFirstChar(Char::uppercase) }}" +
                         ". " + when {
-                        provider.supportsExactEpisodes -> "Exact episode selections are available for supported series."
-                        provider.supportsCountProgress -> "Playback progress is count-only."
-                        else -> "Playback progress is not exposed by this adapter."
-                    },
+                            provider.supportsExactEpisodes -> "Exact episode selections are available for supported series."
+                            provider.supportsCountProgress -> "Playback progress is count-only."
+                            else -> "Playback progress is not exposed by this adapter."
+                        },
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -266,7 +265,9 @@ private fun TrackerLibraryRow(entry: TrackerLibraryEntry, onEdit: () -> Unit) {
                 Text(entry.listName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 val progress = if (entry.item.episodesCompleted != null || entry.item.episodesTotal != null) {
                     "Progress ${entry.item.episodesCompleted ?: 0}/${entry.item.episodesTotal ?: "?"}"
-                } else null
+                } else {
+                    null
+                }
                 Text(
                     listOfNotNull(progress, entry.item.personalRating?.toDouble(10)?.let { "Score %.1f/10".format(java.util.Locale.ROOT, it) }).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,

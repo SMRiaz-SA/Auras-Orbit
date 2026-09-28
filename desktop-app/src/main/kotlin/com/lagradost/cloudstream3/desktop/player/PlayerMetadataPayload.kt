@@ -7,6 +7,7 @@ data class PlayerUiSyncState(
     val contentRating: String? = null,
     val rating: Double? = null,
     val isProbing: Boolean,
+    val isPlaybackReady: Boolean = false,
     val isScraping: Boolean = false,
     val backdropUrl: String?,
     val logoUrl: String?,

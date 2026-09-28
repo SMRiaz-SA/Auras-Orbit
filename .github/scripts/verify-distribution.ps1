@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $distribution = Join-Path $repoRoot 'desktop-app/build/compose/binaries/main/app/Auras-Orbit'
 $installerPath = Join-Path $repoRoot 'desktop-app/build/outputs/Auras-Orbit-Setup.exe'
-$versionFile = Join-Path $repoRoot 'installer/version.iss'
+$versionFile = Join-Path $repoRoot 'desktop-app/build/generated/installer/version.iss'
 
 if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
     $versionLine = Get-Content (Join-Path $repoRoot 'gradle.properties') |
@@ -78,6 +78,16 @@ foreach ($legalFile in @(
 )) {
     $path = Join-Path $distribution "legal/$legalFile"
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required packaged legal file is missing: $path" }
+}
+
+$nativeManifestPath = Join-Path $distribution 'app/resources/jni/native-build.json'
+$nativeBinaryPath = Join-Path $distribution 'app/resources/jni/player_bridge.dll'
+if (-not (Test-Path -LiteralPath $nativeManifestPath)) { throw 'Packaged native build manifest is missing.' }
+$nativeManifest = Get-Content -Raw -LiteralPath $nativeManifestPath | ConvertFrom-Json
+$sourceHash = (Get-FileHash -LiteralPath (Join-Path $repoRoot 'desktop-app/src/main/cpp/player_bridge.cpp') -Algorithm SHA256).Hash
+$binaryHash = (Get-FileHash -LiteralPath $nativeBinaryPath -Algorithm SHA256).Hash
+if ($sourceHash -ne $nativeManifest.sourceSha256 -or $binaryHash -ne $nativeManifest.binarySha256) {
+    throw 'Packaged player bridge does not match the source build manifest.'
 }
 
 if ($RequireInstaller) {

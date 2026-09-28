@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.*
@@ -34,9 +33,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.desktop.profile.Profile
 import com.lagradost.cloudstream3.desktop.profile.ProfileManager
+import com.lagradost.cloudstream3.desktop.profile.ProfilePin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -45,11 +44,12 @@ fun PinCodeDialog(
     show: Boolean,
     profile: Profile?,
     onDismiss: () -> Unit,
-    onVerified: () -> Unit,
+    onVerified: (String) -> Unit,
 ) {
     if (!show || profile == null) return
 
-    val expectedPinLength = remember(profile) { profile.pinCode?.length?.coerceIn(4, 6) ?: 4 }
+    val expectedPinLength = remember(profile) { ProfilePin.expectedLength(profile.pinCode, profile.pinLength) }
+    val pinCellCount = expectedPinLength ?: 6
     var enteredPin by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     var isVerifying by remember { mutableStateOf(false) }
@@ -102,7 +102,7 @@ fun PinCodeDialog(
                 isVerifying = false
                 // Brief success feedback with unlocked badge
                 delay(220)
-                onVerified()
+                onVerified(pin)
             } else {
                 triggerShakeAndClear()
             }
@@ -207,9 +207,9 @@ fun PinCodeDialog(
                 BasicTextField(
                     value = enteredPin,
                     onValueChange = { input ->
-                        if (!isVerifying && !isSuccess && input.all { it.isDigit() } && input.length <= expectedPinLength) {
+                        if (!isVerifying && !isSuccess && input.all { it.isDigit() } && input.length <= pinCellCount) {
                             enteredPin = input
-                            if (input.length == expectedPinLength) {
+                            if (input.length == expectedPinLength || (expectedPinLength == null && input.length == pinCellCount)) {
                                 verify(input)
                             }
                         }
@@ -233,7 +233,7 @@ fun PinCodeDialog(
                         },
                     ),
                 ) {
-                    for (i in 0 until expectedPinLength) {
+                    for (i in 0 until pinCellCount) {
                         val isFilled = i < enteredPin.length
                         val isFocused = i == enteredPin.length && !isVerifying && !isSuccess
 
@@ -293,6 +293,12 @@ fun PinCodeDialog(
                             }
                         }
                     }
+                }
+            }
+
+            if (expectedPinLength == null && enteredPin.length in 4..5 && !isVerifying && !isSuccess) {
+                Button(onClick = { verify(enteredPin) }) {
+                    Text("Verify ${enteredPin.length}-digit PIN")
                 }
             }
 

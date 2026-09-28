@@ -112,7 +112,8 @@ enum class DetailsSectionKey(val displayName: String, val description: String) {
     INFO("Details & Technical Info", "Release date, runtime, status, certification, budget, and language"),
     STUDIOS("Production Studios", "Animation studios, film producers, and production companies"),
     NETWORKS("Broadcast Networks", "Broadcasters, television networks, and streaming channels"),
-    REVIEWS("Community Reviews", "User star ratings and written reviews");
+    REVIEWS("Community Reviews", "User star ratings and written reviews"),
+    ;
 
     companion object {
         val defaultOrder = listOf(

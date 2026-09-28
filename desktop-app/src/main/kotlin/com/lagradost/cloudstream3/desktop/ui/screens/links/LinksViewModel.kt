@@ -196,7 +196,11 @@ class LinksViewModel : BaseMviViewModel<LinksUiState, LinksUiEvent, LinksUiEffec
         val history = event.history
         val loadResponse = event.loadResponse
 
-        val validation = com.lagradost.player.impl.PlayerLinkHandler.validate(link, displayTitle)
+        val validation = com.lagradost.player.impl.PlayerLinkHandler.validate(
+            link,
+            displayTitle,
+            createProxySession = false,
+        )
         if (validation.isFailure) {
             updateState { copy(statusText = validation.exceptionOrNull()?.message ?: "Invalid stream") }
             return

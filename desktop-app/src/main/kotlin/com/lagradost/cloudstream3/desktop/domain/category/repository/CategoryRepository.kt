@@ -10,5 +10,5 @@ interface CategoryRepository {
     suspend fun renameCategory(id: Int, name: String): Boolean
     suspend fun reorderCategories(categories: List<Category>): Boolean
     suspend fun deleteCategory(id: Int): Boolean
-    suspend fun setItemCategory(bookmarkId: String, categoryId: Int): Boolean
+    suspend fun setItemCategory(bookmarkId: String, categoryId: Int, profileId: Int? = null): Boolean
 }

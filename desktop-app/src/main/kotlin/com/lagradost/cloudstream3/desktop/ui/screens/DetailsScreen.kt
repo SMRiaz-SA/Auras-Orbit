@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -28,24 +27,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.desktop.ui.components.DesktopThemeColors.*
-import com.lagradost.cloudstream3.desktop.ui.components.shimmerBackground
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.screens.details.*
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiEvent
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
-import com.lagradost.player.impl.PlayerLinkHandler
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -365,7 +358,9 @@ fun ComposeDetailsScreen(
                         val currentSeason = linkHistory.season ?: uiState.selectedSeason
                         val seasonCast = if (currentSeason != null && currentSeason > 0) {
                             uiState.seasonCredits[currentSeason]
-                        } else null
+                        } else {
+                            null
+                        }
                         val effectiveActors = seasonCast ?: uiState.enrichedActors ?: response?.actors
                         LinksSidePanel(
                             provider = linkProvider,
@@ -437,10 +432,12 @@ fun DetailsContent(
             list
         }
     }
-    val currentSeason = (uiState?.selectedSeason?.takeIf { it in availableSeasons }
-        ?: latestHistory?.season?.takeIf { it in availableSeasons }
-        ?: availableSeasons.firstOrNull()
-        ?: 1)
+    val currentSeason = (
+        uiState?.selectedSeason?.takeIf { it in availableSeasons }
+            ?: latestHistory?.season?.takeIf { it in availableSeasons }
+            ?: availableSeasons.firstOrNull()
+            ?: 1
+        )
 
     val detailsSectionOrder by AppearanceConfig.detailsSectionOrder.collectAsState()
     val detailsDisabledSections by AppearanceConfig.detailsDisabledSections.collectAsState()
@@ -644,7 +641,7 @@ fun DetailsContent(
                                                         companyId = comp.id.takeIf { it > 0 },
                                                         logoUrl = comp.logoUrl,
                                                         originCountry = comp.originCountry,
-                                                    )
+                                                    ),
                                                 )
                                             },
                                         )
@@ -669,7 +666,7 @@ fun DetailsContent(
                                                         companyId = comp.id.takeIf { it > 0 },
                                                         logoUrl = comp.logoUrl,
                                                         originCountry = comp.originCountry,
-                                                    )
+                                                    ),
                                                 )
                                             },
                                         )
@@ -852,4 +849,3 @@ fun DetailsContent(
         )
     }
 }
-

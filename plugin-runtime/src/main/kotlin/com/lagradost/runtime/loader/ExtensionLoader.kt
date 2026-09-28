@@ -17,11 +17,26 @@ import java.util.zip.ZipFile
 
 object ExtensionLoader {
 
+    private const val TRANSFORM_POLICY_ID = "transform-policy-v3"
+
     private val mapper = ObjectMapper().registerModule(kotlinModule())
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
     // Keep track of loaded plugins by absolute path
     val plugins: MutableMap<String, BasePlugin> = mutableMapOf()
+    private val internalNamesByPluginPath = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Host lifecycle hook for resources owned by a plugin, such as process workers. */
+    @Volatile
+    var onPluginUnloaded: ((String) -> Unit)? = null
+
+    /** Host lifecycle hook invoked after plugin registration completes. */
+    @Volatile
+    var onPluginLoaded: ((File) -> Unit)? = null
+
+    /** Optional host hook that replaces dynamic plugin instances with a safe host-side handle. */
+    @Volatile
+    var isolatedPluginFactory: ((File, String) -> BasePlugin?)? = null
 
     // Map class loader to plugin name
     val classLoaders: MutableMap<ClassLoader, String> = java.util.concurrent.ConcurrentHashMap()
@@ -51,20 +66,22 @@ object ExtensionLoader {
         }
     }
 
-    fun getCallingPluginName(): String? {
+    fun getCallingPluginName(): String? = getCallingPluginClassLoader()?.let(classLoaders::get)
+
+    private fun getCallingPluginClassLoader(): ClassLoader? {
         try {
             val walker = java.lang.StackWalker.getInstance(java.lang.StackWalker.Option.RETAIN_CLASS_REFERENCE)
-            val name = walker.walk { stream ->
+            val loader = walker.walk { stream ->
                 stream.map { it.declaringClass }
                     .filter { clazz ->
                         val loader = clazz.classLoader
                         loader != null && classLoaders.containsKey(loader)
                     }
-                    .map { clazz -> classLoaders[clazz.classLoader] }
+                    .map { clazz -> clazz.classLoader }
                     .findFirst()
                     .orElse(null)
             }
-            if (name != null) return name
+            if (loader != null) return loader
         } catch (e: Throwable) {
             // Ignored, fallback below
         }
@@ -74,10 +91,10 @@ object ExtensionLoader {
             val className = element.className
             if (className.startsWith("com.lagradost.") || className.startsWith("java.") || className.startsWith("kotlin.")) continue
 
-            for ((loader, name) in classLoaders) {
+            for ((loader, _) in classLoaders) {
                 val classes = classLoaderToClassNames[loader]
                 if (classes != null && classes.contains(className)) {
-                    return name
+                    return loader
                 }
             }
         }
@@ -87,9 +104,49 @@ object ExtensionLoader {
     // Native plugin interceptors
     var nativePluginInterceptor: ((String) -> BasePlugin?)? = null
 
-    fun loadJar(jarFile: File, fallbackPluginClassName: String? = null, forceBypassSecurity: Boolean = false): BasePlugin {
+    internal fun isTransformedCacheValid(sourcePluginJar: File, transformedJar: File): Boolean {
+        val identityFile = File(transformedJar.path + ".identity")
+        return transformedJar.isFile && identityFile.isFile &&
+            runCatching { identityFile.readText() == transformedCacheIdentity(sourcePluginJar, transformedJar) }.getOrDefault(false)
+    }
+
+    /** Applies the current bytecode policy to a downloaded precompiled JVM sidecar and binds it to both artifacts. */
+    fun preparePrecompiledJvmJar(sourcePluginJar: File, precompiledJvmJar: File) {
+        require(sourcePluginJar.isFile) { "Source plugin archive does not exist" }
+        require(precompiledJvmJar.isFile) { "Precompiled JVM plugin archive does not exist" }
+        com.lagradost.runtime.security.PluginArchiveLimits.verify(precompiledJvmJar)
+        PluginBytecodeTransformer.transform(precompiledJvmJar)
+        File(precompiledJvmJar.path + ".identity").writeText(transformedCacheIdentity(sourcePluginJar, precompiledJvmJar))
+    }
+
+    private fun transformedCacheIdentity(sourcePluginJar: File, transformedJar: File): String =
+        "$TRANSFORM_POLICY_ID:${sha256(sourcePluginJar)}:${sha256(transformedJar)}"
+
+    private fun sha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    fun loadJar(
+        jarFile: File,
+        fallbackPluginClassName: String? = null,
+        @Suppress("UNUSED_PARAMETER") forceBypassSecurity: Boolean = false,
+    ): BasePlugin {
         if (!jarFile.exists()) {
             throw IllegalArgumentException("Jar file does not exist: ${jarFile.absolutePath}")
+        }
+        com.lagradost.runtime.security.PluginArchiveLimits.verify(jarFile)
+        fun cacheMatches(file: File) = isTransformedCacheValid(jarFile, file)
+        fun markCache(file: File) {
+            File(file.path + ".identity").writeText(transformedCacheIdentity(jarFile, file))
         }
 
         var pluginClassName = fallbackPluginClassName
@@ -123,21 +180,22 @@ object ExtensionLoader {
                     File(jarFile.parentFile, jarFile.nameWithoutExtension.substringBefore("-secure") + "-secure.jar")
                 }
                 val isCacheValid = secureJar == jarFile || (
-                    secureJar.exists() && secureJar.lastModified() >= jarFile.lastModified() &&
+                    secureJar.exists() && cacheMatches(secureJar) &&
                         (pluginClassName == null || checkJarHasClass(secureJar, pluginClassName!!))
-                )
+                    )
 
                 if (!isCacheValid) {
                     AppLogger.i("[PluginLoader] Securing Native JVM JAR: ${jarFile.name}...")
                     java.nio.file.Files.copy(jarFile.toPath(), secureJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
                     PluginBytecodeTransformer.transform(secureJar)
+                    markCache(secureJar)
                 } else if (secureJar != jarFile) {
                     AppLogger.i("[PluginLoader] Using cached Secure JVM JAR: ${secureJar.name}")
                 }
                 jarToLoad = secureJar
             } else if (dexEntry != null) {
                 val convertedJar = File(jarFile.parentFile, jarFile.nameWithoutExtension + "-jvm.jar")
-                val isCacheValid = convertedJar.exists() && convertedJar.lastModified() >= jarFile.lastModified() &&
+                val isCacheValid = convertedJar.exists() && cacheMatches(convertedJar) &&
                     (pluginClassName == null || checkJarHasClass(convertedJar, pluginClassName!!))
 
                 if (!isCacheValid) {
@@ -169,9 +227,12 @@ object ExtensionLoader {
                             throw IllegalStateException("Dex2Jar translation finished but no valid JAR was produced at ${convertedJar.absolutePath}")
                         } else {
                             PluginBytecodeTransformer.transform(convertedJar)
+                            markCache(convertedJar)
                         }
                     } finally {
-                        try { dexFile.delete() } catch (_: Throwable) {}
+                        try {
+                            dexFile.delete()
+                        } catch (_: Throwable) {}
                     }
                 } else {
                     AppLogger.i("[PluginLoader] Using cached JVM JAR: ${convertedJar.name}")
@@ -189,19 +250,37 @@ object ExtensionLoader {
 
         AppLogger.i("[PluginLoader] Initializing class $pluginClassName from ${jarToLoad.name}")
 
-        val isPluginTrusted = forceBypassSecurity || isTrusted(jarToLoad, finalInternalName, pluginClassName, nameFromManifest)
-
-        AppLogger.i("Running static bytecode security verification on ${jarToLoad.name} (Trusted: $isPluginTrusted)...")
-        com.lagradost.runtime.security.PluginSecurityVerifier.verifyJar(jarToLoad, finalInternalName, isPluginTrusted)
+        AppLogger.i("Validating plugin archive ${jarToLoad.name}...")
+        com.lagradost.runtime.security.PluginSecurityVerifier.verifyJar(jarToLoad, finalInternalName)
 
         val nativeIntercept = nativePluginInterceptor?.invoke(pluginClassName!!)
+        val isolatedIntercept = if (nativeIntercept == null) isolatedPluginFactory?.invoke(jarFile, pluginClassName!!) else null
+        var providersBeforePluginLoad: List<com.lagradost.cloudstream3.MainAPI> = emptyList()
+        var extractorsBeforePluginLoad: List<com.lagradost.cloudstream3.utils.ExtractorApi> = emptyList()
         val pluginInstance: BasePlugin = if (nativeIntercept != null) {
             AppLogger.i("Intercepted plugin $pluginClassName! Injecting native JVM implementation.")
             nativeIntercept
+        } else if (isolatedIntercept != null) {
+            AppLogger.i("Using isolated host handle for plugin ${jarFile.name}; plugin code will be loaded in its worker process.")
+            isolatedIntercept
         } else {
-            val safeParentLoader = SafePluginClassLoader(this::class.java.classLoader, isPluginTrusted)
+            providersBeforePluginLoad = synchronized(com.lagradost.cloudstream3.APIHolder.allProviders) {
+                com.lagradost.cloudstream3.APIHolder.allProviders.toList()
+            }
+            extractorsBeforePluginLoad = synchronized(com.lagradost.cloudstream3.utils.extractorApis) {
+                com.lagradost.cloudstream3.utils.extractorApis.toList()
+            }
+            val safeParentLoader = SafePluginClassLoader(this::class.java.classLoader, isTrusted = true)
             val classLoader = CompatPluginClassLoader(arrayOf(jarToLoad.toURI().toURL()), safeParentLoader)
-            val pluginClass = classLoader.loadClass(pluginClassName)
+            classLoaders[classLoader] = finalInternalName
+            classLoaderToJar[classLoader] = jarFile
+            val pluginClass = try {
+                classLoader.loadClass(pluginClassName)
+            } catch (failure: Throwable) {
+                classLoaders.remove(classLoader)
+                classLoaderToJar.remove(classLoader)
+                throw failure
+            }
 
             // MegaPlugin VerifiedRepo MixIn injection
             if (pluginClassName == "com.mega.MegaPlugin") {
@@ -213,7 +292,13 @@ object ExtensionLoader {
                 }
             }
 
-            val instance = pluginClass.getDeclaredConstructor().newInstance() as BasePlugin
+            val instance = try {
+                pluginClass.getDeclaredConstructor().newInstance() as BasePlugin
+            } catch (failure: Throwable) {
+                classLoaders.remove(classLoader)
+                classLoaderToJar.remove(classLoader)
+                throw failure
+            }
             classLoaders[classLoader] = finalInternalName
             classLoaderToJar[classLoader] = jarFile
 
@@ -236,9 +321,6 @@ object ExtensionLoader {
 
             // Synchronize any static Requests fields immediately
             synchronizePluginNetworkClients(classLoader, classNames)
-
-            // Proactively scan for any Android XML preferences and populate schema registry
-            scanAllXmlPreferences(jarToLoad, finalInternalName)
 
             if (finalInternalName == "CineStream") {
                 try {
@@ -347,16 +429,23 @@ object ExtensionLoader {
             instance
         }
 
+        // Preference XML is inert metadata and can be parsed in the host without loading plugin code.
+        scanAllXmlPreferences(jarToLoad, finalInternalName)
+
         pluginInstance.filename = jarFile.absolutePath
         // store plugin instance for later unloading
         plugins[jarFile.absolutePath] = pluginInstance
+        internalNamesByPluginPath[jarFile.absolutePath] = finalInternalName
+        internalNamesByPluginPath[jarFile.canonicalPath] = finalInternalName
 
         // Backfill sourcePlugin for any provider/extractor registered during constructor init
         // when pluginInstance.filename was not yet assigned
         try {
+            if (isolatedIntercept != null || nativeIntercept != null) return pluginInstance
             synchronized(com.lagradost.cloudstream3.APIHolder.allProviders) {
                 com.lagradost.cloudstream3.APIHolder.allProviders.forEach { provider ->
-                    if (provider.sourcePlugin == null && provider.sourcePlugin != "built-in") {
+                    val existedBeforeLoad = providersBeforePluginLoad.any { it === provider }
+                    if (!existedBeforeLoad && provider.sourcePlugin == null) {
                         provider.sourcePlugin = jarFile.absolutePath
                     }
                 }
@@ -365,7 +454,7 @@ object ExtensionLoader {
                 val toKeep = mutableListOf<com.lagradost.cloudstream3.MainAPI>()
                 for (provider in com.lagradost.cloudstream3.APIHolder.allProviders.reversed()) {
                     val uniqueKey = "${provider.name}::${provider.sourcePlugin ?: ""}"
-                    if (seenKeys.add(uniqueKey)) {
+                    if (provider.sourcePlugin != jarFile.absolutePath || seenKeys.add(uniqueKey)) {
                         toKeep.add(provider)
                     } else {
                         try {
@@ -377,13 +466,15 @@ object ExtensionLoader {
                 com.lagradost.cloudstream3.APIHolder.allProviders.addAll(toKeep.reversed())
             }
             com.lagradost.cloudstream3.APIHolder.apis.forEach { provider ->
-                if (provider.sourcePlugin == null && provider.sourcePlugin != "built-in") {
+                val existedBeforeLoad = providersBeforePluginLoad.any { it === provider }
+                if (!existedBeforeLoad && provider.sourcePlugin == null) {
                     provider.sourcePlugin = jarFile.absolutePath
                 }
             }
             synchronized(com.lagradost.cloudstream3.utils.extractorApis) {
                 com.lagradost.cloudstream3.utils.extractorApis.forEach { extractor ->
-                    if (extractor.sourcePlugin == null) {
+                    val existedBeforeLoad = extractorsBeforePluginLoad.any { it === extractor }
+                    if (!existedBeforeLoad && extractor.sourcePlugin == null) {
                         extractor.sourcePlugin = jarFile.absolutePath
                     }
                 }
@@ -392,7 +483,7 @@ object ExtensionLoader {
                 val extsToKeep = mutableListOf<com.lagradost.cloudstream3.utils.ExtractorApi>()
                 for (ext in com.lagradost.cloudstream3.utils.extractorApis.reversed()) {
                     val uniqueKey = "${ext.name}::${ext.sourcePlugin ?: ""}"
-                    if (seenExtKeys.add(uniqueKey)) {
+                    if (ext.sourcePlugin != jarFile.absolutePath || seenExtKeys.add(uniqueKey)) {
                         extsToKeep.add(ext)
                     }
                 }
@@ -404,23 +495,6 @@ object ExtensionLoader {
         }
 
         return pluginInstance
-    }
-
-    private fun getTrustedList(): MutableList<String> {
-        val list = mutableListOf<String>()
-        try {
-            list.addAll(com.lagradost.common.storage.DesktopDataStore.getTrustedPlugins())
-        } catch (_: Throwable) {}
-        try {
-            val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
-            val prefs = java.util.prefs.Preferences.userRoot().node("cloudstream_desktop_prefs")
-            val json = prefs.get("trusted_plugins", "[]")
-            val legacy = mapper.readValue(json, object : com.fasterxml.jackson.core.type.TypeReference<List<String>>() {})
-            for (item in legacy) {
-                if (!list.contains(item)) list.add(item)
-            }
-        } catch (_: Throwable) {}
-        return list
     }
 
     fun getPluginAliases(
@@ -482,98 +556,46 @@ object ExtensionLoader {
         return keys
     }
 
-    /** Trust follows the exact plugin file location, including its transformed variants. */
-    private fun getTrustedPathKeys(jarFile: File): Set<String> {
-        val parent = jarFile.parentFile.canonicalFile
-        val baseName = jarFile.nameWithoutExtension.removeSuffix("-secure").removeSuffix("-jvm")
-        val basePath = File(parent, baseName).canonicalPath.lowercase().replace('\\', '/')
-        val legacyFiles = listOf("$baseName.jar", "$baseName.cs3", "$baseName-secure.jar", "$baseName-jvm.jar")
-        return setOf("plugin-path:$basePath") + legacyFiles.map {
-            File(parent, it).canonicalPath.lowercase().replace('\\', '/')
-        }
-    }
-
+    /** Compatibility API retained for callers; plugin loading no longer has trust tiers. */
+    @Suppress("UNUSED_PARAMETER")
     fun isTrusted(
         jarFile: File,
         internalName: String? = null,
         pluginClassName: String? = null,
         manifestName: String? = null,
-    ): Boolean {
-        val candidateKeys = getTrustedPathKeys(jarFile)
-        val list = getTrustedList().map { it.lowercase().trim() }
+    ): Boolean = true
 
-        val inList = candidateKeys.any { list.contains(it) }
-        val inDataStore = candidateKeys.any { com.lagradost.common.storage.DesktopDataStore.isPluginTrusted(it) }
-        return inList || inDataStore
-    }
-
+    /** Compatibility no-op: there are no per-plugin runtime permission tiers. */
+    @Suppress("UNUSED_PARAMETER")
     fun addTrusted(
         jarFile: File,
         internalName: String? = null,
         pluginClassName: String? = null,
         manifestName: String? = null,
-    ) {
-        val keysToAdd = getTrustedPathKeys(jarFile)
-        val trusted = getTrustedList()
-        var changed = false
+    ) = Unit
 
-        for (k in keysToAdd) {
-            if (!trusted.any { it.equals(k, ignoreCase = true) }) {
-                trusted.add(k)
-                changed = true
-            }
-            com.lagradost.common.storage.DesktopDataStore.setPluginTrusted(k, true)
-        }
-
-        if (changed) {
-            try {
-                val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
-                val json = mapper.writeValueAsString(trusted)
-                if (json.length < 8192) {
-                    val prefs = java.util.prefs.Preferences.userRoot().node("cloudstream_desktop_prefs")
-                    prefs.put("trusted_plugins", json)
-                }
-            } catch (_: Throwable) {}
-        }
-    }
-
+    /** Compatibility no-op: uninstalling a plugin does not change its access policy. */
+    @Suppress("UNUSED_PARAMETER")
     fun removeTrusted(
         jarFile: File? = null,
         internalName: String? = null,
         pluginClassName: String? = null,
         manifestName: String? = null,
-    ) {
-        val keysToRemove = jarFile?.let(::getTrustedPathKeys) ?: emptySet()
-        val trusted = getTrustedList()
-        var changed = false
+    ) = Unit
 
-        for (k in keysToRemove) {
-            if (trusted.removeAll { it.equals(k, ignoreCase = true) }) {
-                changed = true
-            }
-            com.lagradost.common.storage.DesktopDataStore.setPluginTrusted(k, false)
-        }
-
-        if (changed) {
-            try {
-                val mapper = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
-                val json = mapper.writeValueAsString(trusted)
-                if (json.length < 8192) {
-                    val prefs = java.util.prefs.Preferences.userRoot().node("cloudstream_desktop_prefs")
-                    prefs.put("trusted_plugins", json)
-                }
-            } catch (_: Throwable) {}
-        }
-    }
-
-    fun loadAndInit(jarFile: File, fallbackPluginClassName: String? = null, forceBypassSecurity: Boolean = false): BasePlugin {
-        val pluginInstance = loadJar(jarFile, fallbackPluginClassName, forceBypassSecurity)
+    fun loadAndInit(
+        jarFile: File,
+        fallbackPluginClassName: String? = null,
+        @Suppress("UNUSED_PARAMETER") forceBypassSecurity: Boolean = false,
+    ): BasePlugin {
+        val pluginInstance = loadJar(jarFile, fallbackPluginClassName)
         initializePlugin(pluginInstance)
-        if (forceBypassSecurity) addTrusted(jarFile)
+        onPluginLoaded?.invoke(jarFile)
         return pluginInstance
     }
 
     fun initializePlugin(pluginInstance: BasePlugin) {
+        if (pluginInstance is IsolatedPluginHandle) return
         if (pluginInstance is Plugin) {
             pluginInstance.load(DesktopContextProvider.context)
         } else {
@@ -587,6 +609,7 @@ object ExtensionLoader {
     }
 
     fun unloadPlugin(absolutePath: String) {
+        runCatching { onPluginUnloaded?.invoke(absolutePath) }
         val normPath = File(absolutePath).absolutePath
         val canonicalPath = try {
             File(absolutePath).canonicalPath
@@ -595,7 +618,7 @@ object ExtensionLoader {
         }
         val plugin = plugins[normPath] ?: plugins[absolutePath] ?: plugins[canonicalPath]
 
-        if (plugin != null) {
+        if (plugin != null && plugin !is IsolatedPluginHandle) {
             try {
                 plugin.beforeUnload()
             } catch (t: Throwable) {
@@ -648,7 +671,10 @@ object ExtensionLoader {
         }
 
         // Remove from tracked plugins across all possible path keys
-        pathsToRemove.forEach { plugins.remove(it) }
+        pathsToRemove.forEach {
+            plugins.remove(it)
+            internalNamesByPluginPath.remove(it)
+        }
     }
 
     fun unloadAllPlugins() {
@@ -677,6 +703,14 @@ object ExtensionLoader {
 
     fun getPlugin(absolutePath: String): BasePlugin? = plugins[absolutePath]
 
+    /** Resolves the manifest identity used to scope settings and other plugin-owned host state. */
+    @JvmStatic
+    fun getPluginInternalName(absolutePath: String): String? {
+        internalNamesByPluginPath[absolutePath]?.let { return it }
+        val normalized = runCatching { File(absolutePath).canonicalPath }.getOrElse { File(absolutePath).absolutePath }
+        return internalNamesByPluginPath[normalized]
+    }
+
     /**
      * Loads any extension jars on disk that are not already in memory (e.g. after sync/install).
      */
@@ -685,8 +719,7 @@ object ExtensionLoader {
 
         var loaded = 0
         extensionsDir.walkTopDown()
-            .filter { it.isFile && (it.extension == "jar" || it.extension == "cs3") }
-            .filter { !it.name.endsWith("-jvm.jar") }
+            .filter(PluginArchiveFilter::isLoadablePluginArchive)
             .sortedBy { it.lastModified() }
             .forEach { jar ->
                 if (!isPluginLoaded(jar.absolutePath)) {
@@ -851,7 +884,8 @@ object ExtensionLoader {
                 val clazz = Class.forName(className, true, classLoader)
                 for (field in clazz.declaredFields) {
                     if (java.lang.reflect.Modifier.isStatic(field.modifiers) &&
-                        com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)) {
+                        com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)
+                    ) {
                         field.isAccessible = true
                         val req = field.get(null)
                         syncRequests(req, "static field ${clazz.name}.${field.name}")
@@ -870,7 +904,8 @@ object ExtensionLoader {
                     while (currentClass != null && currentClass != Any::class.java) {
                         for (field in currentClass.declaredFields) {
                             if (!java.lang.reflect.Modifier.isStatic(field.modifiers) &&
-                                com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)) {
+                                com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)
+                            ) {
                                 field.isAccessible = true
                                 val req = field.get(provider)
                                 syncRequests(req, "provider field ${provider.name}.${field.name}")
@@ -890,7 +925,8 @@ object ExtensionLoader {
                     while (currentClass != null && currentClass != Any::class.java) {
                         for (field in currentClass.declaredFields) {
                             if (!java.lang.reflect.Modifier.isStatic(field.modifiers) &&
-                                com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)) {
+                                com.lagradost.nicehttp.Requests::class.java.isAssignableFrom(field.type)
+                            ) {
                                 field.isAccessible = true
                                 val req = field.get(extractor)
                                 syncRequests(req, "extractor field ${extractor.name}.${field.name}")
@@ -914,6 +950,9 @@ object ExtensionLoader {
         }
     }
 }
+
+/** Marker for inert host handles whose real plugin instance lives in a supervised worker. */
+interface IsolatedPluginHandle
 
 abstract class VerifiedRepoMixIn {
     @com.fasterxml.jackson.annotation.JsonCreator

@@ -1,21 +1,21 @@
 package com.lagradost.cloudstream3.syncproviders
 
-import com.lagradost.cloudstream3.LoadResponse
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import com.lagradost.common.logging.AppLogger
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.syncproviders.providers.AniListApi
 import com.lagradost.cloudstream3.syncproviders.providers.MalApi
 import com.lagradost.cloudstream3.syncproviders.providers.OpenSubtitlesStremioApi
 import com.lagradost.cloudstream3.syncproviders.providers.SimklApi
-import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.syncproviders.providers.SubDlApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AccountManager {
@@ -80,8 +80,10 @@ class AccountManager {
             if (legacy.isEmpty()) return legacy
             try {
                 val json = credentialMapper.writeValueAsString(legacy)
-                com.lagradost.common.storage.DesktopDataStore.setKey(protectedStorageKey(prefix), TrackerTokenVault.protect(json))
-                com.lagradost.common.storage.DesktopDataStore.removeKey(legacyKey)
+                com.lagradost.common.storage.DesktopDataStore.setKeys(
+                    mapOf(protectedStorageKey(prefix) to TrackerTokenVault.protect(json)),
+                    setOf(legacyKey),
+                )
                 return legacy
             } catch (_: Exception) {
                 AppLogger.e("Could not protect legacy $prefix credentials; leaving the saved account untouched.")
@@ -89,19 +91,18 @@ class AccountManager {
             }
         }
 
-        fun updateAccounts(prefix: String, array: Array<AuthData>) {
+        fun updateAccounts(prefix: String, array: Array<AuthData>, expectedProfileId: Int = ProfileManager.activeProfileId) = synchronized(ProfileManager) {
+            check(ProfileManager.activeProfileId == expectedProfileId) { "Profile changed while the account operation was running" }
             require(prefix != "NONE")
             if (prefix in protectedTrackerPrefixes) {
                 val secureKey = protectedStorageKey(prefix)
                 val legacyKey = storageKey(prefix)
                 if (array.isEmpty()) {
-                    com.lagradost.common.storage.DesktopDataStore.removeKey(secureKey)
-                    com.lagradost.common.storage.DesktopDataStore.removeKey(legacyKey)
+                    com.lagradost.common.storage.DesktopDataStore.setKeys(emptyMap(), setOf(secureKey, legacyKey))
                 } else {
                     val json = credentialMapper.writeValueAsString(array)
                     val protected = TrackerTokenVault.protect(json)
-                    com.lagradost.common.storage.DesktopDataStore.setKey(secureKey, protected)
-                    com.lagradost.common.storage.DesktopDataStore.removeKey(legacyKey)
+                    com.lagradost.common.storage.DesktopDataStore.setKeys(mapOf(secureKey to protected), setOf(legacyKey))
                 }
             } else {
                 com.lagradost.common.storage.DesktopDataStore.setKey(storageKey(prefix), array)

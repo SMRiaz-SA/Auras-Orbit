@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,7 +27,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +47,7 @@ data class Profile(
     @JsonProperty("avatarColorIndex") val avatarColorIndex: Int = 0,
     @JsonProperty("customAvatarPath") val customAvatarPath: String? = null,
     @JsonProperty("pinCode") val pinCode: String? = null,
+    @JsonProperty("pinLength") val pinLength: Int? = null,
     @JsonProperty("isKids") val isKids: Boolean = false,
     @JsonProperty("createdTimestamp") val createdTimestamp: Long = System.currentTimeMillis(),
 ) {
@@ -85,13 +86,15 @@ fun SkiaAnimatedGif(
                         .url(source)
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                         .build()
-                    val resp = avatarHttpClient.newCall(req).execute()
-                    val b = resp.body.bytes()
-                    resp.close()
-                    b
+                    avatarHttpClient.newCall(req).execute().use { resp ->
+                        check(resp.isSuccessful && resp.body.contentLength() <= 8 * 1024 * 1024L)
+                        resp.body.byteStream().readNBytes(8 * 1024 * 1024 + 1).also {
+                            check(it.size <= 8 * 1024 * 1024) { "Avatar is too large" }
+                        }
+                    }
                 } else {
                     val f = File(source)
-                    if (f.exists()) f.readBytes() else null
+                    if (f.isFile && f.length() <= 8 * 1024 * 1024L) f.readBytes() else null
                 }
                 rawBytes = bytes
             } catch (_: Exception) {
@@ -102,24 +105,26 @@ fun SkiaAnimatedGif(
 
     val bytes = rawBytes
     if (bytes == null) {
-        AsyncImage(
-            model = source,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.High,
-            modifier = modifier,
-        )
+        Box(modifier = modifier)
         return
     }
 
     val codec = remember(bytes) {
         try {
-            Codec.makeFromData(Data.makeFromBytes(bytes))
+            Data.makeFromBytes(bytes).use { data ->
+                Codec.makeFromData(data).also { codec ->
+                    if (codec.imageInfo.width.toLong() * codec.imageInfo.height > 4_000_000 || codec.frameCount > 1_000) {
+                        codec.close()
+                        error("Avatar dimensions or animation exceed limits")
+                    }
+                }
+            }
         } catch (_: Exception) {
             null
         }
     }
 
+    DisposableEffect(codec) { onDispose { codec?.close() } }
     if (codec == null || codec.frameCount <= 1) {
         val staticBitmap = remember(bytes) {
             try {
@@ -145,13 +150,7 @@ fun SkiaAnimatedGif(
                 modifier = modifier,
             )
         } else {
-            AsyncImage(
-                model = source,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                filterQuality = FilterQuality.High,
-                modifier = modifier,
-            )
+            Box(modifier = modifier)
         }
         return
     }
@@ -161,7 +160,11 @@ fun SkiaAnimatedGif(
 
     LaunchedEffect(codec) {
         while (isActive) {
-            val frameInfo = try { codec.framesInfo[frameIndex] } catch (_: Exception) { null }
+            val frameInfo = try {
+                codec.framesInfo[frameIndex]
+            } catch (_: Exception) {
+                null
+            }
             val duration = (frameInfo?.duration?.coerceAtLeast(20) ?: 100).toLong()
             delay(duration)
             frameIndex = (frameIndex + 1) % frameCount
@@ -188,13 +191,7 @@ fun SkiaAnimatedGif(
             modifier = modifier,
         )
     } else {
-        AsyncImage(
-            model = source,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.High,
-            modifier = modifier,
-        )
+        Box(modifier = modifier)
     }
 }
 

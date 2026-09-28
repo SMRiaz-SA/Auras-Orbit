@@ -154,6 +154,7 @@ class LibraryViewModel(
     }
 
     private fun selectReLinkMatch(bookmark: DesktopBookmark, newProvider: MainAPI, match: SearchResponse) {
+        val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val updated = bookmark.copy(
@@ -162,7 +163,7 @@ class LibraryViewModel(
                     name = match.name,
                     posterUrl = match.posterUrl ?: bookmark.posterUrl,
                 )
-                toggleBookmark.saveBookmark(updated)
+                toggleBookmark.saveBookmark(updated, profileId)
                 updateState {
                     copy(
                         orphanRecoveryBookmark = null,
@@ -177,8 +178,9 @@ class LibraryViewModel(
     }
 
     private fun changeWatchType(bookmarkId: String, newType: DesktopWatchType) {
+        val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
         viewModelScope.launch(Dispatchers.IO) {
-            setItemCategory.await(bookmarkId, newType.id)
+            setItemCategory.await(bookmarkId, newType.id, profileId)
         }
     }
 
@@ -199,8 +201,9 @@ class LibraryViewModel(
     }
 
     private fun deleteBookmark(bookmarkId: String) {
+        val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
         viewModelScope.launch(Dispatchers.IO) {
-            removeBookmark.await(bookmarkId)
+            removeBookmark.await(bookmarkId, profileId)
         }
     }
 

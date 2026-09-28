@@ -1,8 +1,8 @@
 package com.lagradost.cloudstream3.desktop.ui.screens
 
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
 
 data class CategoryGridContent(
     val items: List<SearchResponse>,

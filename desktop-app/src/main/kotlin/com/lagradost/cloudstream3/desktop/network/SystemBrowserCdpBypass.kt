@@ -5,8 +5,6 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.*
 import java.io.File
 import java.net.URI
@@ -24,12 +22,15 @@ object SystemBrowserCdpBypass {
     private val cdpScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Volatile private var isBrowserOpen = false
+
     @Volatile private var currentActiveHost: String? = null
+
     @Volatile private var lastUserDismissalTimestamp: Long = 0L
+
     @Volatile private var lastWindowCloseTimestamp: Long = 0L
 
     private const val USER_DISMISSAL_COOLDOWN_MS = 60_000L // 60 seconds suppression on user close
-    private const val INTER_WINDOW_COOLDOWN_MS = 10_000L   // 10 seconds minimum between any windows
+    private const val INTER_WINDOW_COOLDOWN_MS = 10_000L // 10 seconds minimum between any windows
 
     // In-flight manual clearance single-flight deduplicator: gateKey -> CompletableDeferred<Boolean>
     private val inFlightClearances = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
@@ -91,6 +92,7 @@ object SystemBrowserCdpBypass {
 
     // Active proxy sessions keyed by domain
     private val activeSessions = ConcurrentHashMap<String, ProxySession>()
+
     @Volatile private var pendingSession: ProxySession? = null
     private const val PROXY_IDLE_TIMEOUT_MS = 300_000L // 5 minutes idle timeout
 
@@ -109,8 +111,10 @@ object SystemBrowserCdpBypass {
         // 2. Direct match on settled domain (where the browser landed after any Turnstile redirects)
         val settledMatch = activeSessions.values.firstOrNull { session ->
             session.webSocket != null && session.process.isAlive &&
-                (cleanHost.equals(session.domain, ignoreCase = true) ||
-                 cleanHost.equals(session.settledDomain, ignoreCase = true))
+                (
+                    cleanHost.equals(session.domain, ignoreCase = true) ||
+                        cleanHost.equals(session.settledDomain, ignoreCase = true)
+                    )
         }
         if (settledMatch != null) return settledMatch
 
@@ -162,7 +166,11 @@ object SystemBrowserCdpBypass {
             return false
         }
 
-        val uri = try { URI(targetUrl) } catch (_: Exception) { null }
+        val uri = try {
+            URI(targetUrl)
+        } catch (_: Exception) {
+            null
+        }
         val host = (hostName?.ifBlank { null } ?: uri?.host ?: "").lowercase().trim()
 
         if (force) {
@@ -317,7 +325,11 @@ object SystemBrowserCdpBypass {
                 CloudflareKiller.saveClearance(host, userAgent = result.userAgent, okCookies = result.cookies)
                 session.userAgent = result.userAgent
 
-                val settledHost = try { URI(result.settledUrl).host } catch (_: Exception) { null }?.lowercase()?.trim()
+                val settledHost = try {
+                    URI(result.settledUrl).host
+                } catch (_: Exception) {
+                    null
+                }?.lowercase()?.trim()
                 session.settledDomain = settledHost
                 session.settledUrl = result.settledUrl
                 if (!settledHost.isNullOrBlank() && settledHost != host) {
@@ -635,7 +647,7 @@ object SystemBrowserCdpBypass {
                                     settledUrl = capturedSettledUrl,
                                     settledHtml = html,
                                     webSocket = session.webSocket,
-                                )
+                                ),
                             )
                         }
                     }
@@ -780,70 +792,73 @@ object SystemBrowserCdpBypass {
         AppLogger.i("$TAG: Activating fetch proxy for $domain via CDP at $finalWsUrl")
 
         val wsReq = Request.Builder().url(finalWsUrl).build()
-        session.webSocket = client.newWebSocket(wsReq, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send("""{"id": 1, "method": "Network.enable"}""")
-                webSocket.send("""{"id": 2, "method": "Browser.getWindowForTarget"}""")
-                webSocket.send("""{"id": 99999, "method": "Page.setBypassCSP", "params": {"enabled": true}}""")
-                AppLogger.i("$TAG: Proxy WebSocket connected for $domain.")
-            }
-
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                try {
-                    val tree = mapper.readTree(text)
-                    if (tree.get("method")?.asText() == "Inspector.targetCrashed") {
-                        AppLogger.e("$TAG: Proxy browser tab crashed!")
-                        session.pendingFetches.values.forEach { it.complete(null) }
-                        session.pendingFetches.clear()
-                        return
-                    }
-                    val msgId = tree.get("id")?.asInt() ?: return
-
-                    // Minimize the browser window once we have the window ID
-                    if (msgId == 2 && tree.has("result")) {
-                        val windowId = tree.get("result")?.get("windowId")?.asInt()
-                        if (windowId != null) {
-                            webSocket.send("""{"id": 3, "method": "Browser.setWindowBounds", "params": {"windowId": $windowId, "bounds": {"windowState": "minimized"}}}""")
-                        }
-                        return
-                    }
-
-                    // Dispatch fetch responses to waiting callers
-                    val deferred = session.pendingFetches[msgId]
-                    if (deferred != null) {
-                        val result = tree.get("result")
-                        if (result != null && result.has("result")) {
-                            deferred.complete(result.get("result").get("value")?.asText())
-                        } else if (result != null && result.has("exceptionDetails")) {
-                            val errorMsg = result.get("exceptionDetails")?.get("exception")?.get("description")?.asText() ?: "Unknown CDP error"
-                            AppLogger.e("$TAG: Fetch proxy JS error: $errorMsg")
-                            deferred.complete(null)
-                        } else {
-                            deferred.complete(null)
-                        }
-                        session.pendingFetches.remove(msgId)
-                    }
-                } catch (e: Exception) {
-                    AppLogger.e("$TAG: Error parsing proxy CDP message: ${e.message}")
+        session.webSocket = client.newWebSocket(
+            wsReq,
+            object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    webSocket.send("""{"id": 1, "method": "Network.enable"}""")
+                    webSocket.send("""{"id": 2, "method": "Browser.getWindowForTarget"}""")
+                    webSocket.send("""{"id": 99999, "method": "Page.setBypassCSP", "params": {"enabled": true}}""")
+                    AppLogger.i("$TAG: Proxy WebSocket connected for $domain.")
                 }
-            }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                AppLogger.e("$TAG: Proxy WebSocket failed for $domain: ${t.message}")
-                session.webSocket = null
-                session.pendingFetches.values.forEach { it.complete(null) }
-                session.pendingFetches.clear()
-                activeSessions.remove(domain)
-            }
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    try {
+                        val tree = mapper.readTree(text)
+                        if (tree.get("method")?.asText() == "Inspector.targetCrashed") {
+                            AppLogger.e("$TAG: Proxy browser tab crashed!")
+                            session.pendingFetches.values.forEach { it.complete(null) }
+                            session.pendingFetches.clear()
+                            return
+                        }
+                        val msgId = tree.get("id")?.asInt() ?: return
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                AppLogger.i("$TAG: Proxy WebSocket closed for $domain ($code: $reason)")
-                session.webSocket = null
-                session.pendingFetches.values.forEach { it.complete(null) }
-                session.pendingFetches.clear()
-                activeSessions.remove(domain)
-            }
-        })
+                        // Minimize the browser window once we have the window ID
+                        if (msgId == 2 && tree.has("result")) {
+                            val windowId = tree.get("result")?.get("windowId")?.asInt()
+                            if (windowId != null) {
+                                webSocket.send("""{"id": 3, "method": "Browser.setWindowBounds", "params": {"windowId": $windowId, "bounds": {"windowState": "minimized"}}}""")
+                            }
+                            return
+                        }
+
+                        // Dispatch fetch responses to waiting callers
+                        val deferred = session.pendingFetches[msgId]
+                        if (deferred != null) {
+                            val result = tree.get("result")
+                            if (result != null && result.has("result")) {
+                                deferred.complete(result.get("result").get("value")?.asText())
+                            } else if (result != null && result.has("exceptionDetails")) {
+                                val errorMsg = result.get("exceptionDetails")?.get("exception")?.get("description")?.asText() ?: "Unknown CDP error"
+                                AppLogger.e("$TAG: Fetch proxy JS error: $errorMsg")
+                                deferred.complete(null)
+                            } else {
+                                deferred.complete(null)
+                            }
+                            session.pendingFetches.remove(msgId)
+                        }
+                    } catch (e: Exception) {
+                        AppLogger.e("$TAG: Error parsing proxy CDP message: ${e.message}")
+                    }
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    AppLogger.e("$TAG: Proxy WebSocket failed for $domain: ${t.message}")
+                    session.webSocket = null
+                    session.pendingFetches.values.forEach { it.complete(null) }
+                    session.pendingFetches.clear()
+                    activeSessions.remove(domain)
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    AppLogger.i("$TAG: Proxy WebSocket closed for $domain ($code: $reason)")
+                    session.webSocket = null
+                    session.pendingFetches.values.forEach { it.complete(null) }
+                    session.pendingFetches.clear()
+                    activeSessions.remove(domain)
+                }
+            },
+        )
 
         session.lastActivity = System.currentTimeMillis()
         activeSessions[domain] = session
@@ -881,7 +896,11 @@ object SystemBrowserCdpBypass {
         body: String? = null,
         isBinary: Boolean = false,
     ): CdpFetchResult? {
-        val uri = try { URI(url) } catch (_: Exception) { null } ?: return null
+        val uri = try {
+            URI(url)
+        } catch (_: Exception) {
+            null
+        } ?: return null
         val host = uri.host ?: return null
         val session = getSessionForHost(host) ?: return null
         if (!session.process.isAlive) {
@@ -902,7 +921,7 @@ object SystemBrowserCdpBypass {
             "user-agent", "cookie", "host", "content-length", "transfer-encoding",
             "connection", "accept-encoding", "referer", "origin",
             "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
-            "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest"
+            "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest",
         )
         val filteredHeaders = headers.filterKeys {
             it.lowercase() !in forbiddenHeaders
@@ -916,12 +935,14 @@ object SystemBrowserCdpBypass {
             AppLogger.d("$TAG: Rewrote fetch URL origin from $host to settled domain $settledHost: $targetFetchUrl")
         }
 
-        val requestPayload = mapper.writeValueAsString(mapOf(
-            "url" to targetFetchUrl,
-            "method" to method,
-            "headers" to filteredHeaders,
-            "body" to body,
-        ))
+        val requestPayload = mapper.writeValueAsString(
+            mapOf(
+                "url" to targetFetchUrl,
+                "method" to method,
+                "headers" to filteredHeaders,
+                "body" to body,
+            ),
+        )
         val b64 = java.util.Base64.getEncoder().encodeToString(requestPayload.toByteArray())
 
         val expression = if (isBinary) {
@@ -930,15 +951,17 @@ object SystemBrowserCdpBypass {
             """(async()=>{try{const req=JSON.parse(atob("$b64"));const opts={method:req.method,headers:req.headers||{},credentials:"include"};if(req.body)opts.body=req.body;const r=await fetch(req.url,opts);const t=await r.text();return JSON.stringify({s:r.status,ct:r.headers.get("content-type")||"",b:t})}catch(e){return JSON.stringify({s:0,ct:"",b:(e&&e.stack)?e.stack:""+e})}})()"""
         }
 
-        val command = mapper.writeValueAsString(mapOf(
-            "id" to msgId,
-            "method" to "Runtime.evaluate",
-            "params" to mapOf(
-                "expression" to expression,
-                "awaitPromise" to true,
-                "returnByValue" to true,
+        val command = mapper.writeValueAsString(
+            mapOf(
+                "id" to msgId,
+                "method" to "Runtime.evaluate",
+                "params" to mapOf(
+                    "expression" to expression,
+                    "awaitPromise" to true,
+                    "returnByValue" to true,
+                ),
             ),
-        ))
+        )
 
         ws.send(command)
 
@@ -989,15 +1012,17 @@ object SystemBrowserCdpBypass {
         val msgId = session.messageId.incrementAndGet()
         val deferred = CompletableDeferred<String?>()
         session.pendingFetches[msgId] = deferred
-        val command = mapper.writeValueAsString(mapOf(
-            "id" to msgId,
-            "method" to "Runtime.evaluate",
-            "params" to mapOf(
-                "expression" to expression,
-                "awaitPromise" to true,
-                "returnByValue" to true,
+        val command = mapper.writeValueAsString(
+            mapOf(
+                "id" to msgId,
+                "method" to "Runtime.evaluate",
+                "params" to mapOf(
+                    "expression" to expression,
+                    "awaitPromise" to true,
+                    "returnByValue" to true,
+                ),
             ),
-        ))
+        )
         ws.send(command)
         return try {
             withTimeout(timeoutMs) { deferred.await() }

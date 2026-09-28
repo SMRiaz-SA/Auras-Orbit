@@ -129,7 +129,7 @@ class GenreBrowseViewModel(
                         url = event.result.pluginLoadUrl,
                         title = event.result.title,
                         posterUrl = event.result.posterUrl,
-                    )
+                    ),
                 )
             }
         }
@@ -187,7 +187,9 @@ class GenreBrowseViewModel(
                 withContext(Dispatchers.Main.immediate) {
                     if (uiState.value.mediaType != mediaType ||
                         uiState.value.selectedProvider?.let(::providerKey) != providerKeyAtRequest
-                    ) return@withContext
+                    ) {
+                        return@withContext
+                    }
                     updateState { copy(genres = genres, isLoadingGenres = false, error = null) }
                     loadPage(1)
                 }
@@ -198,7 +200,9 @@ class GenreBrowseViewModel(
                 withContext(Dispatchers.Main.immediate) {
                     if (uiState.value.mediaType != mediaType ||
                         uiState.value.selectedProvider?.let(::providerKey) != providerKeyAtRequest
-                    ) return@withContext
+                    ) {
+                        return@withContext
+                    }
                     updateState { copy(isLoadingGenres = false, isLoadingResults = false, error = "Could not load genres from TMDB.") }
                 }
             }
@@ -238,12 +242,17 @@ class GenreBrowseViewModel(
                         uiState.value.selectedGenre?.id != genreIdAtRequest ||
                         uiState.value.selectedTopic != topicAtRequest ||
                         uiState.value.sort != sortAtRequest
-                    ) return@withContext
+                    ) {
+                        return@withContext
+                    }
 
                     updateState {
                         copy(
-                            results = if (page == 1) resultPage.results
-                            else (results + resultPage.results).distinctBy { "${it.mediaType.tmdbPath}:${it.id}" },
+                            results = if (page == 1) {
+                                resultPage.results
+                            } else {
+                                (results + resultPage.results).distinctBy { "${it.mediaType.tmdbPath}:${it.id}" }
+                            },
                             page = resultPage.page,
                             totalPages = resultPage.totalPages,
                             isLoadingResults = false,
@@ -262,7 +271,9 @@ class GenreBrowseViewModel(
                         uiState.value.selectedGenre?.id != genreIdAtRequest ||
                         uiState.value.selectedTopic != topicAtRequest ||
                         uiState.value.sort != sortAtRequest
-                    ) return@withContext
+                    ) {
+                        return@withContext
+                    }
                     val message = e.message?.takeIf { it.startsWith("No TMDB keywords are available") }
                         ?: "Could not load titles from TMDB. Check your connection and try again."
                     updateState {

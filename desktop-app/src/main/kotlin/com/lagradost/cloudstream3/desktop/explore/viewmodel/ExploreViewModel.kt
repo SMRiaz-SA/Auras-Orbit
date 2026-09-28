@@ -14,8 +14,6 @@ import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.base.UiEffect
 import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
-import com.lagradost.cloudstream3.desktop.ui.screens.home.isRealProvider
-import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.*
@@ -101,7 +99,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<ExploreItem>>?): Boolean {
                 return size > MAX_CACHE_ENTRIES
             }
-        }
+        },
     )
 
     init {
@@ -135,7 +133,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 providerName = match.providerName,
                 url = match.searchResponse.url,
                 title = match.displayTitle,
-            )
+            ),
         )
     }
 
@@ -260,7 +258,9 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     internal fun applyFilters(items: List<ExploreItem>, query: String, year: String): List<ExploreItem> {
         val q = query.trim().lowercase(Locale.US)
         return items.filter { item ->
-            val matchesQuery = if (q.isBlank()) true else {
+            val matchesQuery = if (q.isBlank()) {
+                true
+            } else {
                 item.name.lowercase(Locale.US).contains(q) ||
                     item.genres.any { it.lowercase(Locale.US).contains(q) } ||
                     item.releaseYear?.contains(q) == true
@@ -397,11 +397,11 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     internal fun isTitleRelevant(targetTitle: String, candidateTitle: String): Boolean {
         val targetNorm = NON_ALPHANUMERIC_REGEX.replace(
             CardTitleSanitizer.sanitize(targetTitle).displayTitle.lowercase(Locale.US),
-            " "
+            " ",
         ).trim()
         val candidateNorm = NON_ALPHANUMERIC_REGEX.replace(
             CardTitleSanitizer.sanitize(candidateTitle).displayTitle.lowercase(Locale.US),
-            " "
+            " ",
         ).trim()
 
         if (targetNorm.isBlank() || candidateNorm.isBlank()) return false
@@ -487,7 +487,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                                                     qualityText = meta.qualityText,
                                                     hasSub = meta.hasSub,
                                                     hasDub = meta.hasDub,
-                                                )
+                                                ),
                                             )
                                         }
                                     }

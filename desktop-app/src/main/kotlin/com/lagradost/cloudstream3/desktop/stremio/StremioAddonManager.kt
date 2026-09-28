@@ -4,12 +4,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.subtitles.LanguageNormalizer
 import com.lagradost.cloudstream3.desktop.utils.appScope
-import com.lagradost.common.logging.AppLogger
-import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -263,7 +263,9 @@ object StremioAddonManager {
                                     item.name.trim()
                                 } else if (titleText.isNotBlank()) {
                                     titleText.lines().firstOrNull()?.trim()
-                                } else null
+                                } else {
+                                    null
+                                }
 
                                 if (!itemDesc.isNullOrBlank()) {
                                     append(" - $itemDesc")

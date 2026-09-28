@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import kotlinx.coroutines.isActive
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,12 +38,12 @@ import coil3.request.crossfade
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.DesktopDimens
-import com.lagradost.cloudstream3.desktop.ui.components.DesktopUi
 import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.fixUrlNull
 import com.lagradost.common.storage.DesktopBookmark
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun HomeHeroCarousel(

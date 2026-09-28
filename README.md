@@ -4,9 +4,10 @@ Auras Orbit is a portable Windows desktop media client for CloudStream-compatibl
 
 Orbit does not host or distribute media streams or catalogs. You choose which extension repositories and sources to use, and availability depends on those providers.
 
-**Portable desktop line:** `0.2.0.00`<br>
+**Current source version:** `0.2.0.00`<br>
+**Development status:** Pre-alpha<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
-**Release format:** extract-and-run portable folder; no installer is required
+**Downloads:** Published builds are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
 ## Navigate this guide
 
@@ -34,6 +35,8 @@ These screenshots were captured from the running desktop application using a cle
 
 ## Quick start
 
+Download the portable ZIP or Windows installer from the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases) when a build is published. The `main` branch contains source code, not a ready-to-run application package.
+
 1. Extract the portable ZIP to a folder you control.
 2. Keep `Auras-Orbit.exe`, the `app` folder, and the `runtime` folder together.
 3. Start `Auras-Orbit.exe`.
@@ -55,24 +58,23 @@ MAL, AniList, and Simkl are optional integrations. Connect an account from **Set
 
 Provider APIs can reject or ambiguously report a change. A rejected or uncertain provider response is shown as such; it is not treated as a successful write.
 
-See [tracker integration notes](TRACKER_INTEGRATIONS.md) for the supported fields and provider-specific behavior.
-
 ## Privacy
 
 Orbit keeps profiles, local history, bookmarks, settings, extension data, and tracker credentials in local application data. Do not copy those folders into a bug report or source archive. The project's portable packaging checks intentionally exclude profile databases, account identities, watchlist titles, credentials, tokens, and other private app data.
 
 ## Build from source
 
-Source builds require Git with submodules and JDK 21. The Windows distributable also needs the pinned MPV development package, which is downloaded and hash-verified by the repository script; the runtime binary is not stored in Git.
+Source builds require Git with submodules, JDK 21, PowerShell 7, and an internet connection to retrieve the hash-pinned native build tools and MPV development package. The MPV runtime binary is downloaded and verified for packaging; it is not stored in Git.
 
 ```powershell
 git clone --recursive https://github.com/SMRiaz-SA/Auras-Orbit.git
 cd Auras-Orbit
-pwsh -File .\.github\scripts\fetch-mpv.ps1
-.\gradlew.bat clean test :desktop-app:createDistributable --no-daemon
+pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ```
 
-The portable directory is written to `desktop-app/build/compose/binaries/main/app/Auras-Orbit/`. It includes the project, CloudStream upstream, WebView2 SDK, and MPV license/provenance notices in `legal/`.
+The script runs formatting checks, compilation, tests, native tests, and distribution verification on your computer. It creates one versioned portable ZIP and one source ZIP under `desktop-app/build/outputs/`. The portable application tree is written to `desktop-app/build/compose/binaries/main/app/Auras-Orbit/` and includes the WebView2 SDK and required license/provenance notices under `legal/`.
+
+The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with `-PuseMavenLocal=true`. Set `APP_VERSION` in `gradle.properties` to change the app version; installer version metadata is generated under `desktop-app/build/generated/installer/`.
 
 ## License and support
 

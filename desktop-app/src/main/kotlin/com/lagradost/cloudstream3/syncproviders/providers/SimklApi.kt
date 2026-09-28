@@ -419,8 +419,11 @@ class SimklApi : SyncAPI() {
             currentActivities == cached.activities -> cached.items
             else -> {
                 val since = cached.activities.all
-                val changes = if (since.isNullOrBlank()) fetchAllItems(account.token)
-                else fetchAllItems(account.token, dateFrom = since)
+                val changes = if (since.isNullOrBlank()) {
+                    fetchAllItems(account.token)
+                } else {
+                    fetchAllItems(account.token, dateFrom = since)
+                }
                 changes ?: return null
                 var merged = mergeItems(cached.items, changes)
                 if (haveRemovalsChanged(cached.activities, currentActivities)) {

@@ -13,12 +13,10 @@ import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Orchestrator that coordinates metadata resolution, progressive enrichment,
@@ -132,8 +130,8 @@ object MetadataPipeline {
             }
 
             // Ground-Truth Type Disambiguation: If loaded has multiple episodes, series response, or season/series tokens, enforce TvSeries
-            val hasSeriesPattern = Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|complete|all-episodes|web-series|tv-series)\b""").containsMatchIn(loaded.name)
-                || Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|all-episodes|web-series|tv-series)\b""").containsMatchIn(urlClean)
+            val hasSeriesPattern = Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|complete|all-episodes|web-series|tv-series)\b""").containsMatchIn(loaded.name) ||
+                Regex("""(?i)\b(?:season|series|s\d{1,2}|episodes?|all-episodes|web-series|tv-series)\b""").containsMatchIn(urlClean)
             val isMovie = loaded.type == com.lagradost.cloudstream3.TvType.Movie || loaded.type == com.lagradost.cloudstream3.TvType.AnimeMovie
             if (isMovie && (loaded is com.lagradost.cloudstream3.TvSeriesLoadResponse || allEpisodes.size > 1 || titleSeason != null || hasSeriesPattern)) {
                 loaded.type = if (loaded.type == com.lagradost.cloudstream3.TvType.AnimeMovie) com.lagradost.cloudstream3.TvType.Anime else com.lagradost.cloudstream3.TvType.TvSeries
@@ -169,13 +167,19 @@ object MetadataPipeline {
                     {
                         if (isAnime) {
                             val primary = MetadataConfig.animePrimaryProvider.value
-                            if (it.id == primary) 0 else if (it.id == "anilist" || it.id == "kitsu") 1 else 2
+                            if (it.id == primary) {
+                                0
+                            } else if (it.id == "anilist" || it.id == "kitsu") {
+                                1
+                            } else {
+                                2
+                            }
                         } else {
                             if (it.id == "cinemeta") 0 else 1
                         }
                     },
                     { it.priority },
-                )
+                ),
             )
 
             // 3. Resolve Media Identity (Stage 1 Resolvers with Canonical Identity Caching)
@@ -253,13 +257,19 @@ object MetadataPipeline {
                     {
                         if (isAnime) {
                             val primary = MetadataConfig.animePrimaryProvider.value
-                            if (it.id == primary) 0 else if (it.id == "anilist" || it.id == "kitsu") 1 else 2
+                            if (it.id == primary) {
+                                0
+                            } else if (it.id == "anilist" || it.id == "kitsu") {
+                                1
+                            } else {
+                                2
+                            }
                         } else {
                             if (it.id == "tmdb") 0 else 1
                         }
                     },
                     { it.priority },
-                )
+                ),
             )
 
             // Run enrichers in parallel so total time = max(provider time) instead of sum(provider time)

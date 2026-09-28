@@ -26,6 +26,7 @@ class VlcPlayer : MediaPlayer {
     private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var stdoutJob: Job? = null
     private val currentProcess = AtomicReference<Process?>(null)
+    private val activeProxySessionId = AtomicReference<String?>(null)
 
     private fun killCurrent() {
         currentProcess.getAndSet(null)?.let { proc ->
@@ -34,25 +35,28 @@ class VlcPlayer : MediaPlayer {
                 AppLogger.i("VlcPlayer: Killed previous VLC process.")
             } catch (_: Exception) {}
         }
+        activeProxySessionId.getAndSet(null)?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
         stdoutJob?.cancel()
         _state.update { it.copy(isPlaying = false, isPaused = false, currentUrl = null) }
     }
 
     override suspend fun play(link: ExtractorLink, title: String?, subtitles: List<String>, startPositionMs: Long): Result<Unit> =
         withContext(Dispatchers.IO) {
+            var pendingProxySessionId: String? = null
             try {
                 _state.update { it.copy(isLoading = true, error = null) }
-
-                val validated = PlayerLinkHandler.validate(link, title).getOrElse {
-                    _state.update { state -> state.copy(isLoading = false, error = it.message) }
-                    return@withContext Result.failure(it)
-                }
 
                 val vlcExecutable = findVlcExecutable()
                     ?: run {
                         _state.update { state -> state.copy(isLoading = false, error = "VLC not found") }
                         return@withContext Result.failure(IllegalStateException("VLC not found. Install VLC or use MPV."))
                     }
+
+                val validated = PlayerLinkHandler.validate(link, title).getOrElse {
+                    _state.update { state -> state.copy(isLoading = false, error = it.message) }
+                    return@withContext Result.failure(it)
+                }
+                pendingProxySessionId = validated.proxySessionId
 
                 val startSec = startPositionMs / 1000L
 
@@ -96,6 +100,8 @@ class VlcPlayer : MediaPlayer {
                 AppLogger.i("Launching VLC (${validated.streamKind}): ${validated.displayTitle}")
 
                 killCurrent()
+                activeProxySessionId.set(pendingProxySessionId)
+                pendingProxySessionId = null
 
                 val process = ProcessBuilder(args)
                     .redirectErrorStream(true)
@@ -114,6 +120,11 @@ class VlcPlayer : MediaPlayer {
                         AppLogger.i("VLC process ended: ${e.message}")
                     } finally {
                         if (currentProcess.compareAndSet(process, null)) {
+                            validated.proxySessionId?.let { sessionId ->
+                                if (activeProxySessionId.compareAndSet(sessionId, null)) {
+                                    com.lagradost.player.impl.proxy.LocalStreamProxy.unregisterSession(sessionId)
+                                }
+                            }
                             _state.update { it.copy(isPlaying = false, isFinished = true) }
                         }
                     }
@@ -121,6 +132,8 @@ class VlcPlayer : MediaPlayer {
 
                 Result.success(Unit)
             } catch (e: Exception) {
+                pendingProxySessionId?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
+                activeProxySessionId.getAndSet(null)?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
                 AppLogger.i("VLC launch failed: ${e.message}")
                 _state.update { it.copy(isPlaying = false, error = e.message) }
                 Result.failure(e)

@@ -4,8 +4,6 @@ import com.lagradost.common.net.NetworkTrafficBuffer
 import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.Response
-import okio.Buffer
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 /**
@@ -15,7 +13,14 @@ import java.util.concurrent.TimeUnit
 class DevNetworkInterceptor : Interceptor {
 
     private val SENSITIVE_HEADERS = setOf(
-        "authorization", "cookie", "set-cookie", "x-api-key", "api-key", "token", "x-auth-token", "proxy-authorization",
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "api-key",
+        "token",
+        "x-auth-token",
+        "proxy-authorization",
     )
 
     private fun isSensitiveHeader(name: String): Boolean {
@@ -93,19 +98,14 @@ class DevNetworkInterceptor : Interceptor {
     }
 
     private fun extractRequestBody(request: okhttp3.Request): String? {
-        val body = request.body ?: return null
-        return try {
-            val buffer = Buffer()
-            body.writeTo(buffer)
-            val charset = body.contentType()?.charset(StandardCharsets.UTF_8) ?: StandardCharsets.UTF_8
-            val str = buffer.readString(charset)
-            if (str.length > 50_000) str.take(50_000) + "\n... [truncated]" else str
-        } catch (t: Throwable) {
-            null
-        }
+        // Never replay a request body for diagnostics.
+        return null
     }
 
     private fun extractResponseBody(response: Response, contentType: String?): Pair<String?, Long> {
+        if (!java.lang.Boolean.getBoolean("auras.diagnostics.captureBodies")) {
+            return Pair(null, response.body.contentLength().coerceAtLeast(0))
+        }
         val body = response.body
         val contentLength = body.contentLength()
 

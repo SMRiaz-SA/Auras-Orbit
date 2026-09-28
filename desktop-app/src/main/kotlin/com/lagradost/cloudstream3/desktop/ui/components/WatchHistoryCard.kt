@@ -321,7 +321,13 @@ fun WatchHistoryCard(
                     } else if (history.duration > 0) {
                         val leftSeconds = maxOf(0L, history.duration - history.position)
                         val leftMins = leftSeconds / 60L
-                        if (leftMins >= 60) "${leftMins / 60}h ${leftMins % 60}m left" else if (leftMins > 0) "${leftMins}m left" else "<1m left"
+                        if (leftMins >= 60) {
+                            "${leftMins / 60}h ${leftMins % 60}m left"
+                        } else if (leftMins > 0) {
+                            "${leftMins}m left"
+                        } else {
+                            "<1m left"
+                        }
                     } else {
                         "${(progress * 100).toInt()}%"
                     }
@@ -340,7 +346,9 @@ fun WatchHistoryCard(
                         history.season?.let { "S$it" } ?: "",
                         history.episode?.let { "E$it" } ?: "",
                     ).filter { it.isNotBlank() }.joinToString(" ")
-                } else ""
+                } else {
+                    ""
+                }
                 val epSub = buildString {
                     if (seText.isNotBlank()) append(seText)
                     val epName = history.episodeName
@@ -623,7 +631,13 @@ fun WatchHistoryCardDetailed(
                 } else if (history.duration > 0) {
                     val leftSeconds = maxOf(0L, history.duration - history.position)
                     val leftMins = leftSeconds / 60L
-                    if (leftMins >= 60) "${leftMins / 60}h ${leftMins % 60}m left" else if (leftMins > 0) "${leftMins}m left" else "<1m left"
+                    if (leftMins >= 60) {
+                        "${leftMins / 60}h ${leftMins % 60}m left"
+                    } else if (leftMins > 0) {
+                        "${leftMins}m left"
+                    } else {
+                        "<1m left"
+                    }
                 } else {
                     "${(progress * 100).toInt()}%"
                 }

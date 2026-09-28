@@ -25,8 +25,6 @@ import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.newMovieSearchResponse
-import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.desktop.data.history.WatchHistoryRepositoryImpl
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.GetContinueWatching
 import com.lagradost.cloudstream3.desktop.repo.ActiveProviderRepository
@@ -42,6 +40,8 @@ import com.lagradost.cloudstream3.desktop.ui.theme.ContinueWatchingStyle
 import com.lagradost.cloudstream3.desktop.ui.theme.PosterTitlePosition
 import com.lagradost.cloudstream3.desktop.ui.theme.ProviderBadgeDisplayMode
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
+import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.common.storage.WatchHistory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -324,7 +324,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     provider = activeProvider,
                                     onRemove = {},
                                     onClick = {},
-                                    onPlayClick = {}
+                                    onPlayClick = {},
                                 )
                             }
                             ContinueWatchingStyle.DETAILED -> {
@@ -336,7 +336,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     provider = activeProvider,
                                     onRemove = {},
                                     onClick = {},
-                                    onPlayClick = {}
+                                    onPlayClick = {},
                                 )
                             }
                             ContinueWatchingStyle.THUMBNAIL -> {
@@ -348,7 +348,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     provider = activeProvider,
                                     onRemove = {},
                                     onClick = {},
-                                    onPlayClick = {}
+                                    onPlayClick = {},
                                 )
                             }
                         }
@@ -382,7 +382,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                             provider = activeProvider,
                             itemWidth = optimalItemWidth,
                             onClick = {},
-                            onPlayClick = {}
+                            onPlayClick = {},
                         )
                     }
                 }
@@ -413,7 +413,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                             provider = activeProvider,
                             itemWidth = optimalItemWidth,
                             onClick = {},
-                            onPlayClick = {}
+                            onPlayClick = {},
                         )
                     }
                 }
@@ -445,24 +445,24 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                     shape = RoundedCornerShape(10.dp),
                     color = theme.SurfaceCard.copy(alpha = 0.7f),
                     border = BorderStroke(1.dp, theme.Divider.copy(alpha = 0.5f)),
-                    modifier = Modifier.clickable { onBack() }
+                    modifier = Modifier.clickable { onBack() },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = theme.TextPrimary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Text(
                             "Back to Settings",
                             style = MaterialTheme.typography.labelLarge,
                             color = theme.TextPrimary,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
@@ -502,7 +502,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                         CardMetadataConfig.setAutoDetectSubDub(true)
                         CardMetadataConfig.setAutoDetectQuality(true)
                         CardMetadataConfig.setShowRatingBadges(true)
-                    }
+                    },
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -532,31 +532,40 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = activeControlTab == 0,
-                            onClick = { activeControlTab = 0; isControlsExpanded = true },
+                            onClick = {
+                                activeControlTab = 0
+                                isControlsExpanded = true
+                            },
                             label = { Text("📐 Dimensions & Spacing", fontWeight = FontWeight.Medium) },
                             shape = RoundedCornerShape(10.dp),
                         )
                         FilterChip(
                             selected = activeControlTab == 1,
-                            onClick = { activeControlTab = 1; isControlsExpanded = true },
+                            onClick = {
+                                activeControlTab = 1
+                                isControlsExpanded = true
+                            },
                             label = { Text("✨ Style & Layout", fontWeight = FontWeight.Medium) },
                             shape = RoundedCornerShape(10.dp),
                         )
                         FilterChip(
                             selected = activeControlTab == 2,
-                            onClick = { activeControlTab = 2; isControlsExpanded = true },
+                            onClick = {
+                                activeControlTab = 2
+                                isControlsExpanded = true
+                            },
                             label = { Text("🏷️ Badges & Overlays", fontWeight = FontWeight.Medium) },
                             shape = RoundedCornerShape(10.dp),
                         )
                     }
 
                     TextButton(
-                        onClick = { isControlsExpanded = !isControlsExpanded }
+                        onClick = { isControlsExpanded = !isControlsExpanded },
                     ) {
                         Icon(
                             if (isControlsExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(if (isControlsExpanded) "Hide Studio Bar" else "Show Controls")
@@ -576,7 +585,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text("Poster Width", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = theme.TextPrimary)
-                                            Text("${posterWidthDp} dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text("$posterWidthDp dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
                                         Slider(
                                             value = posterWidthDp.toFloat(),
@@ -589,7 +598,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text("Card Spacing", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = theme.TextPrimary)
-                                            Text("${homeSpacingDp} dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text("$homeSpacingDp dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
                                         Slider(
                                             value = homeSpacingDp.toFloat(),
@@ -607,7 +616,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text("Row Spacing", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = theme.TextPrimary)
-                                            Text("${homeVerticalSpacingDp} dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text("$homeVerticalSpacingDp dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
                                         Slider(
                                             value = homeVerticalSpacingDp.toFloat(),
@@ -620,7 +629,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                             Text("Corner Radius", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = theme.TextPrimary)
-                                            Text("${posterRoundingDp} dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text("$posterRoundingDp dp", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
                                         Slider(
                                             value = posterRoundingDp.toFloat(),
@@ -695,7 +704,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                         }
                                         Switch(
                                             checked = posterHoverGlowEnabled,
-                                            onCheckedChange = { AppearanceConfig.setPosterHoverGlowEnabled(it) }
+                                            onCheckedChange = { AppearanceConfig.setPosterHoverGlowEnabled(it) },
                                         )
                                     }
                                 }
@@ -724,7 +733,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                             }
                                             Switch(
                                                 checked = showRatingBadges,
-                                                onCheckedChange = { CardMetadataConfig.setShowRatingBadges(it) }
+                                                onCheckedChange = { CardMetadataConfig.setShowRatingBadges(it) },
                                             )
                                         }
                                     }
@@ -746,7 +755,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                             }
                                             Switch(
                                                 checked = autoDetectQuality,
-                                                onCheckedChange = { CardMetadataConfig.setAutoDetectQuality(it) }
+                                                onCheckedChange = { CardMetadataConfig.setAutoDetectQuality(it) },
                                             )
                                         }
                                     }
@@ -773,7 +782,7 @@ fun SettingsPosterEditorScreen(onBack: () -> Unit = {}) {
                                             }
                                             Switch(
                                                 checked = autoDetectSubDub,
-                                                onCheckedChange = { CardMetadataConfig.setAutoDetectSubDub(it) }
+                                                onCheckedChange = { CardMetadataConfig.setAutoDetectSubDub(it) },
                                             )
                                         }
                                     }

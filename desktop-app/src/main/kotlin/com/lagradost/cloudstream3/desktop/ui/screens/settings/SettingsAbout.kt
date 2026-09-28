@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -15,7 +12,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lagradost.cloudstream3.desktop.AppConfig
 import com.lagradost.cloudstream3.desktop.utils.appScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,17 +52,17 @@ fun SettingsAbout() {
             }
         }
 
-        SettingsGroupCard(title = "Desktop Source & Development") {
+        SettingsGroupCard(title = "Project Source & Development") {
             SettingsNavigationItem(
-                label = "Desktop Source Code",
+                label = "Auras Orbit Source Code",
                 subtitle = "View repository, report desktop issues, and inspect release builds.",
-                onClick = { openUrl("https://github.com/errorcode26/CS3-desktop-client-unofficial") },
+                onClick = { openUrl("https://github.com/SMRiaz-SA/Auras-Orbit") },
             )
         }
 
-        SettingsGroupCard(title = "Upstream Community & Documentation") {
+        SettingsGroupCard(title = "Upstream Credits & Community") {
             SettingsNavigationItem(
-                label = "Official Android Repository",
+                label = "CloudStream Upstream Source",
                 subtitle = "View upstream CloudStream core source code and releases.",
                 onClick = { openUrl("https://github.com/recloudstream/cloudstream") },
             )

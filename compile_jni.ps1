@@ -19,7 +19,7 @@ if (!(Test-Path (Join-Path $jniInclude "jni.h"))) {
 }
 
 $cppDir = "desktop-app\src\main\cpp"
-$outDir = "desktop-app\appResources\windows\jni"
+$outDir = "desktop-app\build\native\jni"
 $webview2Dir = Join-Path $cppDir "webview2\build\native"
 $webview2Include = Join-Path $webview2Dir "include"
 $webview2Dll = Join-Path $webview2Dir "x64\WebView2Loader.dll"
@@ -42,9 +42,10 @@ $gppArgs = @(
     "-m64",
     "-o", $outFile,
     (Join-Path $cppDir "player_bridge.cpp"),
-    "-I`"$jniInclude`"",
-    "-I`"$jniWin32`"",
-    "-I`"$webview2Include`"",
+    "-I$jniInclude",
+    "-I$jniWin32",
+    "-I$webview2Include",
+    "-std=c++17",
     "-static-libgcc",
     "-static-libstdc++",
     "-Wl,--kill-at",
@@ -54,9 +55,16 @@ $gppArgs = @(
     "-ldwmapi"
 )
 
-$process = Start-Process -FilePath "g++" -ArgumentList $gppArgs -Wait -NoNewWindow -PassThru
-if ($process.ExitCode -ne 0) {
-    Write-Error "g++ compilation failed with exit code $($process.ExitCode)."
+$compiler = & .\.github\scripts\fetch-native-toolchain.ps1
+& $compiler @gppArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "g++ compilation failed with exit code $LASTEXITCODE."
 } else {
+    $manifest = [ordered]@{
+        toolchain = 'w64devkit-2.10.0'
+        sourceSha256 = (Get-FileHash -LiteralPath (Join-Path $cppDir 'player_bridge.cpp') -Algorithm SHA256).Hash
+        binarySha256 = (Get-FileHash -LiteralPath $outFile -Algorithm SHA256).Hash
+    }
+    $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outDir 'native-build.json') -Encoding utf8
     Write-Host "Successfully compiled $outFile"
 }

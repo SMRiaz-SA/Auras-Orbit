@@ -28,7 +28,7 @@ data class LogEntry(
         throwable?.let { t ->
             val sw = StringWriter()
             t.printStackTrace(PrintWriter(sw))
-            sw.toString()
+            LogBuffer.sanitize(sw.toString())
         }
     }
 

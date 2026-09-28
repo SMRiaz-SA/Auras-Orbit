@@ -106,7 +106,9 @@ fun DetailsStatsSection(
         } else {
             "${mins}m"
         }
-    } else null
+    } else {
+        null
+    }
 
     val isTv = data.type == com.lagradost.cloudstream3.TvType.TvSeries ||
         data.type == com.lagradost.cloudstream3.TvType.Anime ||
@@ -370,7 +372,11 @@ private fun ProductionCompanySectionLayout(
             visibleCompanies.forEach { company ->
                 ProductionCompanyCard(
                     company = company,
-                    onClick = if (onCompanyClick != null) { { onCompanyClick(company) } } else null,
+                    onClick = if (onCompanyClick != null) {
+                        { onCompanyClick(company) }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -587,4 +593,3 @@ private fun formatCountry(raw: String): String {
         }
         .joinToString(", ")
 }
-

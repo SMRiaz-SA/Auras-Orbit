@@ -34,7 +34,11 @@ object PlayerLinkHandler {
     }
 
     @kotlin.OptIn(kotlin.uuid.ExperimentalUuidApi::class, com.lagradost.cloudstream3.Prerelease::class)
-    fun validate(link: ExtractorLink, explicitTitle: String? = null): Result<ValidatedLink> {
+    fun validate(
+        link: ExtractorLink,
+        explicitTitle: String? = null,
+        createProxySession: Boolean = true,
+    ): Result<ValidatedLink> {
         try {
             // ExtractorLinkPlayList contains concatenated chunk streams (with empty parent URLs).
             // We write an MPV Edit Decision List (EDL) file locally to play them seamlessly.
@@ -121,10 +125,14 @@ object PlayerLinkHandler {
             val provider = com.lagradost.cloudstream3.APIHolder.getApiFromNameNull(link.source)
             val videoInterceptor = try {
                 provider?.getVideoInterceptor(link)
-            } catch (_: Throwable) { null }
-            val finalSessionId = if (useProxy) {
+            } catch (_: Throwable) {
+                null
+            }
+            val finalSessionId = if (useProxy && createProxySession) {
                 com.lagradost.player.impl.proxy.LocalStreamProxy.registerSession(headers, videoInterceptor)
-            } else null
+            } else {
+                null
+            }
 
             val finalUrl = if (useProxy && finalSessionId != null) {
                 if (link.isM3u8 || link.type == ExtractorLinkType.M3U8 || url.contains(".m3u8")) {

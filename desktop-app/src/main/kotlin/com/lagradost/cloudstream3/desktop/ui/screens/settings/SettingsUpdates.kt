@@ -14,16 +14,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.desktop.AppConfig
-import com.lagradost.cloudstream3.desktop.AppUpdater
-import kotlinx.coroutines.launch
-import java.awt.Desktop
-import java.net.URI
-import java.util.Locale
-
 import com.lagradost.cloudstream3.desktop.player.ytdl.DesktopYtDlpBinary
-import com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager
-import com.lagradost.cloudstream3.desktop.updates.PendingUpdate
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.SettingsUiEvent
+import com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager
+import java.util.Locale
 
 @Composable
 fun SettingsUpdates(viewModel: SettingsViewModel) {

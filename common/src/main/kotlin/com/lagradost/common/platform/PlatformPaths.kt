@@ -39,7 +39,9 @@ object PlatformPaths {
         val userDir = System.getProperty("user.dir")
         if (File(userDir, "portable.txt").exists()) {
             val legacyPortableDir = File(userDir, "CloudStreamData")
-            val portableDir = if (legacyPortableDir.exists()) legacyPortableDir else {
+            val portableDir = if (legacyPortableDir.exists()) {
+                legacyPortableDir
+            } else {
                 val previousAurasDir = File(userDir, "AurasData")
                 if (previousAurasDir.exists()) previousAurasDir else File(userDir, "AurasOrbitData")
             }

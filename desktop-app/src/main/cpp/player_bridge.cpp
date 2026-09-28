@@ -11,8 +11,11 @@
 #include <atomic>
 #include <condition_variable>
 #include <unordered_map>
+#include <cmath>
+#include <cwctype>
 #include <initguid.h>
 #include "WebView2.h"
+#include "ControlsUrlPolicy.h"
 
 // File logging macro for production debugging
 static std::ofstream g_logFile;
@@ -61,6 +64,30 @@ ICoreWebView2*           g_webview           = nullptr;
 bool                     g_webviewReady      = false;
 static std::atomic<bool> g_uiReady{false};
 std::wstring             g_pendingUrl        = L"";
+std::wstring             g_controlsUrl       = L"";
+
+class ControlsNavigationHandler : public ICoreWebView2NavigationStartingEventHandler {
+    std::atomic<ULONG> refs{1};
+public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (iid == IID_IUnknown || iid == IID_ICoreWebView2NavigationStartingEventHandler) {
+            *out = this; AddRef(); return S_OK;
+        }
+        *out = nullptr; return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override { auto n = --refs; if (!n) delete this; return n; }
+    HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) override {
+        PWSTR uri = nullptr;
+        bool allowed = false;
+        if (SUCCEEDED(args->get_Uri(&uri)) && uri) {
+            allowed = auras::isControlsUiUrl(uri, g_controlsUrl);
+            CoTaskMemFree(uri);
+        }
+        args->put_Cancel(allowed ? FALSE : TRUE);
+        return S_OK;
+    }
+};
 
 mpv_handle* g_mpvHandle = nullptr;
 std::mutex  g_mpvMutex;
@@ -173,6 +200,13 @@ public:
     }
     HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2* sender,
                                      ICoreWebView2WebMessageReceivedEventArgs* args) override {
+        PWSTR source = nullptr;
+        bool allowed = false;
+        if (SUCCEEDED(args->get_Source(&source)) && source) {
+            allowed = auras::isControlsUiUrl(source, g_controlsUrl);
+            CoTaskMemFree(source);
+        }
+        if (!allowed) return S_OK;
         PWSTR messageJson = nullptr;
         if (SUCCEEDED(args->get_WebMessageAsJson(&messageJson)) && messageJson) {
             std::wstring wjson(messageJson);
@@ -219,6 +253,7 @@ public:
                 if (!wval.empty()) {
                     // Convert ms → seconds
                     double ms = _wtof(wval.c_str());
+                    if (!std::isfinite(ms) || std::abs(ms) > 31536000000.0) return S_OK;
                     double sec = ms / 1000.0;
                     char buf[64];
                     if (evType == L"seekTo") {
@@ -439,6 +474,10 @@ public:
 
         EventRegistrationToken token;
         g_webview->add_WebMessageReceived(new WebMessageReceivedHandler(), &token);
+        EventRegistrationToken navigationToken;
+        auto navigationHandler = new ControlsNavigationHandler();
+        g_webview->add_NavigationStarting(navigationHandler, &navigationToken);
+        navigationHandler->Release();
 
         EventRegistrationToken accelToken;
         g_webviewController->add_AcceleratorKeyPressed(new AcceleratorKeyPressedHandler(), &accelToken);
@@ -809,7 +848,7 @@ void runNativeUiThread(HWND hostHwnd, int width, int height) {
         std::cerr << "[NativeBridge] FATAL: WebView2 container CreateWindowExW failed, error="
                   << GetLastError() << std::endl;
     } else {
-        LOG_TO_FILE("[NativeBridge] WebView2 container HWND created: " << g_containerHwnd);
+    LOG_TO_FILE("[NativeBridge] WebView2 container HWND created");
     }
 
     // Initialize WebView2
@@ -834,7 +873,7 @@ void runNativeUiThread(HWND hostHwnd, int width, int height) {
         auto lastSlash = jniDir.find_last_of(L"\\/");
         if (lastSlash != std::wstring::npos) jniDir = jniDir.substr(0, lastSlash + 1);
         std::wstring loaderPath = jniDir + L"WebView2Loader.dll";
-        LOG_TO_FILE("[NativeBridge] Loading WebView2Loader from: " << std::string(loaderPath.begin(), loaderPath.end()));
+    LOG_TO_FILE("[NativeBridge] Resolving WebView2Loader path");
         hLoader = LoadLibraryW(loaderPath.c_str());
         if (!hLoader) {
             // Fallback: try bare name (works in dev where CWD has the DLL)
@@ -935,7 +974,7 @@ public:
             g_warmupCtrl->put_IsVisible(FALSE);
             g_warmupCtrl->get_CoreWebView2(&g_warmupWebView);
             if (g_warmupWebView && !g_warmupControlsUrl.empty()) {
-                LOG_TO_FILE("[NativeBridge] Prewarming WebView2 with URL: " << std::string(g_warmupControlsUrl.begin(), g_warmupControlsUrl.end()));
+                LOG_TO_FILE("[NativeBridge] Prewarming WebView2 controls page");
                 g_warmupWebView->Navigate(g_warmupControlsUrl.c_str());
             }
         } else {
@@ -1073,7 +1112,7 @@ JNIEXPORT jlong JNICALL Java_com_lagradost_cloudstream3_desktop_player_webview_N
 {
     g_hostHwnd = (HWND)hostHwndPtr;
     g_uiReady = false;
-    LOG_TO_FILE("[NativeBridge] initWebView called, thread=" << GetCurrentThreadId());
+    LOG_TO_FILE("[NativeBridge] initWebView called");
 
     // Force Canvas HWND class background to black to prevent white flash on initial window exposure
     SetClassLongPtrW(g_hostHwnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
@@ -1098,7 +1137,7 @@ JNIEXPORT jlong JNICALL Java_com_lagradost_cloudstream3_desktop_player_webview_N
     std::unique_lock<std::mutex> lock(g_initMutex);
     g_initCv.wait(lock, []() { return g_initComplete; });
 
-    LOG_TO_FILE("[NativeBridge] Returning combined HWND=" << g_containerHwnd);
+    LOG_TO_FILE("[NativeBridge] Returning combined WebView2 container HWND");
     return reinterpret_cast<jlong>(g_containerHwnd);
 }
 
@@ -1343,6 +1382,9 @@ JNIEXPORT void JNICALL Java_com_lagradost_cloudstream3_desktop_player_webview_Na
     env->ReleaseStringChars(url, chars);
 
     postUiTask([wurl]() {
+        auto controls = auras::normalizeControlsUrl(wurl);
+        if (controls.empty()) return;
+        g_controlsUrl = controls;
         if (g_webview) {
             g_webview->Navigate(wurl.c_str());
         } else {

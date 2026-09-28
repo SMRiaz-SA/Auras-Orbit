@@ -153,9 +153,13 @@ fun SearchResults(
                                 provider.sourcePlugin?.let {
                                     try {
                                         java.io.File(it).parentFile?.name?.replace("_", " ")
-                                    } catch (_: Exception) { null }
+                                    } catch (_: Exception) {
+                                        null
+                                    }
                                 }
-                            } else null
+                            } else {
+                                null
+                            }
 
                             val rowTitle = if (!repoTag.isNullOrBlank()) "${provider.name} ($repoTag)" else provider.name
 

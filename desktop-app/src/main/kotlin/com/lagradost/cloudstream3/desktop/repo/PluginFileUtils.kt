@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.repo
 
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
+import com.lagradost.runtime.loader.ExtensionLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -11,6 +12,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * Internal file utility for plugin downloads, hashing, and cache directories.
@@ -25,9 +27,13 @@ internal object PluginFileUtils {
         return if (cleaned.isBlank() || cleaned.all { it == '.' }) "_" else cleaned
     }
 
+    fun repositoryDirectoryCollisionKey(repoName: String): String =
+        safeDirectoryName(repoName).lowercase(Locale.ROOT)
+
     fun repositoryDirectory(repoName: String): File {
         val root = getExtensionsDir().canonicalFile
-        val directory = File(root, safeDirectoryName(repoName)).canonicalFile
+        val storageName = DesktopRepositoryManager.getSavedRepositories().singleOrNull { it.name == repoName }?.storageName ?: repoName
+        val directory = File(root, safeDirectoryName(storageName)).canonicalFile
         require(directory.parentFile == root) { "Repository directory must be inside Extensions" }
         return directory
     }
@@ -37,6 +43,69 @@ internal object PluginFileUtils {
         val file = File(directory, safeDirectoryName(internalName) + suffix).canonicalFile
         require(file.parentFile == directory) { "Plugin file must be inside its repository" }
         return file
+    }
+
+    /**
+     * Keep the current plugin files available until a replacement has downloaded and loaded.
+     * The callbacks unload a partially loaded replacement before restoring files, then reload
+     * the previous plugin after every file has been restored.
+     */
+    internal suspend fun <T> withFileRollback(
+        files: List<File>,
+        onBeforeRestore: () -> Unit = {},
+        onAfterRestore: () -> Unit = {},
+        operation: suspend () -> T,
+    ): T = withContext(Dispatchers.IO) {
+        val targets = files.map { it.canonicalFile }.distinct()
+        val extensionsDir = getExtensionsDir()
+        if (!extensionsDir.exists()) extensionsDir.mkdirs()
+        val backupDir = Files.createTempDirectory(extensionsDir.toPath(), ".plugin-rollback-").toFile()
+        val backups = try {
+            targets.mapIndexed { index, target ->
+                val backup = File(backupDir, index.toString())
+                val existed = target.isFile
+                if (existed) Files.copy(target.toPath(), backup.toPath())
+                target to backup.takeIf { existed }
+            }
+        } catch (failure: Throwable) {
+            backupDir.deleteRecursively()
+            throw failure
+        }
+
+        try {
+            operation()
+        } catch (failure: Throwable) {
+            try {
+                onBeforeRestore()
+            } catch (rollbackFailure: Throwable) {
+                failure.addSuppressed(rollbackFailure)
+            }
+
+            var restored = true
+            backups.forEach { (target, backup) ->
+                try {
+                    if (backup == null) {
+                        Files.deleteIfExists(target.toPath())
+                    } else {
+                        target.parentFile?.mkdirs()
+                        Files.copy(backup.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
+                } catch (rollbackFailure: Throwable) {
+                    restored = false
+                    failure.addSuppressed(rollbackFailure)
+                }
+            }
+            if (restored) {
+                try {
+                    onAfterRestore()
+                } catch (rollbackFailure: Throwable) {
+                    failure.addSuppressed(rollbackFailure)
+                }
+            }
+            throw failure
+        } finally {
+            backupDir.deleteRecursively()
+        }
     }
 
     fun sha256(file: File): String {
@@ -52,34 +121,47 @@ internal object PluginFileUtils {
         return "sha256-" + digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    internal fun alternatePluginUrls(
+        plugin: SitePlugin,
+        candidates: List<Pair<String, SitePlugin>>,
+    ): List<String> = candidates.asSequence()
+        .map { it.second }
+        .filter {
+            plugin.fileHash != null &&
+                it.internalName == plugin.internalName &&
+                it.fileHash.equals(plugin.fileHash, ignoreCase = true) &&
+                it.url != plugin.url && it.url.startsWith("http")
+        }
+        .map { it.url }
+        .distinct()
+        .toList()
+
     /**
      * Downloads a `.jar` or `.cs3` plugin to the correct repository directory.
      * Optionally fetches a pre-compiled JVM bytecode jar to bypass Dex2Jar.
      */
     suspend fun downloadPlugin(repoName: String, plugin: SitePlugin): File? = withContext(Dispatchers.IO) {
-        val repoDir = repositoryDirectory(repoName)
-        if (!repoDir.exists()) repoDir.mkdirs()
-
         val destFile = pluginFile(repoName, plugin.internalName, ".jar")
-        val tempFile = File.createTempFile(destFile.name, ".tmp", getExtensionsDir())
+        val alternateUrls = alternatePluginUrls(plugin, DesktopRepositoryManager.getAllPlugins())
+        downloadPlugin(plugin, destFile, (listOf(plugin.url) + alternateUrls).distinct(), PluginNetworkClient.redirectClient)
+    }
+
+    internal suspend fun downloadPlugin(
+        plugin: SitePlugin,
+        destFile: File,
+        candidateUrls: List<String>,
+        client: okhttp3.OkHttpClient,
+    ): File? = withContext(Dispatchers.IO) {
+        val repoDir = destFile.parentFile ?: return@withContext null
+        if (!repoDir.exists()) repoDir.mkdirs()
+        val tempFile = File.createTempFile(destFile.name, ".tmp", repoDir)
 
         try {
-            // Primary download URL first, followed by any alternate repository mirrors for this plugin
-            val candidateUrls = mutableListOf(plugin.url)
-            DesktopRepositoryManager.getAllPlugins()
-                .filter {
-                    plugin.fileHash != null &&
-                        it.second.internalName == plugin.internalName &&
-                        it.second.fileHash.equals(plugin.fileHash, ignoreCase = true) &&
-                        it.second.url != plugin.url && it.second.url.startsWith("http")
-                }
-                .forEach { candidateUrls.add(it.second.url) }
-
             var downloadSuccess = false
             for (candidateUrl in candidateUrls) {
                 try {
                     val request = Request.Builder().url(candidateUrl).build()
-                    PluginNetworkClient.redirectClient.newCall(request).execute().use { response ->
+                    client.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code} downloading from $candidateUrl")
                         val body = response.body
                         val contentLength = body.contentLength()
@@ -109,6 +191,7 @@ internal object PluginFileUtils {
                         }
                     }
 
+                    com.lagradost.runtime.security.PluginArchiveLimits.verify(tempFile)
                     downloadSuccess = true
                     break
                 } catch (e: Exception) {
@@ -138,11 +221,12 @@ internal object PluginFileUtils {
             // [PERFORMANCE] If a pre-compiled JVM jar is provided, download it alongside the .cs3 file.
             // ExtensionLoader will detect this -jvm.jar file and completely skip the slow dex2jar conversion step!
             if (!plugin.jarUrl.isNullOrBlank() && !plugin.jarHash.isNullOrBlank()) {
-                val jvmDestFile = pluginFile(repoName, plugin.internalName, "-jvm.jar")
-                val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", getExtensionsDir())
+                val jvmDestFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}-jvm.jar")
+                val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", jvmDestFile.parentFile)
+                var installedJvmSidecar = false
                 try {
                     val jvmRequest = Request.Builder().url(plugin.jarUrl).build()
-                    PluginNetworkClient.redirectClient.newCall(jvmRequest).execute().use { response ->
+                    client.newCall(jvmRequest).execute().use { response ->
                         if (response.isSuccessful) {
                             val body = response.body
                             if (body.contentLength() > 64 * 1024 * 1024L) {
@@ -163,6 +247,7 @@ internal object PluginFileUtils {
                                 }
                             }
 
+                            com.lagradost.runtime.security.PluginArchiveLimits.verify(jvmTempFile)
                             val downloadHash = sha256(jvmTempFile)
                             if (plugin.jarHash != downloadHash) {
                                 throw IllegalStateException("JVM Extension hash mismatch when validating '${jvmDestFile.name}'! Expected: '${plugin.jarHash}', got: '$downloadHash'.")
@@ -182,10 +267,16 @@ internal object PluginFileUtils {
                                     StandardCopyOption.REPLACE_EXISTING,
                                 )
                             }
+                            installedJvmSidecar = true
+                            ExtensionLoader.preparePrecompiledJvmJar(destFile, jvmDestFile)
                             AppLogger.i("Successfully pre-seeded JVM bytecode for ${plugin.internalName}!")
                         }
                     }
                 } catch (e: Exception) {
+                    if (installedJvmSidecar) {
+                        jvmDestFile.delete()
+                        File(jvmDestFile.path + ".identity").delete()
+                    }
                     AppLogger.i("Failed to download pre-compiled JVM jar for ${plugin.internalName}: ${e.message}")
                 } finally {
                     jvmTempFile.delete()

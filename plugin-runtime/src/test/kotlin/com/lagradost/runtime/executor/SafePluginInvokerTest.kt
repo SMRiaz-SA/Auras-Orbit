@@ -27,7 +27,31 @@ class SafePluginInvokerTest {
             "should not reach"
         }
         assertTrue(result.isFailure)
+        val failure = result.exceptionOrNull()
+        assertTrue(failure is TimeoutException)
+        assertTrue(failure?.message.orEmpty().contains("(limit was 100ms)"))
+    }
+
+    @Test
+    fun unpenalizedTimeoutUsesSharedInvocationAccounting() = runTest {
+        val providerName = "unpenalized-timeout-fixture"
+        PluginCircuitBreaker.resetProvider(providerName)
+
+        val result = SafePluginInvoker.invoke(
+            providerName = providerName,
+            timeoutMs = 100L,
+            penalizeOnTimeout = false,
+        ) {
+            delay(500L)
+            "should not reach"
+        }
+
+        assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is TimeoutException)
+        val stats = PluginCircuitBreaker.getStats(providerName)
+        assertEquals(1, stats?.successfulCalls)
+        assertEquals(0, stats?.failedCalls)
+        PluginCircuitBreaker.resetProvider(providerName)
     }
 
     @Test

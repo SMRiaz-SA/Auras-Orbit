@@ -4,6 +4,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicLong
 
@@ -25,14 +27,19 @@ object LogBuffer {
     val logFlow: SharedFlow<LogEntry> = _logFlow.asSharedFlow()
 
     private val SENSITIVE_PARAM_REGEX = Regex(
-        "(?i)(token|password|secret|auth|apikey|api_key|access_token|authorization)=([^&\\s\"',]+)",
+        "(?i)(token|password|secret|auth|apikey|api_key|access_token|authorization|signature|sig)=([^&\\s\"',]+)",
     )
     private val AUTH_HEADER_REGEX = Regex(
         "(?i)(Authorization:\\s*(?:Bearer|Basic)\\s+)([^\\s\\r\\n]+)",
     )
 
     fun sanitize(text: String): String {
-        var sanitized = text
+        var sanitized = Regex("""(?i)("(?:[^"]*(?:token|password|secret|authorization|api[_-]?key)|code|cookie)"\s*:\s*)"(?:\\.|[^"\\])*"""")
+            .replace(text) { "${it.groupValues[1]}\"***MASKED***\"" }
+        sanitized = Regex("""(?i)(https?://[^\s?#]+)\?[^\s"<>]+""")
+            .replace(sanitized) { "${it.groupValues[1]}?***MASKED***" }
+        sanitized = Regex("""(?i)(https(?:%25)*%3a(?:%25)*%2f(?:%25)*%2f[^\s"<>]*?)(?:%25)*%3f[^\s"<>]+""")
+            .replace(sanitized) { "${it.groupValues[1]}%3F***MASKED***" }
         sanitized = SENSITIVE_PARAM_REGEX.replace(sanitized) { matchResult ->
             "${matchResult.groupValues[1]}=***MASKED***"
         }
@@ -42,6 +49,25 @@ object LogBuffer {
         return sanitized
     }
 
+    /** Keeps exception types and frames for diagnosis while dropping arbitrary exception messages. */
+    fun sanitizeThrowable(throwable: Throwable): Throwable {
+        val visited = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+        val safeTrace = buildString {
+            fun appendThrowable(current: Throwable, prefix: String) {
+                if (!visited.add(current)) {
+                    appendLine("$prefix[CIRCULAR REFERENCE]")
+                    return
+                }
+                appendLine("$prefix${current.javaClass.name}: [message redacted]")
+                current.stackTrace.forEach { frame -> appendLine("\tat ${sanitize(frame.toString())}") }
+                current.suppressed.forEach { appendThrowable(it, "\tSuppressed: ") }
+                current.cause?.let { appendThrowable(it, "Caused by: ") }
+            }
+            appendThrowable(throwable, "")
+        }
+        return RuntimeException(safeTrace.trimEnd()).apply { stackTrace = emptyArray() }
+    }
+
     fun record(
         level: LogLevel,
         tag: String,
@@ -49,15 +75,16 @@ object LogBuffer {
         throwable: Throwable? = null,
         threadName: String = Thread.currentThread().name,
     ): LogEntry {
+        val sanitizedTag = sanitize(tag)
         val sanitizedMsg = sanitize(message)
         val entry = LogEntry(
             id = idCounter.getAndIncrement(),
             timestamp = System.currentTimeMillis(),
             level = level,
-            tag = tag,
+            tag = sanitizedTag,
             message = sanitizedMsg,
-            throwable = throwable,
-            threadName = threadName,
+            throwable = throwable?.let(::sanitizeThrowable),
+            threadName = sanitize(threadName),
         )
 
         buffer.addLast(entry)

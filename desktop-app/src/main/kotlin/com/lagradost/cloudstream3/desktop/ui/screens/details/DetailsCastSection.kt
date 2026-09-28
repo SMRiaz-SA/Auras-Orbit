@@ -19,16 +19,12 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +37,7 @@ import com.lagradost.cloudstream3.ActorData
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.ui.components.posterHoverEffect
+import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiState
 import com.lagradost.cloudstream3.fixUrlNull
 
@@ -62,7 +59,9 @@ fun DetailsCastSection(
     val hasAnimeDualCast = baseActors.any { it.voiceActor != null }
     val activeSeasonActors = if (selectedSeason != null && seasonCredits?.containsKey(selectedSeason) == true) {
         seasonCredits[selectedSeason]
-    } else null
+    } else {
+        null
+    }
 
     // For anime with dual-cast characters, preserve the rich character+VA cards.
     // For live-action or when dual-cast is absent, allow season credits to take precedence.
@@ -119,7 +118,7 @@ fun DetailsCastSection(
                 tmdbId = uiState?.tmdbId ?: data.syncData["tmdb"]?.toIntOrNull(),
                 availableSeasons = availableSeasons,
                 initialSeason = selectedSeason,
-            )
+            ),
         )
     }
 
@@ -490,7 +489,9 @@ private fun ActorCard(
 
     val secondaryText = when {
         !subName.isNullOrBlank() -> {
-            if (!isInverted) "🎙 Voice: $subName" else {
+            if (!isInverted) {
+                "🎙 Voice: $subName"
+            } else {
                 val raw = subName.trim()
                 if (raw.startsWith("as ", ignoreCase = true) || raw.contains(" • ")) raw else "as $raw"
             }
@@ -559,9 +560,9 @@ private fun ActorCard(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
-                        )
-                    )
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f)),
+                        ),
+                    ),
             )
 
             // Top-left Role Badge

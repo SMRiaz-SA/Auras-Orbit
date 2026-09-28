@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageData
 import com.lagradost.cloudstream3.SearchResponse
@@ -188,7 +187,6 @@ fun HomeCategorySection(
                             }
                         }
                     }
-
                 }
             } else if (errorMessage != null) {
                 val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current

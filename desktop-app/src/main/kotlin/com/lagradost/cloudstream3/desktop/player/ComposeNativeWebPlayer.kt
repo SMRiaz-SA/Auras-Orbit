@@ -40,6 +40,7 @@ fun ComposeNativeWebPlayer(
     playerState: com.lagradost.cloudstream3.desktop.ui.screens.player.PlayerState? = null,
     links: List<ExtractorLink> = emptyList(),
     currentLinkIndex: Int = 0,
+    playbackGeneration: Long = 0L,
     episodes: List<com.lagradost.cloudstream3.Episode> = emptyList(),
     currentEpisodeId: String? = null,
     currentEpisodeNumber: Int? = null,
@@ -47,6 +48,7 @@ fun ComposeNativeWebPlayer(
     isLoading: Boolean = false,
     loadingStatusText: String? = null,
     isProbing: Boolean = false,
+    isPlaybackReady: Boolean = false,
     isScraping: Boolean = false,
     failedLinks: Map<Int, String> = emptyMap(),
     backdropUrl: String? = null,
@@ -180,6 +182,7 @@ fun ComposeNativeWebPlayer(
                 contentRating = contentRating,
                 rating = rating,
                 isProbing = isProbing,
+                isPlaybackReady = isPlaybackReady,
                 isScraping = isScraping,
                 backdropUrl = safeBackdrop,
                 logoUrl = safeLogo,
@@ -282,7 +285,7 @@ fun ComposeNativeWebPlayer(
         }
     }
 
-    LaunchedEffect(isUiReady, isLoading, links, currentLinkIndex, episodes, currentEpisodeId, currentEpisodeNumber, currentSeasonNumber, audioTracks, subtitleTracks, videoTracks, chapters, currentChapterIndex, proxyAudioTracks, proxySubtitleTracks, proxyVideoTracks, loadingStatusText, isProbing, isScraping, failedLinks, backdropUrl, logoUrl, title, activeShader, activeLazyVideoTrackUrl, activeLazyAudioTrackUrl, activeSkipInterval, skipIntervals, resolution, plot, year, tags, contentRating, rating, activeSubtitleOverrideEnabled, isLive, isAudioOnlyStream, isAudioMode, actors, isExhausted, exhaustionReason, exhaustionDiagnostics) {
+    LaunchedEffect(isUiReady, isLoading, links, currentLinkIndex, episodes, currentEpisodeId, currentEpisodeNumber, currentSeasonNumber, audioTracks, subtitleTracks, videoTracks, chapters, currentChapterIndex, proxyAudioTracks, proxySubtitleTracks, proxyVideoTracks, loadingStatusText, isProbing, isPlaybackReady, isScraping, failedLinks, backdropUrl, logoUrl, title, activeShader, activeLazyVideoTrackUrl, activeLazyAudioTrackUrl, activeSkipInterval, skipIntervals, resolution, plot, year, tags, contentRating, rating, activeSubtitleOverrideEnabled, isLive, isAudioOnlyStream, isAudioMode, actors, isExhausted, exhaustionReason, exhaustionDiagnostics) {
         if (isUiReady) {
             if (isScraping && !isExhausted && !isLoading) {
                 kotlinx.coroutines.delay(60L)
@@ -386,6 +389,7 @@ fun ComposeNativeWebPlayer(
         subtitles = subtitles,
         startPositionMs = startPositionMs,
         shouldPauseForResume = shouldPauseForResume,
+        playbackGeneration = playbackGeneration,
         onPlaybackReady = {
             com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.__dismissProbingOverlay) window.__dismissProbingOverlay();")
             currentOnPlaybackReady()
@@ -446,21 +450,25 @@ fun ComposeNativeWebPlayer(
                 val ep = activeEp.episode
                 val epTitle = activeEp.name?.ifEmpty { "Episode $ep" } ?: "Episode $ep"
                 "S$s:E$ep • $epTitle"
-            } else ""
+            } else {
+                ""
+            }
             val initialSubtitleStyle = if (initialSubtitle.isNotEmpty()) "display: block;" else "display: none;"
 
+            fun escapeHtml(value: String) = value.replace("&", "&amp;").replace("\"", "&quot;")
+                .replace("'", "&#39;").replace("<", "&lt;").replace(">", "&gt;")
             val htmlContent = htmlTemplate
                 .replace("/* CSS_INJECT */", cssContent)
                 .replace("/* JS_INJECT */", jsContent)
                 .replace("{{ACCENT_COLOR}}", accentColorHex)
                 .replace("{{ACCENT_COLOR_RGB}}", accentColorRgb)
-                .replace("{{INITIAL_BACKDROP_URL}}", initialBackdropUrl)
+                .replace("{{INITIAL_BACKDROP_URL}}", escapeHtml(initialBackdropUrl))
                 .replace("{{INITIAL_BACKDROP_CLASS}}", initialBackdropClass)
-                .replace("{{INITIAL_LOGO_URL}}", initialLogoUrl)
+                .replace("{{INITIAL_LOGO_URL}}", escapeHtml(initialLogoUrl))
                 .replace("{{INITIAL_LOGO_STYLE}}", initialLogoStyle)
                 .replace("{{INITIAL_TITLE}}", initialTitle)
                 .replace("{{INITIAL_TITLE_STYLE}}", initialTitleStyle)
-                .replace("{{INITIAL_SUBTITLE}}", initialSubtitle)
+                .replace("{{INITIAL_SUBTITLE}}", escapeHtml(initialSubtitle))
                 .replace("{{INITIAL_SUBTITLE_STYLE}}", initialSubtitleStyle)
 
             if (htmlContent.isNotEmpty() && htmlTemplate.isNotEmpty()) {
