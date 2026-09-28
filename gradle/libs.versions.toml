@@ -57,7 +57,7 @@ logback = "1.5.0"
 workRuntimeKtx = "2.11.2"
 zipline = "1.27.0"
 
-sqldelight = "2.0.2"
+sqldelight = "2.4.0"
 cryptography = "0.6.0"
 ksoup = "0.2.6"
 jvmTarget = "1.8"
