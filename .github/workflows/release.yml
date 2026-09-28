@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: [ self-hosted, Windows, X64, auras-orbit ]
+    timeout-minutes: 60
 
     steps:
     - name: Checkout repository
@@ -53,12 +54,33 @@ jobs:
       shell: pwsh
       run: .\gradlew.bat spotlessCheck --no-daemon
 
+    - name: Run JVM tests
+      timeout-minutes: 20
+      shell: pwsh
+      run: .\gradlew.bat test --no-daemon --console=plain --stacktrace --info --max-workers=2
+
+    - name: Run native tests
+      timeout-minutes: 10
+      shell: pwsh
+      run: .\gradlew.bat :desktop-app:nativeTest --no-daemon --console=plain --stacktrace --max-workers=2
+
     - name: Build App (createDistributable)
-      shell: bash
+      timeout-minutes: 20
+      shell: pwsh
       run: |
-        # Extract version from tag (e.g., v0.1.4 -> 0.1.4)
-        VERSION=${GITHUB_REF_NAME#v}
-        ./gradlew test :desktop-app:nativeTest :desktop-app:createDistributable -PAPP_VERSION=$VERSION -PorbitDistribution=release --no-daemon
+        $version = $env:GITHUB_REF_NAME.Substring(1)
+        .\gradlew.bat :desktop-app:createDistributable "-PAPP_VERSION=$version" -PorbitDistribution=release --no-daemon --console=plain --stacktrace --max-workers=2
+
+    - name: Upload Test Reports
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: release-test-reports
+        path: |
+          common/build/reports/tests/
+          desktop-app/build/reports/tests/
+          plugin-runtime/build/reports/tests/
+          player-abstraction/build/reports/tests/
 
     - name: Verify portable distribution version and notices
       shell: pwsh
