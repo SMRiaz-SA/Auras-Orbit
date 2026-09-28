@@ -18,29 +18,18 @@ fun main(args: Array<String>) {
         return
     }
 
+    val targetJar = File(pluginFile.parentFile, pluginFile.nameWithoutExtension + "-jvm.jar")
+    val hasDex = (pluginFile.extension == "cs3" || pluginFile.extension == "zip") &&
+        ZipFile(pluginFile).use { zip ->
+            zip.entries().asSequence().any { it.name.matches(Regex("^classes(?:([2-9][0-9]*))?\\.dex$")) }
+        }
     val jarFile = if (pluginFile.name.endsWith("-jvm.jar")) {
         pluginFile
+    } else if (hasDex) {
+        com.lagradost.runtime.loader.DexToJvmTranslator.translateArchive(pluginFile, targetJar)
+        targetJar
     } else {
-        val dexFile = File(pluginFile.parentFile, pluginFile.nameWithoutExtension + ".dex")
-        if (pluginFile.extension == "cs3" || pluginFile.extension == "zip") {
-            ZipFile(pluginFile).use { zip ->
-                val dexEntry = zip.getEntry("classes.dex")
-                if (dexEntry != null) {
-                    zip.getInputStream(dexEntry).use { input ->
-                        java.nio.file.Files.copy(input, dexFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                    }
-                }
-            }
-        }
-        val targetJar = File(pluginFile.parentFile, pluginFile.nameWithoutExtension + "-jvm.jar")
-        if (!targetJar.exists() && dexFile.exists()) {
-            try {
-                com.googlecode.dex2jar.tools.Dex2jarCmd().doMain("-f", dexFile.absolutePath, "-o", targetJar.absolutePath)
-            } catch (e: Exception) {
-                com.googlecode.dex2jar.tools.Dex2jarCmd.main("-f", dexFile.absolutePath, "-o", targetJar.absolutePath)
-            }
-        }
-        if (targetJar.exists()) targetJar else pluginFile
+        pluginFile
     }
 
     if (jarFile.exists()) {

@@ -55,8 +55,8 @@ object ImageUtils {
                 .replace(Regex("""_UY\d+_"""), "_UY850_")
         }
 
-        // AniList / MyAnimeList avatars
-        if (url.contains("anilist.co") || url.contains("myanimelist.net")) {
+        // AniList metadata portraits
+        if (url.contains("anilist.co")) {
             return url.replace("/medium/", "/large/")
         }
 

@@ -225,7 +225,7 @@ object DesktopDataStore {
         val queries = DatabaseFactory.database.cloudstreamDBQueries
         val removed = queries.selectAllKeyValues().executeAsList().map { it.key }.filter {
             it.startsWith("$profileId/") ||
-                ((it.startsWith("auth_tokens_") || it.startsWith("tracker_credentials_v1_")) && it.endsWith(suffix))
+                (it.startsWith("auth_tokens_") || it.startsWith("tracker_credentials_v1_")) && it.endsWith(suffix)
         }.toSet()
         queries.transaction {
             queries.selectAllBookmarks().executeAsList().filter {

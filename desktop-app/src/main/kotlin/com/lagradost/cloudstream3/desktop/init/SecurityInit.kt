@@ -35,6 +35,7 @@ fun initSecurity() {
     DesktopDataStore.init()
     com.lagradost.cloudstream3.desktop.profile.ProfileManager.init()
     DesktopDataStore.activeProfileProvider = { com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId }
+    RetiredTrackerDataCleanup.run()
     com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.reloadFromDataStore()
     com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.reloadFromDataStore()
 }

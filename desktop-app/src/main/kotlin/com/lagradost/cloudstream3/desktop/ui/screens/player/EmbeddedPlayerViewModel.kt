@@ -150,7 +150,6 @@ class EmbeddedPlayerViewModel(
                                 hasNextEpisode = hasNextEpisode,
                                 nextEpisode = nextEpisodeData,
                                 saveProgress = savePlaybackProgress,
-                                loadResponse = currentData.loadResponse,
                                 forceNotify = true,
                             )
                         },
@@ -484,24 +483,17 @@ class EmbeddedPlayerViewModel(
     private fun savePosition(history: WatchHistory, forceNotify: Boolean = false) {
         saveJob?.cancel()
         saveJob = viewModelScope.launch(Dispatchers.IO) {
-            val currentData = uiState.value.launchData
             WatchHistoryCoordinator.saveWithNextEpisodeQueue(
                 history = history,
                 hasNextEpisode = uiState.value.hasNextEpisode,
                 nextEpisode = uiState.value.nextEpisodeData,
                 saveProgress = savePlaybackProgress,
-                loadResponse = currentData?.loadResponse,
                 forceNotify = forceNotify,
             )
         }
     }
 
     private fun init(initialData: VideoLaunchData) {
-        initialData.loadResponse?.let { response ->
-            com.lagradost.cloudstream3.desktop.utils.appScope.launch(Dispatchers.IO) {
-                TrackerPlaybackSyncCoordinator.syncWatchedHistory(response, initialData.history.parentId)
-            }
-        }
         linkRetries.clear()
         loadLinksJob?.cancel()
         countdownJob?.cancel()

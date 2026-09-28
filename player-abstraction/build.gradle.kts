@@ -17,9 +17,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation(libs.nicehttp)
 
-    val ktorVersion = "3.0.3"
-    implementation("io.ktor:ktor-server-core:$ktorVersion")
-    implementation("io.ktor:ktor-server-netty:$ktorVersion")
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
 
     // We may need to depend on the library to pass SubtitleData and ExtractorLink
     implementation(project(":library"))

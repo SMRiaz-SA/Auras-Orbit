@@ -4,14 +4,14 @@ Auras Orbit is a portable Windows desktop media client for CloudStream-compatibl
 
 Orbit does not host or distribute media streams or catalogs. You choose which extension repositories and sources to use, and availability depends on those providers.
 
-**Current source version:** `0.2.0.00`<br>
+**Current source version:** `0.2.0.15`<br>
 **Development status:** Pre-alpha<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
 ## Navigate this guide
 
-[What you get](#what-you-get) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Tracker accounts](#tracker-accounts) · [Privacy](#privacy) · [Build from source](#build-from-source)
+[What you get](#what-you-get) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Privacy](#privacy) · [Build from source](#build-from-source)
 
 ## What you get
 
@@ -20,18 +20,16 @@ Orbit does not host or distribute media streams or catalogs. You choose which ex
 - Genre Browser and topic filters for providers that expose the supported catalog data.
 - Local profiles, bookmarks, watch history, and playback progress.
 - Native MPV playback with a WebView2-based player interface.
-- Optional MAL, AniList, and Simkl accounts, including a connected Tracker Library and explicit editing of fields supported by each provider.
-- Per-tracker playback-sync controls. External tracker accounts are optional.
 
 Extensions are user-selected. Adding a repository makes its catalog available for review; it does not install every extension in that repository.
 
 ## Visual tour
 
-These screenshots were captured from the running desktop application using a clean local demo state. The Home image shows the first-run onboarding card before an extension repository has been configured; the profile image shows Orbit's local profile selector.
+These screenshots were captured from the running desktop application. Home shows the first-run extensions setup before a repository has been configured; the profile selector shows the active local profile and profile-management options.
 
-![Auras Orbit Home with the extension onboarding card](assets/auras-orbit-home.png)
+![Auras Orbit Home with the extension onboarding card](assets/auras-orbit-home.jpg)
 
-![Auras Orbit profile selector](assets/auras-orbit-profile-picker.png)
+![Auras Orbit profile selector with the active profile and management options](assets/auras-orbit-profile-picker.jpg)
 
 ## Quick start
 
@@ -52,15 +50,13 @@ Orbit includes its MPV native library in the portable package. Windows must prov
 
 If Orbit reports that WebView2 is missing, install the [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/#download-section) while online, or the x64 Evergreen Standalone Installer on an offline PC. Return to Orbit and choose **Check again after installing**; restart Orbit if the player still cannot start.
 
-## Tracker accounts
+## Watch history and lists
 
-MAL, AniList, and Simkl are optional integrations. Connect an account from **Settings → Accounts**, then open **Library → Tracker Library** to search and filter the connected list. Orbit only submits fields that the selected provider exposes, keeps rejected values unchanged, and refreshes the displayed entry after an accepted save.
-
-Provider APIs can reject or ambiguously report a change. A rejected or uncertain provider response is shown as such; it is not treated as a successful write.
+Auras Orbit manages watch history, playback progress, and bookmarks locally for each profile. External watch-tracking accounts and playback syncing are not supported.
 
 ## Privacy
 
-Orbit keeps profiles, local history, bookmarks, settings, extension data, and tracker credentials in local application data. Do not copy those folders into a bug report or source archive. The project's portable packaging checks intentionally exclude profile databases, account identities, watchlist titles, credentials, tokens, and other private app data.
+Orbit keeps profiles, local history, bookmarks, settings, extension data, and subtitle-service credentials in local application data. Do not copy those folders into a bug report or source archive. The project's portable packaging checks intentionally exclude profile databases, account identities, watchlist titles, credentials, tokens, and other private app data.
 
 ## Build from source
 

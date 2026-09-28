@@ -63,20 +63,9 @@ fun ComposeLibraryScreen(
                 Button(onClick = { onNavigate(Config.Home) }) {
                     Text("Browse Shows")
                 }
-                OutlinedButton(onClick = { onNavigate(Config.TrackerLibrary) }, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Open Tracker Library")
-                }
             }
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = if (isCompact) 8.dp else 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    OutlinedButton(onClick = { onNavigate(Config.TrackerLibrary) }) {
-                        Text("Tracker Library")
-                    }
-                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

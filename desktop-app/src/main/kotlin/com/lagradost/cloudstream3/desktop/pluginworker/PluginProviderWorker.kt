@@ -83,7 +83,9 @@ import kotlin.coroutines.CoroutineContext
 private const val MAX_PROVIDER_RPC_FRAME_BYTES = 4 * 1024 * 1024
 private const val MAX_PLUGIN_SETTING_SCHEMA_FRAME_BYTES = 64 * 1024
 private const val MAX_VIDEO_INTERCEPTOR_BODY_BYTES = 1024 * 1024
-private const val PROVIDER_WORKER_STARTUP_TIMEOUT_MS = 60_000L
+
+// First load may translate several MiB of DEX before the worker can answer its ready request.
+private const val PROVIDER_WORKER_STARTUP_TIMEOUT_MS = 180_000L
 private const val MAX_CROSS_PLUGIN_EXTRACTOR_DEPTH = 8
 private const val HOST_EXTERNAL_EXTRACTOR_SOURCE = "__auras_host_external_extractor__"
 

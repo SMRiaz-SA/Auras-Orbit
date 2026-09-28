@@ -13,6 +13,7 @@ import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import com.lagradost.runtime.loader.ExtensionLoader
 import com.lagradost.runtime.loader.PluginArchiveFilter
+import com.lagradost.runtime.loader.PluginDexConversionException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -76,10 +77,20 @@ private fun loadInstalledPlugins() {
             ExtensionLoader.loadAndInit(jarFile)
             loaded++
         } catch (e: Throwable) {
-            // Likely a NoClassDefFoundError due to arbitrary load order. Queue for retry.
-            retryQueue.add(jarFile)
-            AppLogger.e("Deferred loading of ${jarFile.name} (dependency not met yet?)")
-            // Clean up potentially partial state via full unload so second pass doesn't duplicate them
+            if (e is PluginDexConversionException) {
+                // A deterministic DEX-to-JVM conversion failure cannot be fixed by load order.
+                failed++
+                AppLogger.e("Could not convert plugin ${jarFile.name} for the desktop JVM", e)
+                com.lagradost.cloudstream3.desktop.ui.components.AppToastManager.showPluginQuarantined(
+                    pluginName = jarFile.nameWithoutExtension.removeSuffix("-jvm"),
+                    reason = e.message ?: e.javaClass.simpleName,
+                )
+            } else {
+                // Likely a NoClassDefFoundError due to arbitrary load order. Queue for retry.
+                retryQueue.add(jarFile)
+                AppLogger.e("Deferred loading of ${jarFile.name} (dependency not met yet?)", e)
+            }
+            // Clean up potentially partial state so a retry or later install cannot duplicate it.
             ExtensionLoader.unloadPlugin(jarFile.absolutePath)
         }
     }

@@ -59,7 +59,8 @@ class ProfileSecurityTest {
             position = 10,
             duration = 100,
         )
-        DesktopDataStore.setKey("tracker_credentials_v1_auth_tokens_mal_profile_${removed.id}", "synthetic")
+        val subtitleCredentialKey = "auth_tokens_stremio_external_addons_profile_${removed.id}"
+        DesktopDataStore.setKey(subtitleCredentialKey, "synthetic")
         DesktopDataStore.setProfileKey("theme", "private", removed.id)
         DesktopDataStore.addBookmark(bookmark, removed.id)
         DesktopDataStore.setLastWatched(history)
@@ -67,7 +68,7 @@ class ProfileSecurityTest {
         val fresh = ProfileManager.createProfile("fresh")
         assertNotEquals(removed.id, fresh.id)
         assertNull(DesktopDataStore.getProfileKey<String>("theme", fresh.id))
-        assertNull(DesktopDataStore.getKey<String>("tracker_credentials_v1_auth_tokens_mal_profile_${removed.id}"))
+        assertNull(DesktopDataStore.getKey<String>(subtitleCredentialKey))
         assertTrue(DesktopDataStore.getBookmarks(fresh.id).isEmpty())
         assertTrue(DesktopDataStore.getAllWatchHistory(fresh.id).isEmpty())
         assertNull(DesktopDataStore.getLastWatched(history.parentId))
