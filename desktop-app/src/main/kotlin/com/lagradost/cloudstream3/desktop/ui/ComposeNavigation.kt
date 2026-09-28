@@ -42,7 +42,6 @@ import com.lagradost.cloudstream3.desktop.ui.screens.ComposeDetailsScreen
 import com.lagradost.cloudstream3.desktop.ui.screens.ComposeHomeScreen
 import com.lagradost.cloudstream3.desktop.ui.screens.ComposeLibraryScreen
 import com.lagradost.cloudstream3.desktop.ui.screens.extensions.ComposeExtensionScreen
-import com.lagradost.cloudstream3.desktop.ui.screens.tracker.TrackerLibraryScreen
 import com.lagradost.common.storage.WatchHistory
 import kotlinx.coroutines.launch
 
@@ -245,7 +244,6 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                     is RootComponent.Child.Search -> "Search"
                                     is RootComponent.Child.Extensions -> "Extensions"
                                     is RootComponent.Child.Library -> "Library"
-                                    is RootComponent.Child.TrackerLibrary -> "Tracker Library"
                                     is RootComponent.Child.Downloads -> "Downloads"
                                     is RootComponent.Child.Settings -> "Settings"
                                     is RootComponent.Child.CategoryGrid -> activeInstance.component.title
@@ -430,12 +428,6 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                                         ComposeLibraryScreen(
                                                             onNavigate = { rootComponent.bringToFront(it) },
                                                             viewModel = child.component.viewModel,
-                                                        )
-                                                    }
-                                                    is RootComponent.Child.TrackerLibrary -> {
-                                                        TrackerLibraryScreen(
-                                                            viewModel = child.component.viewModel,
-                                                            onNavigate = { rootComponent.bringToFront(it) },
                                                         )
                                                     }
                                                     is RootComponent.Child.Downloads -> {

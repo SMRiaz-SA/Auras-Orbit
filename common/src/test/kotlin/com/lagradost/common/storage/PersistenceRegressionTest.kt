@@ -24,18 +24,23 @@ class PersistenceRegressionTest {
     }
 
     @Test
-    fun credentialReplacementAndProfileDeletionPreserveOtherProfiles() {
-        DesktopDataStore.setKey("auth_tokens_mal_profile_81", "legacy")
-        DesktopDataStore.setKeys(mapOf("tracker_credentials_v1_auth_tokens_mal_profile_81" to "encrypted"), setOf("auth_tokens_mal_profile_81"))
-        assertNull(DatabaseFactory.database.cloudstreamDBQueries.selectKeyValue("auth_tokens_mal_profile_81").executeAsOneOrNull())
+    fun profileDeletionClearsSubtitleAndRetiredCredentialsWithoutAffectingOtherProfiles() {
+        val removedCredential = "auth_tokens_stremio_external_addons_profile_81"
+        val retainedCredential = "auth_tokens_stremio_external_addons_profile_82"
+        val retiredCredential = "tracker_credentials_v1_auth_tokens_mal_profile_81"
+        DesktopDataStore.setKey(removedCredential, "removed")
+        DesktopDataStore.setKey(retainedCredential, "kept")
+        DesktopDataStore.setKey(retiredCredential, "legacy")
         DesktopDataStore.setKey("82/theme", "keep")
         DesktopDataStore.setKey("81/theme", "remove")
         DesktopDataStore.deleteProfileData(81, emptyMap())
         assertNull(DesktopDataStore.getKey<String>("81/theme"))
-        assertNull(DesktopDataStore.getKey<String>("tracker_credentials_v1_auth_tokens_mal_profile_81"))
+        assertNull(DesktopDataStore.getKey<String>(removedCredential))
+        assertNull(DesktopDataStore.getKey<String>(retiredCredential))
+        assertEquals("kept", DesktopDataStore.getKey<String>(retainedCredential))
         assertEquals("keep", DesktopDataStore.getKey<String>("82/theme"))
         assertFailsWith<IllegalStateException> { DesktopDataStore.setKey("81/theme", "late write") }
-        assertFailsWith<IllegalStateException> { DesktopDataStore.setKey("auth_tokens_mal_profile_81", "late token") }
+        assertFailsWith<IllegalStateException> { DesktopDataStore.setKey("auth_tokens_stremio_external_addons_profile_81", "late token") }
     }
 
     @Test

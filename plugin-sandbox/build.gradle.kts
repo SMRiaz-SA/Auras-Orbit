@@ -24,20 +24,17 @@ dependencies {
     implementation(project(":desktop-app"))
     implementation(project(":common"))
     implementation(project(":player-abstraction"))
-    implementation("org.bouncycastle:bcprov-jdk18on:1.77")
+    implementation(libs.bcprov)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // ASM for bytecode analysis
-    implementation("org.ow2.asm:asm:9.7")
-    implementation("org.ow2.asm:asm-tree:9.7")
-    implementation("org.ow2.asm:asm-commons:9.7")
+    implementation(libs.asm)
+    implementation(libs.asm.tree)
+    implementation(libs.asm.commons)
 
     // JSON and Coroutines
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
-    // Dalvik-to-JVM compatibility layer
-    implementation("de.femtopedia.dex2jar:dex-tools:2.4.38")
 
     // For command line arguments (optional, but good for testers)
     implementation("com.github.ajalt.clikt:clikt:4.2.2")

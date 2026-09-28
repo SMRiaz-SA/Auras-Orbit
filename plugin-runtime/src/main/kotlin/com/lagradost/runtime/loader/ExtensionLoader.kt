@@ -4,20 +4,18 @@ import android.content.DesktopContextProvider
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.kotlinModule
-import com.googlecode.dex2jar.tools.Dex2jarCmd
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.plugins.BasePlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.common.logging.AppLogger
 import java.io.File
 import java.net.URLClassLoader
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 object ExtensionLoader {
 
-    private const val TRANSFORM_POLICY_ID = "transform-policy-v3"
+    private const val TRANSFORM_POLICY_ID = "transform-policy-v4"
+    private val DEX_ENTRY_PATTERN = Regex("^classes(?:([2-9][0-9]*))?\\.dex$")
 
     private val mapper = ObjectMapper().registerModule(kotlinModule())
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -172,7 +170,7 @@ object ExtensionLoader {
             // Check if archive already contains compiled JVM .class bytecode
             val hasJvmClasses = zip.entries().asSequence().any { it.name.endsWith(".class") }
 
-            val dexEntry = zip.getEntry("classes.dex")
+            val hasDexFiles = zip.entries().asSequence().any { DEX_ENTRY_PATTERN.matches(it.name) }
             if (hasJvmClasses) {
                 val secureJar = if (jarFile.name.endsWith("-secure.jar")) {
                     jarFile
@@ -193,46 +191,21 @@ object ExtensionLoader {
                     AppLogger.i("[PluginLoader] Using cached Secure JVM JAR: ${secureJar.name}")
                 }
                 jarToLoad = secureJar
-            } else if (dexEntry != null) {
+            } else if (hasDexFiles) {
                 val convertedJar = File(jarFile.parentFile, jarFile.nameWithoutExtension + "-jvm.jar")
                 val isCacheValid = convertedJar.exists() && cacheMatches(convertedJar) &&
                     (pluginClassName == null || checkJarHasClass(convertedJar, pluginClassName!!))
 
                 if (!isCacheValid) {
                     AppLogger.i("[PluginLoader] Transpiling Dalvik DEX -> JVM JAR for ${jarFile.name}...")
-                    val dexFile = File(jarFile.parentFile, jarFile.nameWithoutExtension + ".dex")
                     try {
-                        zip.getInputStream(dexEntry).use { input ->
-                            Files.copy(input, dexFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                        }
-
-                        try {
-                            AppLogger.i("[PluginLoader] Starting Dex2Jar translation...")
-                            Dex2jarCmd().doMain("-f", dexFile.absolutePath, "-o", convertedJar.absolutePath)
-                            AppLogger.i("[PluginLoader] Dex2Jar translation finished.")
-                        } catch (t: Throwable) {
-                            AppLogger.e("[PluginLoader] Dex2jarCmd().doMain failed. Trying fallback...", t)
-                            try {
-                                Dex2jarCmd.main("-f", dexFile.absolutePath, "-o", convertedJar.absolutePath)
-                                AppLogger.i("[PluginLoader] Dex2Jar fallback translation finished.")
-                            } catch (t2: Throwable) {
-                                AppLogger.e("[PluginLoader] Dex2Jar fallback completely failed!", t2)
-                                convertedJar.delete()
-                                throw IllegalStateException("Failed to transpile Dalvik DEX to JVM bytecode for ${jarFile.name}: ${t2.message}", t2)
-                            }
-                        }
-
-                        if (!convertedJar.exists() || convertedJar.length() == 0L) {
-                            convertedJar.delete()
-                            throw IllegalStateException("Dex2Jar translation finished but no valid JAR was produced at ${convertedJar.absolutePath}")
-                        } else {
-                            PluginBytecodeTransformer.transform(convertedJar)
-                            markCache(convertedJar)
-                        }
-                    } finally {
-                        try {
-                            dexFile.delete()
-                        } catch (_: Throwable) {}
+                        DexToJvmTranslator.translateArchive(jarFile, convertedJar)
+                        PluginBytecodeTransformer.transform(convertedJar)
+                        markCache(convertedJar)
+                    } catch (failure: Throwable) {
+                        convertedJar.delete()
+                        File(convertedJar.path + ".identity").delete()
+                        throw failure
                     }
                 } else {
                     AppLogger.i("[PluginLoader] Using cached JVM JAR: ${convertedJar.name}")

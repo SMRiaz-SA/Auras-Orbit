@@ -77,15 +77,6 @@ class LibraryComponent(
     val viewModel = rootInstanceKeeper.getOrCreate(key = "LibraryViewModel") { LibraryViewModel() }
 }
 
-class TrackerLibraryComponent(
-    componentContext: ComponentContext,
-    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
-) : ComponentContext by componentContext {
-    val viewModel = rootInstanceKeeper.getOrCreate(key = "TrackerLibraryViewModel") {
-        com.lagradost.cloudstream3.desktop.ui.screens.tracker.TrackerLibraryViewModel()
-    }
-}
-
 class DownloadsComponent(
     componentContext: ComponentContext,
     rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,

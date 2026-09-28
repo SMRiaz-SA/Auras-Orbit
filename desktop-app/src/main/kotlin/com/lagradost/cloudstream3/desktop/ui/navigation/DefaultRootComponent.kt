@@ -62,9 +62,6 @@ class DefaultRootComponent(
             is Config.Library -> RootComponent.Child.Library(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.LibraryComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
             )
-            is Config.TrackerLibrary -> RootComponent.Child.TrackerLibrary(
-                com.lagradost.cloudstream3.desktop.ui.navigation.components.TrackerLibraryComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
-            )
             is Config.Downloads -> RootComponent.Child.Downloads(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.DownloadsComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
             )
@@ -125,7 +122,6 @@ class DefaultRootComponent(
             is Config.Explore,
             is Config.Search,
             is Config.Library,
-            is Config.TrackerLibrary,
             is Config.Downloads,
             is Config.History,
             is Config.Extensions,

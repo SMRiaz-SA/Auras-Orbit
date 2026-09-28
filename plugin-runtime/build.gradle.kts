@@ -30,14 +30,15 @@ dependencies {
 
     // Dalvik-to-JVM transcompiler
     implementation("de.femtopedia.dex2jar:dex-tools:2.4.38")
+    implementation(libs.fastutil) // Required by the DEX method splitter
 
     // JSON for manifest parsing
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
 
     // ASM Bytecode Manipulation for Static Verification
-    implementation("org.ow2.asm:asm:9.6")
-    implementation("org.ow2.asm:asm-tree:9.6")
-    implementation("org.ow2.asm:asm-commons:9.6")
+    implementation(libs.asm)
+    implementation(libs.asm.tree)
+    implementation(libs.asm.commons)
 
     // Rhino JS Engine Sandbox
     implementation(libs.rhino)

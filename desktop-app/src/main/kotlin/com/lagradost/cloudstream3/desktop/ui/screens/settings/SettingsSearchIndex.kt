@@ -86,9 +86,6 @@ object SettingsSearchIndex {
         SettingsSearchEntry("Extension Repositories", LeafTab.EXTENSIONS, listOf("repositories", "repos", "plugins", "extensions", "sources", "url"), uiLabel = "Repositories"),
 
         // Extensions > Accounts tab
-        SettingsSearchEntry("AniList Tracker", LeafTab.ACCOUNTS, listOf("anilist", "tracker", "anime", "sync", "scrobble", "login"), uiLabel = "AniList"),
-        SettingsSearchEntry("MAL / MyAnimeList Tracker", LeafTab.ACCOUNTS, listOf("mal", "myanimelist", "tracker", "anime", "sync", "login"), uiLabel = "MAL"),
-        SettingsSearchEntry("SIMKL Tracker", LeafTab.ACCOUNTS, listOf("simkl", "tracker", "anime", "shows", "movies", "sync"), uiLabel = "SIMKL"),
         SettingsSearchEntry("Discord Rich Presence", LeafTab.ACCOUNTS, listOf("discord", "rpc", "rich presence", "status", "activity"), uiLabel = "Discord Rich Presence"),
 
         // Metadata & Integrations tab & Sub-screens

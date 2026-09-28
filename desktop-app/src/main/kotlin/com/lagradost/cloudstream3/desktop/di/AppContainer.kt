@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.desktop.data.hero.HeroRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.history.WatchHistoryRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.plugins.PluginRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.providers.ActiveProviderRepositoryImpl
-import com.lagradost.cloudstream3.desktop.data.tracking.TrackingRepositoryImpl
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.*
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.repository.BookmarksRepository
 import com.lagradost.cloudstream3.desktop.domain.category.interactor.*
@@ -18,8 +17,6 @@ import com.lagradost.cloudstream3.desktop.domain.history.repository.WatchHistory
 import com.lagradost.cloudstream3.desktop.domain.plugins.interactor.*
 import com.lagradost.cloudstream3.desktop.domain.plugins.repository.PluginRepository
 import com.lagradost.cloudstream3.desktop.domain.providers.repository.ActiveProviderRepository
-import com.lagradost.cloudstream3.desktop.domain.tracking.interactor.GetTrackingAccounts
-import com.lagradost.cloudstream3.desktop.domain.tracking.repository.TrackingRepository
 
 /**
  * Clean Architecture Dependency Injection Container.
@@ -31,7 +28,6 @@ interface AppContainer {
     val bookmarksRepository: BookmarksRepository
     val categoryRepository: CategoryRepository
     val pluginRepository: PluginRepository
-    val trackingRepository: TrackingRepository
     val activeProviderRepository: ActiveProviderRepository
     val heroRepository: HeroRepository
 
@@ -62,9 +58,6 @@ interface AppContainer {
     val addPluginRepository: AddPluginRepository
     val removePluginRepository: RemovePluginRepository
     val syncPluginRepositories: SyncPluginRepositories
-
-    // Tracking Interactors
-    val getTrackingAccounts: GetTrackingAccounts
 }
 
 class DefaultAppContainer : AppContainer {
@@ -72,7 +65,6 @@ class DefaultAppContainer : AppContainer {
     override val bookmarksRepository: BookmarksRepository by lazy { BookmarksRepositoryImpl() }
     override val categoryRepository: CategoryRepository by lazy { CategoryRepositoryImpl() }
     override val pluginRepository: PluginRepository by lazy { PluginRepositoryImpl() }
-    override val trackingRepository: TrackingRepository by lazy { TrackingRepositoryImpl() }
     override val activeProviderRepository: ActiveProviderRepository by lazy { ActiveProviderRepositoryImpl() }
     override val heroRepository: HeroRepository by lazy { HeroRepositoryImpl() }
 
@@ -99,8 +91,6 @@ class DefaultAppContainer : AppContainer {
     override val addPluginRepository by lazy { AddPluginRepository(pluginRepository) }
     override val removePluginRepository by lazy { RemovePluginRepository(pluginRepository) }
     override val syncPluginRepositories by lazy { SyncPluginRepositories(pluginRepository) }
-
-    override val getTrackingAccounts by lazy { GetTrackingAccounts(trackingRepository) }
 }
 
 /** Global thread-safe holder for non-Composable instantiation contexts (e.g. Decompose ComponentContext) */
