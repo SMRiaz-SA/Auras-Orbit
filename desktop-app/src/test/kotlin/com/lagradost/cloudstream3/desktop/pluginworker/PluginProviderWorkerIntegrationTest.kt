@@ -42,7 +42,8 @@ class PluginProviderWorkerIntegrationTest {
     fun providerRunsInChildAndRestartsAfterNonCooperativeTimeout() = runBlocking {
         PluginSettingsSchemaRegistry.schemas.remove("WorkerFixture_")
         val testRoot = Files.createTempDirectory("auras-provider-worker-").toFile()
-        val pluginFile = createFixturePlugin(testRoot)
+        // Preserve a non-canonical path to exercise the same identity mismatch as Windows short paths.
+        val pluginFile = createFixturePlugin(File(testRoot, "."))
         val crossExtractorPluginFile = createCrossExtractorPlugin(testRoot)
         val healthyPluginFile = createHealthyPlugin(testRoot)
         val trustedPluginFile = createTrustedPlugin(testRoot)
