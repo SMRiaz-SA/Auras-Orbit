@@ -6,7 +6,7 @@ androidGradlePlugin = "9.1.1"
 animeDb = "1.0.2"
 annotation = "1.10.0"
 appcompat = "1.7.1"
-biometric = "1.4.0-alpha06"
+biometric = "1.4.0-alpha07"
 buildkonfigGradlePlugin = "0.18.0"
 coil = { strictly = "3.5.0" } # Desktop targets JVM 21
 asm = "9.10.1"
