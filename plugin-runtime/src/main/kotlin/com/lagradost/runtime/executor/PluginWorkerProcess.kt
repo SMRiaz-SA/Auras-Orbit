@@ -43,6 +43,7 @@ object PluginWorkerProcess {
     private const val MAX_CAPTURE_BYTES = 4 * 1024 * 1024
     internal const val MAX_TIMEOUT_MS = 10 * 60 * 1000L
     private const val KILL_GRACE_MS = 250L
+    private const val DESCENDANT_EXIT_WAIT_MS = 2_000L
 
     suspend fun execute(
         command: List<String>,
@@ -140,17 +141,31 @@ object PluginWorkerProcess {
 
     internal fun destroyTree(process: Process) {
         val handle = process.toHandle()
-        runCatching {
+        val descendants = runCatching {
             handle.descendants().use { descendants ->
-                descendants.toList().asReversed().forEach { child ->
-                    runCatching { child.destroyForcibly() }
-                }
+                descendants.toList().asReversed()
             }
-        }
+        }.getOrDefault(emptyList())
+        descendants.forEach { child -> runCatching { child.destroyForcibly() } }
+        awaitExit(descendants, DESCENDANT_EXIT_WAIT_MS)
+        descendants.filter(ProcessHandle::isAlive).forEach { child -> runCatching { child.destroyForcibly() } }
+        awaitExit(descendants, KILL_GRACE_MS)
+
         runCatching { process.destroy() }
         runCatching { process.waitFor(KILL_GRACE_MS, TimeUnit.MILLISECONDS) }
         if (process.isAlive) runCatching { process.destroyForcibly() }
         runCatching { process.waitFor(KILL_GRACE_MS, TimeUnit.MILLISECONDS) }
+    }
+
+    private fun awaitExit(processes: List<ProcessHandle>, timeoutMs: Long) {
+        val exits = processes.asSequence()
+            .filter(ProcessHandle::isAlive)
+            .map(ProcessHandle::onExit)
+            .toList()
+        if (exits.isEmpty()) return
+        runCatching {
+            CompletableFuture.allOf(*exits.toTypedArray()).get(timeoutMs, TimeUnit.MILLISECONDS)
+        }
     }
 }
 

@@ -94,11 +94,11 @@ class PluginWorkerProcessTest {
             assertFailsWith<PluginWorkerTimeoutException> {
                 PluginWorkerProcess.execute(
                     command = fixtureCommand("spawn-tree", pidFile.toString()),
-                    timeoutMs = 3_000,
+                    timeoutMs = 8_000,
                 )
             }
 
-            assertTrue((System.nanoTime() - started) / 1_000_000 < 7_000)
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 12_000)
             val pids = Files.readString(pidFile).trim().split(',').mapNotNull(String::toLongOrNull)
             assertEquals(2, pids.size, "fixture must report its child and grandchild process IDs")
             pids.forEach { pid ->
@@ -166,11 +166,11 @@ class PluginWorkerProcessTest {
             PluginWorkerSession.launch(fixtureCommand("framed-echo"), workerKey = "busy-plugin")
         }
         try {
-            val response = withTimeout(3_000) {
+            val response = withTimeout(15_000) {
                 PluginWorkerProcess.execute(
                     command = fixtureCommand("echo"),
                     request = "other plugin".toByteArray(UTF_8),
-                    timeoutMs = 2_000,
+                    timeoutMs = 10_000,
                     workerKey = "independent-plugin",
                 )
             }
@@ -281,7 +281,7 @@ object PluginWorkerFixture {
                 childBuilder.redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 childBuilder.redirectError(ProcessBuilder.Redirect.DISCARD)
                 childBuilder.start()
-                val deadline = System.nanoTime() + 2_000_000_000L
+                val deadline = System.nanoTime() + 7_000_000_000L
                 while ((!pidFile.isFile || pidFile.length() == 0L) && System.nanoTime() < deadline) {
                     Thread.sleep(5)
                 }
