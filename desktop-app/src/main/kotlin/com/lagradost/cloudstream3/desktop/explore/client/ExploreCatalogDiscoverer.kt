@@ -59,7 +59,7 @@ object ExploreCatalogDiscoverer {
                             genres = genres,
                             supportsSearch = supportsSearch,
                             addonManifestUrl = addon.manifestUrl,
-                        )
+                        ),
                     )
                 }
             }

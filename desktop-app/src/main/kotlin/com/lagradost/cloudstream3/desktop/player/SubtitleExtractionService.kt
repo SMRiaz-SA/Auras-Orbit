@@ -4,6 +4,7 @@ import com.lagradost.cloudstream3.desktop.subtitles.SubtitlePipeline
 import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities.SubtitleEntity
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,6 +18,15 @@ import java.util.zip.ZipInputStream
 
 object SubtitleExtractionService {
     private const val TAG = "SubtitleExtractionService"
+    private const val MAX_SUBTITLE_BYTES = 32 * 1024 * 1024
+    private const val MAX_ARCHIVE_ENTRIES = 256
+    private const val MAX_PLAYLIST_SEGMENTS = 512
+
+    private suspend fun fetchSubtitleBytes(url: String): ByteArray =
+        com.lagradost.cloudstream3.app.get(url, timeout = 15000L).okhttpResponse.use { response ->
+            check(response.isSuccessful) { "Subtitle service returned HTTP ${response.code}" }
+            response.body.byteStream().readBoundedBytes(MAX_SUBTITLE_BYTES)
+        }
 
     suspend fun searchSubtitles(
         query: String,
@@ -70,13 +80,8 @@ object SubtitleExtractionService {
             var finalFile: File? = null
 
             if (fileUrl.startsWith("http", ignoreCase = true)) {
-                val resp = com.lagradost.cloudstream3.app.get(fileUrl, timeout = 15000L).okhttpResponse
-                if (!resp.isSuccessful) {
-                    AppLogger.w(TAG, "HTTP download failed with status ${resp.code} for $fileUrl")
-                    return@withContext null
-                }
-                val rawBytes = resp.body.bytes()
-                AppLogger.i(TAG, "Downloaded ${rawBytes.size} bytes from $fileUrl (HTTP ${resp.code})")
+                val rawBytes = fetchSubtitleBytes(fileUrl)
+                AppLogger.i(TAG, "Downloaded ${rawBytes.size} subtitle bytes")
 
                 if (rawBytes.isEmpty()) {
                     AppLogger.w(TAG, "Downloaded subtitle payload is empty")
@@ -87,12 +92,12 @@ object SubtitleExtractionService {
             } else if (fileUrl.startsWith("file://", ignoreCase = true)) {
                 val f = File(URI(fileUrl))
                 if (f.exists()) {
-                    finalFile = processAndNormalizeSubtitleBytes(f.readBytes(), name, fileUrl)
+                    finalFile = processAndNormalizeSubtitleBytes(f.inputStream().use { it.readBoundedBytes(MAX_SUBTITLE_BYTES) }, name, fileUrl)
                 }
             } else {
                 val f = File(fileUrl)
                 if (f.exists()) {
-                    finalFile = processAndNormalizeSubtitleBytes(f.readBytes(), name, fileUrl)
+                    finalFile = processAndNormalizeSubtitleBytes(f.inputStream().use { it.readBoundedBytes(MAX_SUBTITLE_BYTES) }, name, fileUrl)
                 }
             }
 
@@ -153,7 +158,7 @@ object SubtitleExtractionService {
                     ?: lines.firstOrNull { !it.trim().startsWith("#") && it.trim().isNotEmpty() }
                 if (uriMatch != null && currentBase != null) {
                     val resolvedChild = resolveUrl(currentBase, uriMatch)
-                    val childResp = com.lagradost.cloudstream3.app.get(resolvedChild, timeout = 10000L).text
+                    val childResp = fetchSubtitleBytes(resolvedChild).toString(Charsets.UTF_8)
                     if (childResp.isNotBlank()) {
                         currentLines = childResp.lines()
                         currentBase = resolvedChild
@@ -167,13 +172,18 @@ object SubtitleExtractionService {
                 .map { if (currentBase != null) resolveUrl(currentBase, it) else it }
 
             if (segmentUrls.isEmpty()) return null
+            require(segmentUrls.size <= MAX_PLAYLIST_SEGMENTS) { "Subtitle playlist contains too many segments" }
 
             val vttBuilder = StringBuilder("WEBVTT\n\n")
             var hasCues = false
+            var totalBytes = 0L
 
             for (segUrl in segmentUrls) {
+                val bytes = fetchSubtitleBytes(segUrl)
+                totalBytes += bytes.size
+                require(totalBytes <= MAX_SUBTITLE_BYTES) { "Subtitle playlist exceeds its byte budget" }
                 try {
-                    val segText = com.lagradost.cloudstream3.app.get(segUrl, timeout = 10000L).text
+                    val segText = bytes.toString(Charsets.UTF_8)
                     if (segText.isNotBlank()) {
                         val cleanLines = segText.trimStart('\uFEFF').lines()
                         for (line in cleanLines) {
@@ -209,18 +219,22 @@ object SubtitleExtractionService {
         }
     }
 
-    private fun extractFromArchiveIfPresent(bytes: ByteArray): ByteArray? {
+    internal fun extractFromArchiveIfPresent(bytes: ByteArray): ByteArray? {
         // ZIP Archive: PK (0x50 0x4B)
         if (bytes.size > 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
             AppLogger.i(TAG, "Detected ZIP archive payload, extracting subtitle entries...")
             try {
                 ZipInputStream(ByteArrayInputStream(bytes)).use { zipIn ->
                     var entry: ZipEntry? = zipIn.nextEntry
+                    var entries = 0
+                    var expandedBytes = 0
                     while (entry != null) {
+                        require(++entries <= MAX_ARCHIVE_ENTRIES) { "Subtitle archive contains too many entries" }
+                        val entryBytes = zipIn.readBoundedBytes(MAX_SUBTITLE_BYTES - expandedBytes)
+                        expandedBytes += entryBytes.size
                         val nameLower = entry.name.lowercase()
                         if (!entry.isDirectory && !nameLower.contains("__macosx") && !nameLower.startsWith(".")) {
                             if (nameLower.endsWith(".srt") || nameLower.endsWith(".vtt") || nameLower.endsWith(".ass") || nameLower.endsWith(".ssa") || nameLower.endsWith(".sub")) {
-                                val entryBytes = zipIn.readBytes()
                                 if (entryBytes.isNotEmpty()) {
                                     AppLogger.i(TAG, "Extracted valid subtitle '${entry.name}' (${entryBytes.size} bytes) from ZIP")
                                     return entryBytes
@@ -232,6 +246,7 @@ object SubtitleExtractionService {
                 }
             } catch (e: Exception) {
                 AppLogger.w(TAG, "Failed to unpack ZIP archive: ${e.message}")
+                throw java.io.IOException("Invalid or oversized subtitle archive", e)
             }
         }
         // GZIP Stream: 0x1F 0x8B
@@ -239,7 +254,7 @@ object SubtitleExtractionService {
             AppLogger.i(TAG, "Detected GZIP compressed stream, decompressing...")
             try {
                 GZIPInputStream(ByteArrayInputStream(bytes)).use { gzIn ->
-                    val decompressed = gzIn.readBytes()
+                    val decompressed = gzIn.readBoundedBytes(MAX_SUBTITLE_BYTES)
                     if (decompressed.isNotEmpty()) {
                         AppLogger.i(TAG, "Decompressed ${decompressed.size} bytes from GZIP stream")
                         return decompressed
@@ -247,6 +262,7 @@ object SubtitleExtractionService {
                 }
             } catch (e: Exception) {
                 AppLogger.w(TAG, "Failed to decompress GZIP stream: ${e.message}")
+                throw java.io.IOException("Invalid or oversized compressed subtitle", e)
             }
         }
         return null
@@ -294,4 +310,3 @@ object SubtitleExtractionService {
         return Pair(text, ext)
     }
 }
-

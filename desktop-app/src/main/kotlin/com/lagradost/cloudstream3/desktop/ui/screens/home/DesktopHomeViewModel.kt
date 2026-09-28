@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
-import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageData
 import com.lagradost.cloudstream3.MainPageRequest
@@ -192,13 +191,15 @@ class DesktopHomeViewModel(
         reloadEpoch: Long,
     ) {
         val pagesByProvider = coroutineScope {
-            providers.map { provider ->
+            providers.filter { it.hasMainPage }.map { provider ->
                 async(Dispatchers.IO) {
                     val result = SafePluginInvoker.invoke(
                         tag = "HomeDiscovery:${provider.name}:mainPage",
                         timeoutMs = SafePluginInvoker.TIMEOUT_LOAD_MS,
                     ) { provider.mainPage }
-                    val pages = if (result.isSuccess) result.getOrNull().orEmpty() else {
+                    val pages = if (result.isSuccess) {
+                        result.getOrNull().orEmpty()
+                    } else {
                         val failure = result.exceptionOrNull()
                         if (failure is kotlinx.coroutines.CancellationException) throw failure
                         com.lagradost.common.logging.AppLogger.w(

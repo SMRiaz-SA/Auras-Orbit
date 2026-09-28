@@ -1,7 +1,6 @@
 package com.lagradost.cloudstream3.desktop.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
@@ -12,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +22,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -41,14 +38,12 @@ import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager
 import com.lagradost.cloudstream3.desktop.ui.badges.CardMetadataConfig
 import com.lagradost.cloudstream3.desktop.ui.badges.CardTitleSanitizer
 import com.lagradost.cloudstream3.desktop.ui.badges.DesktopBadgeComponents
 import com.lagradost.cloudstream3.desktop.ui.badges.FastRatingEnricher
 import com.lagradost.cloudstream3.desktop.ui.badges.RatingSourcePolicy
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
-import com.lagradost.cloudstream3.desktop.ui.theme.ProviderBadgeDisplayMode
 import com.lagradost.cloudstream3.fixUrlNull
 
 @androidx.compose.runtime.Immutable
@@ -380,12 +375,12 @@ fun BoxScope.PosterBadges(
     val isAnime = item is com.lagradost.cloudstream3.AnimeSearchResponse
     val pluginHasSub = isAnime && (
         item.episodes[com.lagradost.cloudstream3.DubStatus.Subbed] != null ||
-        item.dubStatus?.contains(com.lagradost.cloudstream3.DubStatus.Subbed) == true
-    )
+            item.dubStatus?.contains(com.lagradost.cloudstream3.DubStatus.Subbed) == true
+        )
     val pluginHasDub = isAnime && (
         item.episodes[com.lagradost.cloudstream3.DubStatus.Dubbed] != null ||
-        item.dubStatus?.contains(com.lagradost.cloudstream3.DubStatus.Dubbed) == true
-    )
+            item.dubStatus?.contains(com.lagradost.cloudstream3.DubStatus.Dubbed) == true
+        )
 
     val pluginQualityText = item.quality?.name?.let { qName ->
         when {

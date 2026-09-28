@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 enum class RatingSourcePolicy {
     VERIFIED_ADDON, // Fetch verified rating from Cinemeta / AniList / TMDB
     SCRAPER_NATIVE, // Use raw scraper rating
-    SMART_HYBRID,    // Use scraper rating if valid; otherwise fallback to Verified Addon
+    SMART_HYBRID, // Use scraper rating if valid; otherwise fallback to Verified Addon
 }
 
 object CardMetadataConfig {
@@ -27,29 +27,33 @@ object CardMetadataConfig {
     const val KEY_RATING_POLICY = "pref_card_rating_source_policy"
 
     private val _autoCleanTitles = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(KEY_AUTO_CLEAN_TITLES) ?: true
+        DesktopDataStore.getKey<Boolean>(KEY_AUTO_CLEAN_TITLES) ?: true,
     )
     val autoCleanTitles: StateFlow<Boolean> = _autoCleanTitles.asStateFlow()
 
     private val _autoDetectSubDub = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(KEY_AUTO_DETECT_SUB_DUB) ?: true
+        DesktopDataStore.getKey<Boolean>(KEY_AUTO_DETECT_SUB_DUB) ?: true,
     )
     val autoDetectSubDub: StateFlow<Boolean> = _autoDetectSubDub.asStateFlow()
 
     private val _autoDetectQuality = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(KEY_AUTO_DETECT_QUALITY) ?: true
+        DesktopDataStore.getKey<Boolean>(KEY_AUTO_DETECT_QUALITY) ?: true,
     )
     val autoDetectQuality: StateFlow<Boolean> = _autoDetectQuality.asStateFlow()
 
     private val _showRatingBadges = MutableStateFlow(
-        DesktopDataStore.getKey<Boolean>(KEY_SHOW_RATING_BADGES) ?: true
+        DesktopDataStore.getKey<Boolean>(KEY_SHOW_RATING_BADGES) ?: true,
     )
     val showRatingBadges: StateFlow<Boolean> = _showRatingBadges.asStateFlow()
 
     private val _ratingPolicy = MutableStateFlow(
         DesktopDataStore.getKey<String>(KEY_RATING_POLICY)?.let {
-            try { RatingSourcePolicy.valueOf(it) } catch (_: Exception) { null }
-        } ?: RatingSourcePolicy.SMART_HYBRID
+            try {
+                RatingSourcePolicy.valueOf(it)
+            } catch (_: Exception) {
+                null
+            }
+        } ?: RatingSourcePolicy.SMART_HYBRID,
     )
     val ratingPolicy: StateFlow<RatingSourcePolicy> = _ratingPolicy.asStateFlow()
 

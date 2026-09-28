@@ -1,9 +1,9 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
 import com.lagradost.cloudstream3.AnimeSearchResponse
-import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
 import java.util.Locale

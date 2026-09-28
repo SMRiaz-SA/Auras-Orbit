@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -48,8 +49,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,7 +62,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.lazy.rememberLazyListState
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import kotlinx.coroutines.launch
@@ -88,7 +88,7 @@ fun GenreBrowseScreen(
                         url = effect.url,
                         preloadedName = effect.title,
                         preloadedPoster = effect.posterUrl,
-                    )
+                    ),
                 )
             }
         }
@@ -174,179 +174,179 @@ fun GenreBrowseScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (filtersExpanded) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("Provider", style = MaterialTheme.typography.labelLarge)
-                    ProviderPicker(
-                        providers = state.providers,
-                        selectedProvider = state.selectedProvider,
-                        onSelect = { viewModel.onEvent(GenreBrowseUiEvent.SelectProvider(it)) },
-                    )
-                    TextButton(onClick = { viewModel.onEvent(GenreBrowseUiEvent.RefreshProviders) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Refresh", fontSize = 11.sp)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "TMDB catalogue · StreamPlay details & playback",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    IconButton(
-                        onClick = { filtersExpanded = false },
-                        modifier = Modifier.size(32.dp),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(
-                            Icons.Default.ExpandMore,
-                            contentDescription = "Collapse filters",
-                            modifier = Modifier.rotate(180f),
+                        Text("Provider", style = MaterialTheme.typography.labelLarge)
+                        ProviderPicker(
+                            providers = state.providers,
+                            selectedProvider = state.selectedProvider,
+                            onSelect = { viewModel.onEvent(GenreBrowseUiEvent.SelectProvider(it)) },
                         )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GenreBrowseMediaType.entries.forEach { mediaType ->
-                        FilterChip(
-                            selected = state.mediaType == mediaType,
-                            onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectMediaType(mediaType)) },
-                            label = { Text(mediaType.label) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (mediaType == GenreBrowseMediaType.Movies) Icons.Default.Movie else Icons.Default.Tv,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
+                        TextButton(onClick = { viewModel.onEvent(GenreBrowseUiEvent.RefreshProviders) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Refresh", fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "TMDB catalogue · StreamPlay details & playback",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                }
-
-                if (state.selectedProvider != null) {
-                    if (state.isLoadingGenres) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Text("Loading genres…", style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else if (state.genres.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
+                        IconButton(
+                            onClick = { filtersExpanded = false },
+                            modifier = Modifier.size(32.dp),
                         ) {
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        genreListState.animateScrollToItem((genreListState.firstVisibleItemIndex - 4).coerceAtLeast(0))
-                                    }
-                                },
-                                enabled = canScrollGenresLeft,
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Scroll genres left")
-                            }
-                            LazyRow(
-                                modifier = Modifier.weight(1f),
-                                state = genreListState,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp),
-                            ) {
-                                item(key = "all-genres") {
-                                    FilterChip(
-                                        selected = state.selectedGenre == null,
-                                        onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectGenre(null)) },
-                                        label = { Text("All") },
-                                    )
-                                }
-                                items(state.genres, key = { it.id }) { genre ->
-                                    FilterChip(
-                                        selected = state.selectedGenre?.id == genre.id,
-                                        onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectGenre(genre)) },
-                                        label = { Text(genre.name, maxLines = 1, softWrap = false) },
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val nextIndex = (genreListState.firstVisibleItemIndex + 4)
-                                            .coerceAtMost((genreListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
-                                        genreListState.animateScrollToItem(nextIndex)
-                                    }
-                                },
-                                enabled = canScrollGenresRight,
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowBack,
-                                    modifier = Modifier.rotate(180f),
-                                    contentDescription = "Scroll genres right",
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Topics", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        topicListState.animateScrollToItem((topicListState.firstVisibleItemIndex - 4).coerceAtLeast(0))
-                                    }
-                                },
-                                enabled = canScrollTopicsLeft,
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Scroll topics left")
-                            }
-                            LazyRow(
-                                modifier = Modifier.weight(1f),
-                                state = topicListState,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(horizontal = 4.dp),
-                            ) {
-                                item(key = "all-topics") {
-                                    FilterChip(
-                                        selected = state.selectedTopic == null,
-                                        onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectTopic(null)) },
-                                        label = { Text("All") },
-                                    )
-                                }
-                                items(GenreBrowseTopic.entries, key = { it.name }) { topic ->
-                                    FilterChip(
-                                        selected = state.selectedTopic == topic,
-                                        onClick = {
-                                            val nextTopic = if (state.selectedTopic == topic) null else topic
-                                            viewModel.onEvent(GenreBrowseUiEvent.SelectTopic(nextTopic))
-                                        },
-                                        label = { Text(topic.label, maxLines = 1, softWrap = false) },
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val nextIndex = (topicListState.firstVisibleItemIndex + 4)
-                                            .coerceAtMost((topicListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
-                                        topicListState.animateScrollToItem(nextIndex)
-                                    }
-                                },
-                                enabled = canScrollTopicsRight,
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowBack,
-                                    modifier = Modifier.rotate(180f),
-                                    contentDescription = "Scroll topics right",
-                                )
-                            }
+                            Icon(
+                                Icons.Default.ExpandMore,
+                                contentDescription = "Collapse filters",
+                                modifier = Modifier.rotate(180f),
+                            )
                         }
                     }
-                }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GenreBrowseMediaType.entries.forEach { mediaType ->
+                            FilterChip(
+                                selected = state.mediaType == mediaType,
+                                onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectMediaType(mediaType)) },
+                                label = { Text(mediaType.label) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (mediaType == GenreBrowseMediaType.Movies) Icons.Default.Movie else Icons.Default.Tv,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    if (state.selectedProvider != null) {
+                        if (state.isLoadingGenres) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Loading genres…", style = MaterialTheme.typography.bodySmall)
+                            }
+                        } else if (state.genres.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            genreListState.animateScrollToItem((genreListState.firstVisibleItemIndex - 4).coerceAtLeast(0))
+                                        }
+                                    },
+                                    enabled = canScrollGenresLeft,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Scroll genres left")
+                                }
+                                LazyRow(
+                                    modifier = Modifier.weight(1f),
+                                    state = genreListState,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                ) {
+                                    item(key = "all-genres") {
+                                        FilterChip(
+                                            selected = state.selectedGenre == null,
+                                            onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectGenre(null)) },
+                                            label = { Text("All") },
+                                        )
+                                    }
+                                    items(state.genres, key = { it.id }) { genre ->
+                                        FilterChip(
+                                            selected = state.selectedGenre?.id == genre.id,
+                                            onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectGenre(genre)) },
+                                            label = { Text(genre.name, maxLines = 1, softWrap = false) },
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val nextIndex = (genreListState.firstVisibleItemIndex + 4)
+                                                .coerceAtMost((genreListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+                                            genreListState.animateScrollToItem(nextIndex)
+                                        }
+                                    },
+                                    enabled = canScrollGenresRight,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.ArrowBack,
+                                        modifier = Modifier.rotate(180f),
+                                        contentDescription = "Scroll genres right",
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Topics", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            topicListState.animateScrollToItem((topicListState.firstVisibleItemIndex - 4).coerceAtLeast(0))
+                                        }
+                                    },
+                                    enabled = canScrollTopicsLeft,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Scroll topics left")
+                                }
+                                LazyRow(
+                                    modifier = Modifier.weight(1f),
+                                    state = topicListState,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                ) {
+                                    item(key = "all-topics") {
+                                        FilterChip(
+                                            selected = state.selectedTopic == null,
+                                            onClick = { viewModel.onEvent(GenreBrowseUiEvent.SelectTopic(null)) },
+                                            label = { Text("All") },
+                                        )
+                                    }
+                                    items(GenreBrowseTopic.entries, key = { it.name }) { topic ->
+                                        FilterChip(
+                                            selected = state.selectedTopic == topic,
+                                            onClick = {
+                                                val nextTopic = if (state.selectedTopic == topic) null else topic
+                                                viewModel.onEvent(GenreBrowseUiEvent.SelectTopic(nextTopic))
+                                            },
+                                            label = { Text(topic.label, maxLines = 1, softWrap = false) },
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val nextIndex = (topicListState.firstVisibleItemIndex + 4)
+                                                .coerceAtMost((topicListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+                                            topicListState.animateScrollToItem(nextIndex)
+                                        }
+                                    },
+                                    enabled = canScrollTopicsRight,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.ArrowBack,
+                                        modifier = Modifier.rotate(180f),
+                                        contentDescription = "Scroll topics right",
+                                    )
+                                }
+                            }
+                        }
+                    }
                 } else {
                     val filterSummary = listOf(
                         state.selectedProvider?.name ?: "Choose provider",

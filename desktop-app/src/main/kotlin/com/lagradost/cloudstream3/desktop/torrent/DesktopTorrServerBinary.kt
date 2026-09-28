@@ -3,11 +3,10 @@ package com.lagradost.cloudstream3.desktop.torrent
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import com.lagradost.common.storage.DesktopDataStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
@@ -18,8 +17,46 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class DesktopTorrServerBinary {
-    private var process: Process? = null
+internal interface TorrServerRuntime {
+    suspend fun resolveBinary(fallback: suspend () -> File): File
+
+    fun launch(command: List<String>, workingDirectory: File, logFile: File): Process
+
+    fun isHealthy(baseUrl: String): Boolean
+}
+
+private object ProductionTorrServerRuntime : TorrServerRuntime {
+    private val healthClient = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofMillis(500))
+        .build()
+
+    override suspend fun resolveBinary(fallback: suspend () -> File): File = fallback()
+
+    override fun launch(command: List<String>, workingDirectory: File, logFile: File): Process = ProcessBuilder(command)
+        .directory(workingDirectory)
+        .redirectErrorStream(true)
+        .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
+        .start()
+
+    override fun isHealthy(baseUrl: String): Boolean = try {
+        val request = HttpRequest.newBuilder(URI.create("$baseUrl/echo"))
+            .timeout(Duration.ofMillis(800))
+            .GET()
+            .build()
+        val response = healthClient.send(request, HttpResponse.BodyHandlers.ofString())
+        response.statusCode() in 200..299
+    } catch (_: Exception) {
+        false
+    }
+}
+
+class DesktopTorrServerBinary internal constructor(
+    private val runtime: TorrServerRuntime = ProductionTorrServerRuntime,
+) {
+    @Volatile private var process: Process? = null
+
+    @Volatile private var stopRequested = false
+    private val lifecycleLock = Any()
     private val isStarting = AtomicBoolean(false)
 
     val port: Int
@@ -27,17 +64,6 @@ class DesktopTorrServerBinary {
 
     val baseUrl: String
         get() = "http://127.0.0.1:$port"
-
-    private val healthClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofMillis(500))
-        .build()
-
-    private val httpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
 
     init {
         Runtime.getRuntime().addShutdownHook(
@@ -51,110 +77,134 @@ class DesktopTorrServerBinary {
 
     suspend fun start(): Unit = withContext(Dispatchers.IO) {
         if (isRunning()) {
+            check(ownedProcessIsAlive()) { "The TorrServer port is already occupied by another process. Choose another port." }
             AppLogger.d("TorrServer already running on port $port")
             return@withContext
         }
 
-        if (!isStarting.compareAndSet(false, true)) {
+        val acquiredStart = synchronized(lifecycleLock) {
+            if (!isStarting.compareAndSet(false, true)) {
+                false
+            } else {
+                stopRequested = false
+                true
+            }
+        }
+        if (!acquiredStart) {
             // Another coroutine is already starting it, wait up to 10s
             for (i in 0..50) {
-                if (isRunning()) return@withContext
+                if (isRunning()) {
+                    check(ownedProcessIsAlive()) { "The TorrServer port is already occupied by another process. Choose another port." }
+                    return@withContext
+                }
+                if (!isStarting.get()) break
                 delay(200)
             }
-            return@withContext
+            if (isRunning()) {
+                check(ownedProcessIsAlive()) { "The TorrServer port is already occupied by another process. Choose another port." }
+                return@withContext
+            }
+            throw IllegalStateException("The TorrServer start attempt did not become healthy within 10 seconds")
         }
 
+        var startedProcess: Process? = null
+        var ready = false
         try {
-            killOrphanedProcess()
-            val binaryFile = resolveOrDownloadBinary()
+            if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
+            val binaryFile = runtime.resolveBinary { resolveOrDownloadBinary() }
+            if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
 
             val cacheDir = File(PlatformPaths.appDataDir, "torrserver/cache").apply { mkdirs() }
             val logFile = File(PlatformPaths.logsDir, "torrserver.log")
 
             val command = listOf(
                 binaryFile.absolutePath,
-                "-p", port.toString(),
-                "-d", cacheDir.absolutePath,
+                "-p",
+                port.toString(),
+                "--ip",
+                "127.0.0.1",
+                "-d",
+                cacheDir.absolutePath,
                 "--ssl=false",
             )
 
             AppLogger.i("Starting TorrServer: ${command.joinToString(" ")}")
 
-            val procBuilder = ProcessBuilder(command)
-                .directory(binaryFile.parentFile)
-                .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
-
-            val proc = procBuilder.start()
-            process = proc
+            val proc = runtime.launch(command, binaryFile.parentFile, logFile)
+            startedProcess = proc
+            val stoppedBeforeRegistration = synchronized(lifecycleLock) {
+                if (stopRequested) {
+                    true
+                } else {
+                    process = proc
+                    false
+                }
+            }
+            if (stoppedBeforeRegistration) {
+                terminate(proc)
+                throw IllegalStateException("TorrServer startup was stopped before the process was registered")
+            }
 
             val startTime = System.currentTimeMillis()
             while (System.currentTimeMillis() - startTime < STARTUP_TIMEOUT_MS) {
-                if (isRunning()) {
-                    AppLogger.i("TorrServer started successfully on port $port (${System.currentTimeMillis() - startTime}ms)")
-                    return@withContext
+                if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
+
+                if (runtime.isHealthy(baseUrl)) {
+                    ready = synchronized(lifecycleLock) {
+                        process === proc && !stopRequested && proc.isAlive
+                    }
+                    if (ready) {
+                        AppLogger.i("TorrServer started successfully on port $port (${System.currentTimeMillis() - startTime}ms)")
+                        return@withContext
+                    }
+                    throw IllegalStateException("TorrServer stopped before startup completed")
                 }
 
                 if (!proc.isAlive) {
                     val exitCode = runCatching { proc.exitValue() }.getOrNull()
-                    process = null
                     throw IllegalStateException("TorrServer process exited prematurely with code $exitCode. See log: ${logFile.absolutePath}")
                 }
                 delay(HEALTH_CHECK_INTERVAL_MS)
             }
 
-            stop()
             throw IllegalStateException("TorrServer failed to respond to health check within ${STARTUP_TIMEOUT_MS / 1000}s")
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } finally {
+            if (!ready) startedProcess?.let(::releaseAndTerminate)
             isStarting.set(false)
         }
     }
 
-    fun isRunning(): Boolean {
-        return try {
-            val request = HttpRequest.newBuilder(URI.create("$baseUrl/echo"))
-                .timeout(Duration.ofMillis(800))
-                .GET()
-                .build()
-            val response = healthClient.send(request, HttpResponse.BodyHandlers.ofString())
-            response.statusCode() in 200..299
-        } catch (_: Exception) {
-            false
-        }
-    }
+    fun isRunning(): Boolean = runtime.isHealthy(baseUrl)
 
     fun stop() {
-        try {
-            val request = HttpRequest.newBuilder(URI.create("$baseUrl/shutdown"))
-                .timeout(Duration.ofSeconds(2))
-                .GET()
-                .build()
-            healthClient.send(request, HttpResponse.BodyHandlers.discarding())
-        } catch (_: Exception) {
+        val owned = synchronized(lifecycleLock) {
+            if (isStarting.get()) stopRequested = true
+            process.also { process = null }
         }
-
-        process?.let { proc ->
-            try {
-                if (!proc.waitFor(2_000L, TimeUnit.MILLISECONDS) && proc.isAlive) {
-                    proc.destroyForcibly()
-                }
-            } catch (_: Exception) {
-                proc.destroyForcibly()
-            }
-        }
-        process = null
+        if (owned == null) return
+        terminate(owned)
         AppLogger.d("TorrServer stopped")
     }
 
-    private fun killOrphanedProcess() {
+    private fun ownedProcessIsAlive(): Boolean = synchronized(lifecycleLock) { process?.isAlive == true }
+
+    private fun releaseAndTerminate(owned: Process) {
+        synchronized(lifecycleLock) {
+            if (process === owned) process = null
+        }
+        terminate(owned)
+    }
+
+    private fun terminate(owned: Process) {
         try {
-            val request = HttpRequest.newBuilder(URI.create("$baseUrl/shutdown"))
-                .timeout(Duration.ofSeconds(2))
-                .GET()
-                .build()
-            healthClient.send(request, HttpResponse.BodyHandlers.discarding())
-            Thread.sleep(300)
+            owned.destroy()
+            if (!owned.waitFor(2_000L, TimeUnit.MILLISECONDS) && owned.isAlive) {
+                owned.destroyForcibly()
+            }
         } catch (_: Exception) {
+            owned.destroyForcibly()
         }
     }
 

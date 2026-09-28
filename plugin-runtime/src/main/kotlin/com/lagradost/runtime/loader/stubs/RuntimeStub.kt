@@ -1,81 +1,48 @@
 package com.lagradost.runtime.loader.stubs
 
-import com.lagradost.common.logging.AppLogger
-
+/** Bytecode compatibility shims that preserve normal JVM Runtime behavior. */
 object RuntimeStub {
     @JvmStatic
-    fun exec(runtime: Runtime, command: String): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec($command)")
-        return null
-    }
+    fun exec(runtime: Runtime, command: String): Process = runtime.exec(command)
 
     @JvmStatic
-    fun exec(runtime: Runtime, cmdarray: Array<String>): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec(${cmdarray.joinToString()})")
-        return null
-    }
+    fun exec(runtime: Runtime, cmdarray: Array<String>): Process = runtime.exec(cmdarray)
 
     @JvmStatic
-    fun exec(runtime: Runtime, cmdarray: Array<String>, envp: Array<String>?): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec(${cmdarray.joinToString()})")
-        return null
-    }
+    fun exec(runtime: Runtime, cmdarray: Array<String>, envp: Array<String>?): Process = runtime.exec(cmdarray, envp)
 
     @JvmStatic
-    fun exec(runtime: Runtime, cmdarray: Array<String>, envp: Array<String>?, dir: java.io.File?): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec(${cmdarray.joinToString()})")
-        return null
-    }
+    fun exec(runtime: Runtime, cmdarray: Array<String>, envp: Array<String>?, dir: java.io.File?): Process =
+        runtime.exec(cmdarray, envp, dir)
 
     @JvmStatic
-    fun exec(runtime: Runtime, command: String, envp: Array<String>?): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec($command)")
-        return null
-    }
+    fun exec(runtime: Runtime, command: String, envp: Array<String>?): Process = runtime.exec(command, envp)
 
     @JvmStatic
-    fun exec(runtime: Runtime, command: String, envp: Array<String>?, dir: java.io.File?): Process? {
-        AppLogger.i("Plugin Security: Blocked Runtime.exec($command)")
-        return null
-    }
+    fun exec(runtime: Runtime, command: String, envp: Array<String>?, dir: java.io.File?): Process =
+        runtime.exec(command, envp, dir)
 
     @JvmStatic
-    fun loadLibrary(runtime: Runtime, libname: String) {
-        AppLogger.i("Plugin Security: Blocked Runtime.loadLibrary($libname)")
-    }
+    fun loadLibrary(runtime: Runtime, libname: String) = runtime.loadLibrary(libname)
 
     @JvmStatic
-    fun load(runtime: Runtime, filename: String) {
-        AppLogger.i("Plugin Security: Blocked Runtime.load($filename)")
-    }
+    fun load(runtime: Runtime, filename: String) = runtime.load(filename)
 
     @JvmStatic
-    fun exit(runtime: Runtime, status: Int) {
-        AppLogger.i("Plugin Security: Blocked Runtime.exit($status)")
-    }
+    fun exit(runtime: Runtime, status: Int) = runtime.exit(status)
 
     @JvmStatic
-    fun halt(runtime: Runtime, status: Int) {
-        AppLogger.i("Plugin Security: Blocked Runtime.halt($status)")
-    }
+    fun halt(runtime: Runtime, status: Int) = runtime.halt(status)
 
     @JvmStatic
-    fun availableProcessors(runtime: Runtime): Int {
-        return 8 // Standard octa-core mock profile
-    }
+    fun availableProcessors(runtime: Runtime): Int = runtime.availableProcessors()
 
     @JvmStatic
-    fun maxMemory(runtime: Runtime): Long {
-        return 16L * 1024 * 1024 * 1024 // 16 GB heap mock
-    }
+    fun maxMemory(runtime: Runtime): Long = runtime.maxMemory()
 
     @JvmStatic
-    fun totalMemory(runtime: Runtime): Long {
-        return 16L * 1024 * 1024 * 1024 // 16 GB heap mock
-    }
+    fun totalMemory(runtime: Runtime): Long = runtime.totalMemory()
 
     @JvmStatic
-    fun freeMemory(runtime: Runtime): Long {
-        return 12L * 1024 * 1024 * 1024 // 12 GB free memory mock
-    }
+    fun freeMemory(runtime: Runtime): Long = runtime.freeMemory()
 }

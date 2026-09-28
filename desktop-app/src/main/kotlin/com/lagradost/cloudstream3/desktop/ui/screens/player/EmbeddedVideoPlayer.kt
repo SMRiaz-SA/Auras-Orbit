@@ -107,6 +107,9 @@ fun EmbeddedVideoPlayer(
     if (currentLaunchData == null) return
 
     val actualLaunchData = currentLaunchData
+    val lastSavedHistorySecond = remember(actualLaunchData.history.parentId, actualLaunchData.history.episodeId) {
+        java.util.concurrent.atomic.AtomicLong(actualLaunchData.history.position)
+    }
 
     var isLoading by remember(actualLaunchData.history.episodeId) { mutableStateOf(true) }
     var showSources by remember { mutableStateOf(false) }
@@ -135,7 +138,7 @@ fun EmbeddedVideoPlayer(
                 title = showTitle,
                 episode = epNum,
                 season = seasonNum,
-                durationSeconds = 0.0
+                durationSeconds = 0.0,
             )
         }
     }
@@ -174,7 +177,6 @@ fun EmbeddedVideoPlayer(
                     val uiFailedLinks = currentDisplayLinks
                         .mapIndexedNotNull { index, link -> uiState.failedLinks[link.url]?.let { index to it } }
                         .toMap()
-
 
                     val displayTitle = if (targetEpisodeData != null) {
                         buildString {
@@ -255,6 +257,7 @@ fun EmbeddedVideoPlayer(
                         shouldPauseForResume = false,
                         links = currentDisplayLinks,
                         currentLinkIndex = displayLinkIndex,
+                        playbackGeneration = uiState.playbackGeneration,
                         episodes = episodes,
                         currentEpisodeId = displayEpisodeId,
                         currentEpisodeNumber = displayEpisodeNumber,
@@ -262,6 +265,7 @@ fun EmbeddedVideoPlayer(
                         isLoading = isLoading || isLoadingNextEpisode,
                         loadingStatusText = displayLoadingStatus,
                         isProbing = !isExiting && (phase is com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase.Scraping || phase is com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase.Probing),
+                        isPlaybackReady = phase is com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase.Playing,
                         isScraping = !isExiting && (phase is com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase.Scraping),
                         failedLinks = uiFailedLinks,
                         backdropUrl = resolvedBackdropUrl,
@@ -322,19 +326,20 @@ fun EmbeddedVideoPlayer(
                                     title = showTitle,
                                     episode = epNum,
                                     season = seasonNum,
-                                    durationSeconds = playerState.durationMs.value / 1000.0
+                                    durationSeconds = playerState.durationMs.value / 1000.0,
                                 )
                             }
                         },
                         onPositionChange = { posMs, durMs ->
                             if (safeLink == null || isLoading || isLoadingNextEpisode) return@ComposeNativeWebPlayer
-                            playerState.updatePositionFromPlayer(posMs)
                             playerState.updateDurationFromPlayer(durMs)
-                            val durSec = durMs / 1000L
-                            val posSec = posMs / 1000L
-                            if (posSec > 0) {
+                            // Use the canonical, seek-debounced position instead of the raw MPV
+                            // sample, which can briefly report the pre-seek time.
+                            val acceptedPosSec = playerState.positionMs.value / 1000L
+                            val durSec = playerState.durationMs.value / 1000L
+                            if (acceptedPosSec >= 0 && lastSavedHistorySecond.getAndSet(acceptedPosSec) != acceptedPosSec) {
                                 val updatedHistory = actualLaunchData.history.copy(
-                                    position = posSec,
+                                    position = acceptedPosSec,
                                     duration = if (durSec > 0) durSec else actualLaunchData.history.duration,
                                     updateTime = System.currentTimeMillis(),
                                 )

@@ -9,12 +9,22 @@ import com.lagradost.cloudstream3.desktop.ui.screens.player.PlayerState
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.player.impl.PlayerLinkHandler
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.awt.Canvas
 import java.awt.Color
 import java.awt.event.*
 import java.io.File
+
+internal fun extractVideoHost(url: String): String? {
+    if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return null
+
+    return try {
+        java.net.URI(url).host
+    } catch (e: Exception) {
+        com.lagradost.common.logging.AppLogger.w("Failed to extract host from video URL", e)
+        null
+    }
+}
 
 private val ISO_639_LANG_MAP = mapOf(
     "eng" to "English", "en" to "English",
@@ -79,7 +89,9 @@ internal fun cleanTrackDisplayName(
         } catch (_: Throwable) {
             cleanLang.uppercase()
         }
-    } else null
+    } else {
+        null
+    }
 
     var title = rawTitle?.trim() ?: ""
 
@@ -108,7 +120,13 @@ internal fun cleanTrackDisplayName(
             }
         }
         resolvedLang != null -> resolvedLang
-        else -> if (type == "audio") "Audio $id" else if (type == "video") "Video $id" else "Subtitle $id"
+        else -> if (type == "audio") {
+            "Audio $id"
+        } else if (type == "video") {
+            "Video $id"
+        } else {
+            "Subtitle $id"
+        }
     }
 
     if (type == "sub") {
@@ -165,6 +183,7 @@ fun BaseMpvPlayer(
     onCloseRequest: () -> Unit,
     isExiting: Boolean = false,
     isLive: Boolean = false,
+    playbackGeneration: Long = 0L,
     onFullscreenToggle: (() -> Unit)? = null,
     playerState: com.lagradost.cloudstream3.desktop.ui.screens.player.PlayerState? = null,
     modifier: Modifier = Modifier.fillMaxSize(),
@@ -181,6 +200,7 @@ fun BaseMpvPlayer(
     val scope = rememberCoroutineScope()
     var showShortcutsModal by remember { mutableStateOf(false) }
     var isEngineReady by remember { mutableStateOf(false) }
+    var activeProxySessionId by remember { mutableStateOf<String?>(null) }
 
     val currentOnPlaybackReady by rememberUpdatedState(onPlaybackReady)
     val currentOnPlaybackError by rememberUpdatedState(onPlaybackError)
@@ -217,12 +237,17 @@ fun BaseMpvPlayer(
 
     DisposableEffect(Unit) {
         onDispose {
+            activeProxySessionId?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
+            activeProxySessionId = null
             com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine.stopStream()
         }
     }
 
-    LaunchedEffect(link, isEngineReady) {
+    LaunchedEffect(link, isEngineReady, playbackGeneration) {
         if (!isEngineReady) return@LaunchedEffect
+
+        activeProxySessionId?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
+        activeProxySessionId = null
 
         if (link == null) {
             com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine.stopStream()
@@ -284,6 +309,7 @@ fun BaseMpvPlayer(
             currentOnPlaybackError(it.message ?: "Validation failed")
             return@LaunchedEffect
         }
+        activeProxySessionId = validated.proxySessionId
 
         playerState?.reset()
 
@@ -430,12 +456,7 @@ fun BaseMpvPlayer(
         playerState?._isPaused?.value = shouldPause
 
         val sessionId = validated.proxySessionId
-        val videoUrlHost = try {
-            java.net.URI(link.url).host
-        } catch (e: Exception) {
-            com.lagradost.common.logging.AppLogger.w("Failed to extract host from video URL", e)
-            null
-        }
+        val videoUrlHost = extractVideoHost(link.url)
 
         val finalSubtitles = subtitles.map { sub ->
             var fixedUrl = sub.url

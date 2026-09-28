@@ -45,26 +45,32 @@ internal object SimklEpisodeProgress {
             if (media.title.isNotBlank()) put("title", media.title)
             media.year?.takeIf { it > 0 }?.let { put("year", it) }
             if (anime) {
-                put("episodes", refs.map { (ref, watchedAt) ->
-                    buildMap<String, Any> {
-                        put("number", ref.number)
-                        watchedAt?.takeIf { it > 0 }?.let { put("watched_at", Instant.ofEpochMilli(it).toString()) }
-                    }
-                })
+                put(
+                    "episodes",
+                    refs.map { (ref, watchedAt) ->
+                        buildMap<String, Any> {
+                            put("number", ref.number)
+                            watchedAt?.takeIf { it > 0 }?.let { put("watched_at", Instant.ofEpochMilli(it).toString()) }
+                        }
+                    },
+                )
             } else {
-                put("seasons", refs.groupBy { (ref, _) -> requireNotNull(ref.season) }
-                    .toSortedMap()
-                    .map { (season, seasonEvents) ->
-                        mapOf(
-                            "number" to season,
-                            "episodes" to seasonEvents.map { (ref, watchedAt) ->
-                                buildMap<String, Any> {
-                                    put("number", ref.number)
-                                    watchedAt?.takeIf { it > 0 }?.let { put("watched_at", Instant.ofEpochMilli(it).toString()) }
-                                }
-                            },
-                        )
-                    })
+                put(
+                    "seasons",
+                    refs.groupBy { (ref, _) -> requireNotNull(ref.season) }
+                        .toSortedMap()
+                        .map { (season, seasonEvents) ->
+                            mapOf(
+                                "number" to season,
+                                "episodes" to seasonEvents.map { (ref, watchedAt) ->
+                                    buildMap<String, Any> {
+                                        put("number", ref.number)
+                                        watchedAt?.takeIf { it > 0 }?.let { put("watched_at", Instant.ofEpochMilli(it).toString()) }
+                                    }
+                                },
+                            )
+                        },
+                )
             }
         }
         return mapOf((if (anime) "anime" else "shows") to listOf(item))
@@ -109,7 +115,10 @@ internal object SimklEpisodeProgress {
     ): Boolean {
         if (selection.any { episode ->
                 if (anime) episode.season != null else episode.season == null
-            }) return false
+            }
+        ) {
+            return false
+        }
         return canonicalSelection(catalog, anime).containsAll(selection)
     }
 
@@ -150,8 +159,11 @@ internal object SimklEpisodeProgress {
             }
             .distinct()
             .let { sequence ->
-                if (anime) sequence.sortedBy(SimklEpisodeRef::number)
-                else sequence.sortedWith(compareBy<SimklEpisodeRef>({ it.season }, { it.number }))
+                if (anime) {
+                    sequence.sortedBy(SimklEpisodeRef::number)
+                } else {
+                    sequence.sortedWith(compareBy<SimklEpisodeRef>({ it.season }, { it.number }))
+                }
             }
             .toList()
 

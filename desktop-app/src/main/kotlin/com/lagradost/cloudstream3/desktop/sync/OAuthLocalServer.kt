@@ -2,8 +2,8 @@ package com.lagradost.cloudstream3.desktop.sync
 
 import com.lagradost.cloudstream3.syncproviders.AuthAPI
 import com.lagradost.common.logging.AppLogger
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -54,7 +54,18 @@ object OAuthLocalServer {
 
                     socket.use { client ->
                         client.soTimeout = 3_000
-                        val requestLine = client.getInputStream().bufferedReader(StandardCharsets.US_ASCII).readLine()
+                        val input = client.getInputStream()
+                        val requestLine = buildString {
+                            while (length < 8192) {
+                                val byte = input.read()
+                                if (byte < 0 || byte == 10) break
+                                if (byte != 13) append(byte.toChar())
+                            }
+                        }
+                        if (requestLine.length >= 8192) {
+                            respond(client, 400, "OAuth callback is too large.")
+                            continue
+                        }
                         val parts = requestLine?.split(' ', limit = 3).orEmpty()
                         val target = parts.getOrNull(1)
                         if (parts.firstOrNull() != "GET" || target == null) {
@@ -106,7 +117,13 @@ object OAuthLocalServer {
     }
 
     private fun respond(socket: Socket, status: Int, message: String) {
-        val reason = if (status == 200) "OK" else if (status == 404) "Not Found" else "Bad Request"
+        val reason = if (status == 200) {
+            "OK"
+        } else if (status == 404) {
+            "Not Found"
+        } else {
+            "Bad Request"
+        }
         val body = """
             <!doctype html><meta charset="utf-8"><title>Auras Orbit sign-in</title>
             <main style="font:16px system-ui;margin:10vh auto;max-width:34rem;text-align:center">

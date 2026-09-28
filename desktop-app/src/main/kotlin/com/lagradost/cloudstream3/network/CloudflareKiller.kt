@@ -13,7 +13,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okio.Buffer
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 data class HostClearance(
@@ -40,7 +39,9 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
         var globalCookieJar: CookieJar? = null
 
         @Volatile var lastChallengedHost: String? = null
+
         @Volatile var lastChallengedUrl: String? = null
+
         @Volatile var lastChallengeTimestamp: Long = 0L
 
         /**
@@ -180,7 +181,9 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
             val finalCookies = okCookies ?: cookies?.mapNotNull { (k, v) ->
                 try {
                     Cookie.Builder().name(k).value(v).domain(cleanHost).path("/").build()
-                } catch (_: Exception) { null }
+                } catch (_: Exception) {
+                    null
+                }
             } ?: emptyList()
 
             AppLogger.i("$TAG: Registered Cloudflare clearance for $cleanHost (${finalCookies.size} cookies, UA=$userAgent)")
@@ -236,7 +239,11 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
     }
 
     fun getCookieHeaders(url: String): Headers {
-        val httpUrl = try { url.toHttpUrlOrNull() } catch (_: Exception) { null }
+        val httpUrl = try {
+            url.toHttpUrlOrNull()
+        } catch (_: Exception) {
+            null
+        }
         val builder = Headers.Builder()
 
         if (httpUrl != null) {
@@ -263,7 +270,6 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
         val request = chain.request()
         val host = request.url.host.lowercase()
         val isStatic = isStaticAsset(request.url)
-
 
         // If an active browser proxy exists for host, ensure not marked as failed
         if (com.lagradost.cloudstream3.desktop.network.SystemBrowserCdpBypass.hasActiveProxy(host)) {
@@ -299,7 +305,11 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
 
         val isCloudflareChallenge = !isStatic && response.code in ERROR_CODES && isCloudflareServer && run {
             if (cfMitigated.equals("challenge", ignoreCase = true)) return@run true
-            val bodyPreview = try { response.peekBody(4096).string() } catch (_: Exception) { "" }
+            val bodyPreview = try {
+                response.peekBody(4096).string()
+            } catch (_: Exception) {
+                ""
+            }
             val trimmed = bodyPreview.trim()
             if (trimmed.startsWith("{") || trimmed.startsWith("[")) return@run false
 
@@ -525,7 +535,9 @@ class CloudflareKiller(private val cookieJar: CookieJar? = null) : Interceptor {
             val cookiesList = parsed.mapNotNull { (k, v) ->
                 try {
                     Cookie.Builder().name(k).value(v).domain(host).path("/").build()
-                } catch (_: Exception) { null }
+                } catch (_: Exception) {
+                    null
+                }
             }
             saveClearance(host, parsed, userAgentHeader ?: "", okCookies = cookiesList)
             solved = true

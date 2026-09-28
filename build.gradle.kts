@@ -13,6 +13,14 @@ plugins {
 subprojects {
     // Only apply Spotless and desktop Java 21 targets to our custom modules, NEVER to the upstream android-reference
     if (project.name != "library") {
+        configurations.configureEach {
+            resolutionStrategy.force(
+                "com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3",
+                "com.fasterxml.jackson.core:jackson-databind:2.18.3",
+                "com.fasterxml.jackson.core:jackson-core:2.18.3",
+                "com.fasterxml.jackson.core:jackson-annotations:2.18.3",
+            )
+        }
         plugins.withType<JavaPlugin> {
             configure<JavaPluginExtension> {
                 sourceCompatibility = JavaVersion.VERSION_21
@@ -58,7 +66,12 @@ subprojects {
 allprojects {
     // https://docs.gradle.org/current/userguide/upgrading_major_version_9.html#test_task_fails_when_no_tests_are_discovered
     tasks.withType<AbstractTestTask>().configureEach {
-        failOnNoDiscoveredTests = false
+        failOnNoDiscoveredTests = project.name !in setOf("library", "android-stubs", "sandbox")
+    }
+    tasks.withType<Test>().configureEach {
+        doFirst {
+            systemProperty("auras.data.dir", layout.buildDirectory.dir("test-data/${name}/${java.util.UUID.randomUUID()}").get().asFile.absolutePath)
+        }
     }
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
         compilerOptions {

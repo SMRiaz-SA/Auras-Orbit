@@ -1,9 +1,9 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.settings.appearance
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -55,7 +55,9 @@ fun SettingsDetailsSectionsScreen() {
     val currentTargetIndex = if (draggingSectionKey != null && effectiveSlotHeight > 0f) {
         (dragInitialIndex + kotlin.math.round(dragAccumulatedY / effectiveSlotHeight).toInt())
             .coerceIn(0, sectionOrder.lastIndex)
-    } else dragInitialIndex
+    } else {
+        dragInitialIndex
+    }
 
     val currentSectionOrder by rememberUpdatedState(sectionOrder)
     val currentEffectiveSlotHeight by rememberUpdatedState(effectiveSlotHeight)
@@ -69,7 +71,9 @@ fun SettingsDetailsSectionsScreen() {
         val toIdx = if (slotH > 0f) {
             (fromIdx + kotlin.math.round(accY / slotH).toInt())
                 .coerceIn(0, currentSectionOrder.lastIndex)
-        } else fromIdx
+        } else {
+            fromIdx
+        }
         draggingSectionKey = null
         dragAccumulatedY = 0f
         if (fromIdx != toIdx && fromIdx in currentSectionOrder.indices && toIdx in currentSectionOrder.indices) {
@@ -253,8 +257,6 @@ fun SettingsDetailsSectionsScreen() {
                 onCheckedChange = { AppearanceConfig.setAntiSpoilerEnabled(it) },
             )
         }
-
-
 
         SettingsGroupCard(title = "Backdrop Frosted Blur & Atmosphere") {
             SettingsToggleItem(

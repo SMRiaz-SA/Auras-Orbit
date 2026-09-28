@@ -6,24 +6,20 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -33,8 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.desktop.explore.models.ProviderMatch
-import com.lagradost.cloudstream3.desktop.ui.badges.DesktopBadgeComponents
 import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
 import com.lagradost.cloudstream3.desktop.ui.components.WindowControlsPill
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
@@ -62,7 +56,7 @@ fun PersonScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(theme.Background)
+            .background(theme.Background),
     ) {
         // Ambient backdrop glow from person's photo
         val ambientPhoto = uiState.personDetail?.profileUrl ?: image
@@ -82,7 +76,7 @@ fun PersonScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 64.dp, start = 24.dp, end = 24.dp, bottom = 16.dp)
+                .padding(top = 64.dp, start = 24.dp, end = 24.dp, bottom = 16.dp),
         ) {
             if (uiState.isLoading) {
                 Box(
@@ -197,7 +191,7 @@ fun PersonScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .padding(16.dp),
         ) {
             WindowControlsPill(isHome = false, isCompact = false)
         }
@@ -217,7 +211,7 @@ fun PersonScreen(
                             url = url,
                             preloadedName = title,
                             preloadedPoster = poster,
-                        )
+                        ),
                     )
                 },
             )
@@ -327,7 +321,7 @@ private fun PersonHeroSidebar(
 
                 DetailRow(
                     label = "Credits",
-                    value = "${detail.movieCredits.size} Movies • ${detail.tvCredits.size} TV Shows"
+                    value = "${detail.movieCredits.size} Movies • ${detail.tvCredits.size} TV Shows",
                 )
             }
         }
@@ -655,4 +649,3 @@ private fun FilmographyCreditCard(
         }
     }
 }
-

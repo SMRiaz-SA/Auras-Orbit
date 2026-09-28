@@ -36,8 +36,9 @@ sealed class PlayerPhase {
     ) : PlayerPhase()
 
     /**
-     * MPV confirmed at least one decoded frame (onPlaybackReady fired).
-     * Controls are visible. Scraping may still be accumulating extra links.
+     * MPV reported the stream loaded or playback started (onPlaybackReady fired).
+     * This can be paused at the start position; it does not require a visible frame.
+     * Controls are available. Scraping may still be accumulating extra links.
      */
     data class Playing(
         val link: ExtractorLink,

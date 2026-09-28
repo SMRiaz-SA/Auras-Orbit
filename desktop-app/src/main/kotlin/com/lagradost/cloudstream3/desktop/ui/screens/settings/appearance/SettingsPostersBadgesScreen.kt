@@ -58,7 +58,9 @@ fun SettingsPostersBadgesScreen(onNavigateToSubScreen: (SettingsSubScreen) -> Un
             ),
             border = if (cleanModeEnabled) {
                 androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-            } else null,
+            } else {
+                null
+            },
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(18.dp),

@@ -71,10 +71,18 @@ object DesktopDownloadManager {
                 val dbTasks = DatabaseFactory.database.cloudstreamDBQueries.selectAllDownloads().executeAsList()
                 val list = dbTasks.map { row ->
                     val headers: Map<String, String> = row.headersJson?.let {
-                        try { mapper.readValue(it) } catch (_: Exception) { emptyMap() }
+                        try {
+                            mapper.readValue(it)
+                        } catch (_: Exception) {
+                            emptyMap()
+                        }
                     } ?: emptyMap()
 
-                    var initialStatus = try { DownloadStatus.valueOf(row.status) } catch (_: Exception) { DownloadStatus.PAUSED }
+                    var initialStatus = try {
+                        DownloadStatus.valueOf(row.status)
+                    } catch (_: Exception) {
+                        DownloadStatus.PAUSED
+                    }
                     // Reconcile interrupted active downloads on startup
                     if (initialStatus == DownloadStatus.DOWNLOADING) {
                         initialStatus = DownloadStatus.PAUSED
@@ -90,7 +98,9 @@ object DesktopDownloadManager {
                     val existsOnDisk = try {
                         val f = File(row.filePath)
                         f.exists() && f.length() > 0L
-                    } catch (_: Exception) { false }
+                    } catch (_: Exception) {
+                        false
+                    }
 
                     DownloadTask(
                         id = row.id,
@@ -133,7 +143,9 @@ object DesktopDownloadManager {
     @Synchronized
     fun dispatchNextTasks() {
         val max = getMaxConcurrent()
-        val activeCount = _tasks.value.count { it.status == DownloadStatus.DOWNLOADING }
+        // A paused/cancelled job still owns its network and file handles until its
+        // finally block runs. Keep that slot occupied until the job actually exits.
+        val activeCount = activeJobs.size
         val slotsAvailable = (max - activeCount).coerceAtLeast(0)
         if (slotsAvailable <= 0) return
 
@@ -158,7 +170,7 @@ object DesktopDownloadManager {
         // Check for existing identical download
         val existingTask = _tasks.value.find {
             (it.canonicalKey == canonicalKey || it.showName.equals(showName, ignoreCase = true)) &&
-            it.season == season && it.episode == episode
+                it.season == season && it.episode == episode
         }
         if (existingTask != null) {
             val dest = File(existingTask.filePath)
@@ -274,14 +286,14 @@ object DesktopDownloadManager {
         resume(taskId)
     }
 
+    @Synchronized
     private fun startDownloadInternal(taskId: String) {
         val currentTask = _tasks.value.find { it.id == taskId } ?: return
         if (activeJobs.containsKey(taskId)) return
 
         cancelledTasks.remove(taskId)
-        updateTaskStatus(taskId, DownloadStatus.DOWNLOADING)
 
-        val job = scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val destination = File(currentTask.filePath)
             val stagingDir = getTaskStagingDir(taskId).apply { mkdirs() }
             val tempPart = File(stagingDir, "stream.part")
@@ -292,7 +304,7 @@ object DesktopDownloadManager {
                     name = currentTask.showName,
                     url = streamUrl,
                     type = ExtractorLinkType.VIDEO,
-                )
+                ),
             )
 
             AppLogger.i("DesktopDownloadManager starting sandbox download for task $taskId: ${currentTask.displayTitle}")
@@ -305,7 +317,7 @@ object DesktopDownloadManager {
                             name = currentTask.showName,
                             url = streamUrl,
                             type = ExtractorLinkType.TORRENT,
-                        )
+                        ),
                     )
                     getTurboDownloader().download(
                         url = resolved.url,
@@ -390,13 +402,18 @@ object DesktopDownloadManager {
             }
         }
 
-        activeJobs[taskId] = job
+        if (activeJobs.putIfAbsent(taskId, job) != null) {
+            job.cancel()
+            return
+        }
+        updateTaskStatus(taskId, DownloadStatus.DOWNLOADING)
+        job.start()
     }
 
+    @Synchronized
     fun pause(taskId: String) {
         cancelledTasks.add(taskId)
         activeJobs[taskId]?.cancel()
-        activeJobs.remove(taskId)
         val task = _tasks.value.find { it.id == taskId }
         val downloaded = task?.downloadedBytes ?: 0L
         val total = task?.totalBytes ?: 0L
@@ -417,6 +434,7 @@ object DesktopDownloadManager {
         dispatchNextTasks()
     }
 
+    @Synchronized
     fun resume(taskId: String) {
         cancelledTasks.remove(taskId)
         updateTaskStatus(taskId, DownloadStatus.QUEUED)
@@ -424,12 +442,18 @@ object DesktopDownloadManager {
     }
 
     fun cancel(taskId: String) {
+        cancelAndCleanup(taskId)
+    }
+
+    @Synchronized
+    private fun cancelAndCleanup(taskId: String): Job {
         cancelledTasks.add(taskId)
-        activeJobs[taskId]?.cancel()
-        activeJobs.remove(taskId)
+        val activeJob = activeJobs[taskId]
+        activeJob?.cancel()
         updateTaskStatus(taskId, DownloadStatus.CANCELLED)
         val task = _tasks.value.find { it.id == taskId }
-        scope.launch(Dispatchers.IO) {
+        val cleanupJob = scope.launch(Dispatchers.IO) {
+            activeJob?.join()
             try {
                 getTaskStagingDir(taskId).deleteRecursively()
                 if (task != null) {
@@ -444,10 +468,11 @@ object DesktopDownloadManager {
         }
         recalculateTotalSpeed()
         dispatchNextTasks()
+        return cleanupJob
     }
 
     suspend fun delete(taskId: String, deleteFile: Boolean = true): Boolean = withContext(Dispatchers.IO) {
-        cancel(taskId)
+        cancelAndCleanup(taskId).join()
         val task = _tasks.value.find { it.id == taskId }
         var fileDeleted = true
         if (task != null && deleteFile) {
@@ -504,12 +529,12 @@ object DesktopDownloadManager {
         } catch (_: Exception) {}
     }
 
+    @Synchronized
     fun pauseAll() {
         val targets = _tasks.value.filter { it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.QUEUED }
         for (t in targets) {
             cancelledTasks.add(t.id)
             activeJobs[t.id]?.cancel()
-            activeJobs.remove(t.id)
             updateTaskStatus(t.id, DownloadStatus.PAUSED)
         }
         scope.launch(Dispatchers.IO) {
@@ -536,6 +561,7 @@ object DesktopDownloadManager {
         dispatchNextTasks()
     }
 
+    @Synchronized
     fun cancelAll() {
         val activeOrQueued = _tasks.value.filter { it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.QUEUED }
         for (t in activeOrQueued) {
@@ -611,7 +637,9 @@ object DesktopDownloadManager {
                         speedBytesSec = speed,
                         etaSeconds = eta,
                     )
-                } else t
+                } else {
+                    t
+                }
             }
         }
         recalculateTotalSpeed()
@@ -636,8 +664,11 @@ object DesktopDownloadManager {
     private fun updateTaskStatus(taskId: String, status: DownloadStatus, error: String? = null) {
         _tasks.update { current ->
             current.map { t ->
-                if (t.id == taskId) t.copy(status = status, speedBytesSec = 0L, errorMessage = error)
-                else t
+                if (t.id == taskId) {
+                    t.copy(status = status, speedBytesSec = 0L, errorMessage = error)
+                } else {
+                    t
+                }
             }
         }
         scope.launch {
@@ -656,14 +687,18 @@ object DesktopDownloadManager {
     private fun updateTaskCompleted(taskId: String, finalSize: Long) {
         _tasks.update { current ->
             current.map { t ->
-                if (t.id == taskId) t.copy(
-                    status = DownloadStatus.COMPLETED,
-                    downloadedBytes = finalSize,
-                    totalBytes = finalSize,
-                    speedBytesSec = 0L,
-                    dateCompleted = System.currentTimeMillis(),
-                    existsOnDisk = true,
-                ) else t
+                if (t.id == taskId) {
+                    t.copy(
+                        status = DownloadStatus.COMPLETED,
+                        downloadedBytes = finalSize,
+                        totalBytes = finalSize,
+                        speedBytesSec = 0L,
+                        dateCompleted = System.currentTimeMillis(),
+                        existsOnDisk = true,
+                    )
+                } else {
+                    t
+                }
             }
         }
         scope.launch {

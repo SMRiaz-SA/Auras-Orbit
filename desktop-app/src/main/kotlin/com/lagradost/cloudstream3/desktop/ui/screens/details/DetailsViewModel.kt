@@ -121,13 +121,15 @@ class DetailsViewModel(
             is DetailsUiEvent.OnSetEpisodeViewMode -> handleSetEpisodeViewMode(event.viewMode)
             is DetailsUiEvent.OnRefresh -> refresh()
             is DetailsUiEvent.OnAddBookmark -> {
+                val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
                 viewModelScope.launch(Dispatchers.IO) {
-                    bookmarksRepository.addBookmark(event.bookmark)
+                    bookmarksRepository.addBookmark(event.bookmark, profileId)
                 }
             }
             is DetailsUiEvent.OnRemoveBookmark -> {
+                val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
                 viewModelScope.launch(Dispatchers.IO) {
-                    bookmarksRepository.removeBookmark(event.id)
+                    bookmarksRepository.removeBookmark(event.id, profileId)
                 }
             }
             is DetailsUiEvent.OnSelectSeason -> selectSeason(event.season)
@@ -174,11 +176,15 @@ class DetailsViewModel(
                         }.filter { it > 0 }
                         val firstAvailableSeason = availableSeasons.firstOrNull() ?: 1
                         val resolvedSeason = if (isSeries) {
-                            (uiState.value.selectedSeason?.takeIf { it in availableSeasons }
-                                ?: initialSeason?.takeIf { it in availableSeasons }
-                                ?: latestHistorySeason?.takeIf { it in availableSeasons }
-                                ?: firstAvailableSeason)
-                        } else null
+                            (
+                                uiState.value.selectedSeason?.takeIf { it in availableSeasons }
+                                    ?: initialSeason?.takeIf { it in availableSeasons }
+                                    ?: latestHistorySeason?.takeIf { it in availableSeasons }
+                                    ?: firstAvailableSeason
+                                )
+                        } else {
+                            null
+                        }
 
                         updateState {
                             copy(
@@ -271,7 +277,9 @@ class DetailsViewModel(
                                     }
                                 }
                                 current
-                            } else enrichedProductionCompanies
+                            } else {
+                                enrichedProductionCompanies
+                            }
 
                             val mergedNetCompanies = if (update.networkCompanies != null) {
                                 val current = enrichedNetworksList.toMutableList()
@@ -287,7 +295,9 @@ class DetailsViewModel(
                                     }
                                 }
                                 current
-                            } else enrichedNetworksList
+                            } else {
+                                enrichedNetworksList
+                            }
 
                             val newState = copy(
                                 enrichedTagline = update.tagline ?: enrichedTagline,
@@ -342,10 +352,14 @@ class DetailsViewModel(
                             else -> emptyList()
                         }.filter { it > 0 }
                         val currentSeason = if (isSeries) {
-                            (uiState.value.selectedSeason?.takeIf { it in currentAvailableSeasons }
-                                ?: currentAvailableSeasons.firstOrNull()
-                                ?: 1)
-                        } else null
+                            (
+                                uiState.value.selectedSeason?.takeIf { it in currentAvailableSeasons }
+                                    ?: currentAvailableSeasons.firstOrNull()
+                                    ?: 1
+                                )
+                        } else {
+                            null
+                        }
                         if (currentSeason != null && currentSeason > 0) {
                             if (uiState.value.selectedSeason != currentSeason) {
                                 updateState { copy(selectedSeason = currentSeason) }
@@ -617,7 +631,9 @@ class DetailsViewModel(
             val currentSeason = linkHistory.season ?: uiState.value.selectedSeason
             val seasonCast = if (currentSeason != null && currentSeason > 0) {
                 uiState.value.seasonCredits[currentSeason]
-            } else null
+            } else {
+                null
+            }
             val effectiveActors = seasonCast ?: uiState.value.enrichedActors ?: response?.actors
 
             sendEffect(

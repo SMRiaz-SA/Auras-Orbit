@@ -1,11 +1,11 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -272,9 +272,13 @@ fun HomeManagementDialog(
                                         provider.sourcePlugin?.let {
                                             try {
                                                 java.io.File(it).parentFile?.name?.replace("_", " ")
-                                            } catch (_: Exception) { null }
+                                            } catch (_: Exception) {
+                                                null
+                                            }
                                         }
-                                    } else null
+                                    } else {
+                                        null
+                                    }
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -347,7 +351,9 @@ fun HomeManagementDialog(
                                 val currentTargetIndex = if (draggingProviderName != null && effectiveSlotHeight > 0f) {
                                     (providerDragInitialIndex + kotlin.math.round(providerDragAccumulatedY / effectiveSlotHeight).toInt())
                                         .coerceIn(0, activeProviders.lastIndex)
-                                } else providerDragInitialIndex
+                                } else {
+                                    providerDragInitialIndex
+                                }
 
                                 val currentActiveProviders by rememberUpdatedState(activeProviders)
                                 val currentEffectiveSlotHeight by rememberUpdatedState(effectiveSlotHeight)
@@ -361,7 +367,9 @@ fun HomeManagementDialog(
                                     val toIdx = if (slotH > 0f) {
                                         (fromIdx + kotlin.math.round(accY / slotH).toInt())
                                             .coerceIn(0, currentActiveProviders.lastIndex)
-                                    } else fromIdx
+                                    } else {
+                                        fromIdx
+                                    }
                                     draggingProviderName = null
                                     providerDragAccumulatedY = 0f
                                     if (fromIdx != toIdx && fromIdx in currentActiveProviders.indices && toIdx in currentActiveProviders.indices) {
@@ -508,9 +516,13 @@ fun HomeManagementDialog(
                                                     provider.sourcePlugin?.let {
                                                         try {
                                                             java.io.File(it).parentFile?.name?.replace("_", " ")
-                                                        } catch (_: Exception) { null }
+                                                        } catch (_: Exception) {
+                                                            null
+                                                        }
                                                     }
-                                                } else null
+                                                } else {
+                                                    null
+                                                }
 
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -776,45 +788,45 @@ private fun ActiveProviderItem(
                 }
             }
 
-        // Expandable Catalogs Section
-        if (isExpanded && isAdvancedMode) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                Text("Toggle Catalogs", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(8.dp))
+            // Expandable Catalogs Section
+            if (isExpanded && isAdvancedMode) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Toggle Catalogs", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                if (provider.mainPage.isEmpty()) {
-                    Text("No catalogs available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    provider.mainPage.forEach { catalog ->
-                        val isEnabled = catalog.name !in disabledCatalogs
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onToggleCatalog(catalog.name, !isEnabled) }
-                                .padding(vertical = 8.dp, horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = catalog.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
-                                checked = isEnabled,
-                                onCheckedChange = { onToggleCatalog(catalog.name, it) },
-                                modifier = Modifier.padding(start = 16.dp),
-                            )
+                    if (provider.mainPage.isEmpty()) {
+                        Text("No catalogs available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        provider.mainPage.forEach { catalog ->
+                            val isEnabled = catalog.name !in disabledCatalogs
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onToggleCatalog(catalog.name, !isEnabled) }
+                                    .padding(vertical = 8.dp, horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = catalog.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Switch(
+                                    checked = isEnabled,
+                                    onCheckedChange = { onToggleCatalog(catalog.name, it) },
+                                    modifier = Modifier.padding(start = 16.dp),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-}
 }

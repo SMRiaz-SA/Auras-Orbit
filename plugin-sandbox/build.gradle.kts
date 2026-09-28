@@ -3,13 +3,6 @@ plugins {
     application
 }
 
-configurations.all {
-    resolutionStrategy.force("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-databind:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-core:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-annotations:2.18.3")
-}
-
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
@@ -52,7 +45,6 @@ dependencies {
 
 application {
     mainClass.set("PluginTesterKt")
-    applicationDefaultJvmArgs = listOf("-Djava.security.manager=allow")
 }
 
 tasks.named<JavaExec>("run") {

@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.details.dialogs
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +23,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -84,7 +82,9 @@ fun FullCastDialog(
             }
             if (!matchesCategory) return@filter false
 
-            if (searchQuery.isBlank()) true else {
+            if (searchQuery.isBlank()) {
+                true
+            } else {
                 val q = searchQuery.trim().lowercase()
                 actor.actor.name.lowercase().contains(q) ||
                     actor.voiceActor?.name?.lowercase()?.contains(q) == true ||
@@ -294,7 +294,9 @@ private fun FullCastGridCard(
 
     val secondaryVoice = if (!subName.isNullOrBlank()) {
         if (!isInverted) "🎙 $subName" else "as $subName"
-    } else null
+    } else {
+        null
+    }
 
     val mainImg = provider.fixUrlNull(mainImgRaw)
     val cornerImg = provider.fixUrlNull(cornerImgRaw)

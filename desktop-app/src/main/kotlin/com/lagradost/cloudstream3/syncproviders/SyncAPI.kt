@@ -204,8 +204,12 @@ abstract class SyncAPI : AuthAPI() {
     ) {
         fun sort(method: ListSorting?, query: String? = null) {
             val normalizedQuery = query?.trim()?.takeIf(String::isNotEmpty)
-            val filtered = if (normalizedQuery == null) items else items.filter {
-                it.name.contains(normalizedQuery, ignoreCase = true)
+            val filtered = if (normalizedQuery == null) {
+                items
+            } else {
+                items.filter {
+                    it.name.contains(normalizedQuery, ignoreCase = true)
+                }
             }
             val alphabetical = compareBy<LibraryItem> { it.name.lowercase(Locale.ROOT) }
             val comparator = when (method) {

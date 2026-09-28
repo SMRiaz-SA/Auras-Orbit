@@ -23,7 +23,10 @@ object TrackerClientConfig {
 
     private fun set(key: String, value: String) {
         val normalized = value.trim()
-        if (normalized.isEmpty()) DesktopDataStore.removeKey(key)
-        else DesktopDataStore.setKey(key, normalized)
+        if (normalized.isEmpty()) {
+            DesktopDataStore.removeKey(key)
+        } else {
+            DesktopDataStore.setKey(key, normalized)
+        }
     }
 }

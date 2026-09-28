@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,13 +29,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.awt.SwingPanel
 import com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge
 import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamCustomDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerData
@@ -51,22 +49,22 @@ import java.awt.event.ComponentEvent
 fun resolveTrailerEmbedUrl(trailer: TrailerData): String {
     val rawId = trailer.rawKey ?: extractYouTubeId(trailer.url) ?: trailer.id
     val isYouTube = trailer.site.equals("youtube", ignoreCase = true) ||
-            trailer.url.contains("youtube.com", ignoreCase = true) ||
-            trailer.url.contains("youtu.be", ignoreCase = true)
+        trailer.url.contains("youtube.com", ignoreCase = true) ||
+        trailer.url.contains("youtu.be", ignoreCase = true)
 
     val port = com.lagradost.player.impl.proxy.LocalStreamProxy.port
     return if (isYouTube && rawId.isNotBlank()) {
-        "http://127.0.0.1:$port/trailer?id=$rawId"
+        com.lagradost.player.impl.proxy.LocalStreamProxy.buildTrailerUrl(id = rawId)
     } else {
         val encodedUrl = java.net.URLEncoder.encode(trailer.url, "UTF-8")
-        "http://127.0.0.1:$port/trailer?u=$encodedUrl"
+        com.lagradost.player.impl.proxy.LocalStreamProxy.buildTrailerUrl(url = trailer.url)
     }
 }
 
 private fun extractYouTubeId(url: String): String? {
     val patterns = listOf(
         "(?:v=|\\/v\\/|youtu\\.be\\/|\\/embed\\/)([a-zA-Z0-9_-]{11})".toRegex(),
-        "^([a-zA-Z0-9_-]{11})$".toRegex()
+        "^([a-zA-Z0-9_-]{11})$".toRegex(),
     )
     for (pattern in patterns) {
         val match = pattern.find(url)

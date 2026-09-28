@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.cloudstream3.desktop.AppConfig
-import com.lagradost.cloudstream3.desktop.download.AppDownloadManager
 import com.lagradost.cloudstream3.desktop.player.ytdl.DesktopYtDlpBinary
 import com.lagradost.cloudstream3.desktop.torrent.DesktopTorrServerBinary
 import com.lagradost.common.logging.AppLogger
@@ -17,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -93,12 +91,16 @@ object UnifiedUpdateManager {
                 // Only check TorrServer updates if it is installed or P2P is enabled
                 if (DesktopTorrServerBinary().isInstalled()) {
                     checkTorrServerUpdate(force = force)
-                } else null
+                } else {
+                    null
+                }
             }
             val ytdlJob = async {
                 if (DesktopYtDlpBinary().isInstalled()) {
                     checkYtDlpUpdate(force = force)
-                } else null
+                } else {
+                    null
+                }
             }
 
             val appUpdate = appJob.await()
@@ -112,48 +114,26 @@ object UnifiedUpdateManager {
                 _activeDialogUpdate.value = appUpdate ?: torrUpdate ?: ytdlUpdate
             }
         } catch (e: Exception) {
+            hasCheckedInitial = false
             AppLogger.e("UnifiedUpdateManager checkAllUpdates failed", e)
+            throw e
         }
     }
 
-    suspend fun checkAppUpdate(force: Boolean = false): PendingUpdate? = withContext(Dispatchers.IO) {
-        try {
-            val url = "https://api.github.com/repos/${AppConfig.GITHUB_REPO}/releases/latest"
-            val req = Request.Builder()
-                .url(url)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build()
-
-            client.newCall(req).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return@withContext null
-                    val release = mapper.readValue<GitHubApiRelease>(body)
-                    val remoteVersion = release.tag_name.removePrefix("v")
-                    val currentVersion = AppConfig.APP_VERSION
-
-                    if (compareSemVer(remoteVersion, currentVersion) > 0) {
-                        val update = PendingUpdate(
-                            id = "app_client",
-                            type = UpdateType.APP_CLIENT,
-                            title = "Auras Orbit",
-                            currentVersion = "v$currentVersion",
-                            newVersion = release.tag_name,
-                            releaseNotes = release.body,
-                            downloadUrl = release.html_url,
-                            releaseHtmlUrl = release.html_url,
-                            publishedAt = release.published_at,
-                        )
-                        _availableUpdates.update { list -> list.filterNot { it.id == update.id } + update }
-                        return@withContext update
-                    } else {
-                        _availableUpdates.update { list -> list.filterNot { it.id == "app_client" } }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLogger.e("UnifiedUpdateManager checkAppUpdate error: ${e.message}", e)
+    suspend fun checkAppUpdate(force: Boolean = false): PendingUpdate? {
+        com.lagradost.cloudstream3.desktop.AppUpdater.checkForUpdates(force)
+        com.lagradost.cloudstream3.desktop.AppUpdater.lastError.value?.let { throw java.io.IOException(it) }
+        val release = com.lagradost.cloudstream3.desktop.AppUpdater.latestRelease.value
+        val update = release?.let {
+            PendingUpdate(
+                id = "app_client", type = UpdateType.APP_CLIENT, title = "Auras Orbit",
+                currentVersion = AppConfig.APP_VERSION, newVersion = it.tag_name, releaseNotes = it.body,
+                downloadUrl = it.assets.firstOrNull { asset -> asset.name.startsWith("Auras-Orbit-Portable-") && asset.name.endsWith(".zip") }?.browser_download_url ?: it.html_url,
+                releaseHtmlUrl = it.html_url, publishedAt = it.published_at,
+            )
         }
-        null
+        _availableUpdates.update { list -> list.filterNot { it.id == "app_client" } + listOfNotNull(update) }
+        return update
     }
 
     suspend fun checkTorrServerUpdate(force: Boolean = false): PendingUpdate? = withContext(Dispatchers.IO) {
@@ -165,8 +145,9 @@ object UnifiedUpdateManager {
                 .build()
 
             client.newCall(req).execute().use { response ->
+                check(response.isSuccessful) { "Update service returned HTTP ${response.code}" }
                 if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return@withContext null
+                    val body = checkNotNull(response.body?.string()) { "Update service returned an empty response" }
                     val release = mapper.readValue<GitHubApiRelease>(body)
                     val remoteTag = release.tag_name
                     val installedTag = getTorrServerInstalledVersion()
@@ -191,7 +172,9 @@ object UnifiedUpdateManager {
                 }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.e("UnifiedUpdateManager checkTorrServerUpdate error: ${e.message}", e)
+            throw e
         }
         null
     }
@@ -205,8 +188,9 @@ object UnifiedUpdateManager {
                 .build()
 
             client.newCall(req).execute().use { response ->
+                check(response.isSuccessful) { "Update service returned HTTP ${response.code}" }
                 if (response.isSuccessful) {
-                    val body = response.body?.string() ?: return@withContext null
+                    val body = checkNotNull(response.body?.string()) { "Update service returned an empty response" }
                     val release = mapper.readValue<GitHubApiRelease>(body)
                     val remoteTag = release.tag_name.removePrefix("v")
                     val installedTag = getYtDlpInstalledVersion().removePrefix("v")
@@ -231,7 +215,9 @@ object UnifiedUpdateManager {
                 }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.e("UnifiedUpdateManager checkYtDlpUpdate error: ${e.message}", e)
+            throw e
         }
         null
     }

@@ -13,7 +13,6 @@ import kotlin.test.assertTrue
 class MpvEventTest {
     @Test
     fun testMpvEventLoopAndJnaMapping() {
-        System.setProperty("jna.library.path", System.getProperty("user.dir") + "/..")
         println("Loaded MPV Library instance: ${MpvLibrary.INSTANCE}")
         val mpv = MpvLibrary.INSTANCE.mpv_create()
         println("mpv_create returned: $mpv")

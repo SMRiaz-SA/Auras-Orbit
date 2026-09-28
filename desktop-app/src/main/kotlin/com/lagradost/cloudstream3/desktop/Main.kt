@@ -31,7 +31,6 @@ import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.lifecycle.LifecycleRegistry
 import com.arkivanov.essenty.lifecycle.destroy
 import com.arkivanov.essenty.lifecycle.resume
-import com.lagradost.cloudstream3.desktop.init.AppUpdateDialog
 import com.lagradost.cloudstream3.desktop.init.initCoil
 import com.lagradost.cloudstream3.desktop.init.initCrashHandler
 import com.lagradost.cloudstream3.desktop.init.initNetwork
@@ -61,6 +60,11 @@ import java.awt.Toolkit
  * Single unified entry point for Auras Orbit.
  */
 fun main(args: Array<String> = emptyArray()) {
+    if (args.firstOrNull() == "--auras-plugin-worker") {
+        com.lagradost.cloudstream3.desktop.pluginworker.PluginProviderWorkerMain.run(args.drop(1).toTypedArray())
+        return
+    }
+
     System.setProperty("auras.logs.dir", PlatformPaths.logsDir.absolutePath.replace('\\', '/'))
     initCrashHandler()
     initWindowsEnvironment()
@@ -97,6 +101,7 @@ fun main(args: Array<String> = emptyArray()) {
 
     Runtime.getRuntime().addShutdownHook(
         Thread {
+            com.lagradost.cloudstream3.desktop.pluginworker.PluginProviderWorkerRegistry.closeAll()
             com.lagradost.cloudstream3.desktop.discord.DiscordRpcManager.shutdown()
         },
     )
@@ -168,6 +173,7 @@ fun main(args: Array<String> = emptyArray()) {
 
                         repoJob.await()
                         apiJob.await()
+                        com.lagradost.cloudstream3.desktop.pluginworker.PluginProviderWorkerRegistry.applyProviderOverrides()
                         proxyJob.await()
 
                         // Pre-warm settings and appearance classes in background

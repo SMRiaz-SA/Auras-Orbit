@@ -18,10 +18,6 @@ sealed interface ExtensionsUiEvent : UiEvent {
     data class OnUninstallPlugin(val repoName: String, val internalName: String) : ExtensionsUiEvent
     data class OnLoadLocalPlugin(val file: File) : ExtensionsUiEvent
     data class OnRemoveRepository(val url: String) : ExtensionsUiEvent
-    data object OnClearBypass : ExtensionsUiEvent
-    data class OnBypassSecurityAndInstall(val repoName: String, val plugin: SitePlugin) : ExtensionsUiEvent
-    data object OnClearPermissionRequest : ExtensionsUiEvent
-    data class OnGrantPermissionAndInstall(val repoName: String, val plugin: SitePlugin, val permissionName: String) : ExtensionsUiEvent
     data object OnClearUpdateHistory : ExtensionsUiEvent
     data class OnReloadPluginAfterSettings(val file: File, val pluginName: String) : ExtensionsUiEvent
     data class OnAddStremioAddon(val url: String, val onResult: (Result<com.lagradost.cloudstream3.desktop.stremio.ManagedStremioAddon>) -> Unit) : ExtensionsUiEvent

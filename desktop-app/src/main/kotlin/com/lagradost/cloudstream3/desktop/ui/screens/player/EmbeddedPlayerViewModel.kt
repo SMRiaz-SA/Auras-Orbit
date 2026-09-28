@@ -2,14 +2,12 @@ package com.lagradost.cloudstream3.desktop.ui.screens.player
 
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.Episode
-import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.desktop.domain.player.interactor.SavePlaybackProgress
 import com.lagradost.cloudstream3.desktop.player.PlayerConfig
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
-import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerError
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerUiEvent
@@ -26,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.lagradost.cloudstream3.desktop.domain.player.interactor.SavePlaybackProgress
 import java.util.concurrent.atomic.AtomicBoolean
 
 class EmbeddedPlayerViewModel(
@@ -134,23 +131,39 @@ class EmbeddedPlayerViewModel(
             val updatedHistory = currentData.history.copy(
                 position = currentPosSec,
                 duration = currentDurSec,
-                screenshotUrl = "file:///$screenshotPath",
                 updateTime = System.currentTimeMillis(),
             )
-            com.lagradost.cloudstream3.desktop.utils.appScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                saveJob?.cancel()
+                saveJob?.join()
                 try {
-                    java.io.File(screenshotPath).parentFile?.mkdirs()
-                    playerState.takeScreenshot(screenshotPath)
-                    WatchHistoryCoordinator.saveWithNextEpisodeQueue(
+                    WatchHistoryCoordinator.saveWithOptionalScreenshot(
                         history = updatedHistory,
-                        hasNextEpisode = hasNextEpisode,
-                        nextEpisode = nextEpisodeData,
-                        saveProgress = savePlaybackProgress,
-                        loadResponse = currentData.loadResponse,
-                        forceNotify = true,
+                        captureScreenshot = {
+                            java.io.File(screenshotPath).parentFile?.mkdirs()
+                            playerState.takeScreenshot(screenshotPath)
+                            screenshotPath.takeIf { java.io.File(it).isFile }?.let { "file:///$it" }
+                        },
+                        saveHistory = { history ->
+                            WatchHistoryCoordinator.saveWithNextEpisodeQueue(
+                                history = history,
+                                hasNextEpisode = hasNextEpisode,
+                                nextEpisode = nextEpisodeData,
+                                saveProgress = savePlaybackProgress,
+                                loadResponse = currentData.loadResponse,
+                                forceNotify = true,
+                            )
+                        },
+                        onScreenshotFailure = { failure ->
+                            AppLogger.w(
+                                "EmbeddedPlayerViewModel",
+                                "Screenshot capture failed; saving playback history without a new screenshot",
+                                failure,
+                            )
+                        },
                     )
                 } catch (e: Exception) {
-                    AppLogger.e("EmbeddedPlayerViewModel", "Failed to save history or screenshot on dispose", e)
+                    AppLogger.e("EmbeddedPlayerViewModel", "Failed to save playback history on dispose", e)
                 }
             }
         }
@@ -419,7 +432,11 @@ class EmbeddedPlayerViewModel(
                 appendLine("Failed Candidates Breakdown:")
                 links.forEachIndexed { i, link ->
                     val failure = newFailed[link.url] ?: "Skipped"
-                    val host = try { java.net.URI(link.url).host ?: "unknown-host" } catch (_: Throwable) { "link-$i" }
+                    val host = try {
+                        java.net.URI(link.url).host ?: "unknown-host"
+                    } catch (_: Throwable) {
+                        "link-$i"
+                    }
                     val q = if (link.quality > 0) "${link.quality}p" else "unknown"
                     appendLine("  [${i + 1}] ${link.name} ($q, host: $host) -> $failure")
                 }
@@ -514,7 +531,14 @@ class EmbeddedPlayerViewModel(
             adjustedData
         }
 
-        updateState { copy(launchData = hydratedData, phase = PlayerPhase.Idle, failedLinks = emptyMap()) }
+        updateState {
+            copy(
+                launchData = hydratedData,
+                phase = PlayerPhase.Idle,
+                failedLinks = emptyMap(),
+                playbackGeneration = playbackGeneration + 1,
+            )
+        }
 
         // Background metadata hydration pipeline:
         // Handles history launches (loadResponse == null) and quick-play launches (missing logo/cast)
@@ -545,7 +569,9 @@ class EmbeddedPlayerViewModel(
                                 val curr = launchData
                                 if (curr != null) {
                                     copy(launchData = curr.copy(loadResponse = res))
-                                } else this
+                                } else {
+                                    this
+                                }
                             }
                         }
                     }
@@ -569,7 +595,9 @@ class EmbeddedPlayerViewModel(
                                         val curr = launchData
                                         if (curr != null && (curr.enrichedLogoUrl.isNullOrBlank() || curr.enrichedLogoUrl != logo)) {
                                             copy(launchData = curr.copy(enrichedLogoUrl = logo))
-                                        } else this
+                                        } else {
+                                            this
+                                        }
                                     }
                                 },
                                 onBackdropLoaded = { backdrop ->
@@ -577,7 +605,9 @@ class EmbeddedPlayerViewModel(
                                         val curr = launchData
                                         if (curr != null && (curr.enrichedBackdropUrl.isNullOrBlank() || curr.enrichedBackdropUrl != backdrop)) {
                                             copy(launchData = curr.copy(enrichedBackdropUrl = backdrop))
-                                        } else this
+                                        } else {
+                                            this
+                                        }
                                     }
                                 },
                                 onActorsLoaded = { actors ->
@@ -585,7 +615,9 @@ class EmbeddedPlayerViewModel(
                                         val curr = launchData
                                         if (curr != null && (curr.enrichedActors.isNullOrEmpty() || curr.enrichedActors != actors)) {
                                             copy(launchData = curr.copy(enrichedActors = actors))
-                                        } else this
+                                        } else {
+                                            this
+                                        }
                                     }
                                 },
                                 onMetadataLoaded = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, actors, _, _ ->
@@ -594,7 +626,9 @@ class EmbeddedPlayerViewModel(
                                             val curr = launchData
                                             if (curr != null && curr.enrichedActors.isNullOrEmpty()) {
                                                 copy(launchData = curr.copy(enrichedActors = actors))
-                                            } else this
+                                            } else {
+                                                this
+                                            }
                                         }
                                     }
                                 },
@@ -953,7 +987,9 @@ class EmbeddedPlayerViewModel(
                                 append(" - E${newHistory.episode}")
                             }
                         }
-                    } else current.title,
+                    } else {
+                        current.title
+                    },
                 )
 
                 updateState {
@@ -1128,14 +1164,16 @@ class EmbeddedPlayerViewModel(
                     )
                 }
             },
-            onSeekableConfirmed = {
+            onSeekabilityResolved = {
                 updateState {
                     if (!isScrapingLinks) return@updateState this
                     val reSorted = sortLinks(nextEpisodeLinks, startPos)
                     val curLaunch = launchData
                     val updated = if (curLaunch != null && curLaunch.history.episodeId == targetEpisodeId) {
                         curLaunch.copy(links = reSorted)
-                    } else curLaunch
+                    } else {
+                        curLaunch
+                    }
                     copy(nextEpisodeLinks = reSorted, launchData = updated)
                 }
             },

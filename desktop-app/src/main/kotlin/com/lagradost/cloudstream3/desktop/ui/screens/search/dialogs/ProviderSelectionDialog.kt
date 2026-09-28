@@ -171,9 +171,13 @@ fun ProviderSelectionDialog(
                                     provider.sourcePlugin?.let {
                                         try {
                                             File(it).parentFile?.name?.replace("_", " ")
-                                        } catch (_: Exception) { null }
+                                        } catch (_: Exception) {
+                                            null
+                                        }
                                     }
-                                } else null
+                                } else {
+                                    null
+                                }
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),

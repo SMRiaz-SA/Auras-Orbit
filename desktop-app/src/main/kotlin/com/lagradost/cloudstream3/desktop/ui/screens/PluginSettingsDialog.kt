@@ -194,50 +194,50 @@ fun PluginSettingsDialog(
                                 }
                             }
                         } else {
-                        val grouped = settings.groupBy { getCategory(it.key) }
+                            val grouped = settings.groupBy { getCategory(it.key) }
 
-                        // Sort categories so General settings show first, then Stremio, then APIs, then Providers
-                        val sortedCategories = grouped.keys.sortedBy { category ->
-                            when (category) {
-                                "General Configurations" -> 0
-                                "Accounts & API Integrations" -> 1
-                                "Stremio Catalogs & Addons" -> 2
-                                "Sub-Providers & Channels" -> 3
-                                else -> 4
-                            }
-                        }
-
-                        sortedCategories.forEach { category ->
-                            item {
-                                Column(modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
-                                    Text(
-                                        text = category,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        letterSpacing = 1.sp,
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), thickness = 2.dp)
+                            // Sort categories so General settings show first, then Stremio, then APIs, then Providers
+                            val sortedCategories = grouped.keys.sortedBy { category ->
+                                when (category) {
+                                    "General Configurations" -> 0
+                                    "Accounts & API Integrations" -> 1
+                                    "Stremio Catalogs & Addons" -> 2
+                                    "Sub-Providers & Channels" -> 3
+                                    else -> 4
                                 }
                             }
 
-                            items(grouped[category].orEmpty(), key = { it.key }) { schema ->
-                                val fullKey = if (schema.isGlobal) schema.key else schema.pluginPrefName + schema.key
-                                val currentValue = currentValues[fullKey]
-                                com.lagradost.cloudstream3.desktop.ui.screens.PluginSettingItem(
-                                    schema = schema,
-                                    currentValue = currentValue,
-                                    pluginName = pluginName,
-                                    jarFile = jarFile,
-                                    onValueChanged = { newValue ->
-                                        viewModel.onEvent(PluginSettingsUiEvent.OnSettingChanged(schema, newValue))
-                                    },
-                                )
+                            sortedCategories.forEach { category ->
+                                item {
+                                    Column(modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                                        Text(
+                                            text = category,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            letterSpacing = 1.sp,
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), thickness = 2.dp)
+                                    }
+                                }
+
+                                items(grouped[category].orEmpty(), key = { it.key }) { schema ->
+                                    val fullKey = if (schema.isGlobal) schema.key else schema.pluginPrefName + schema.key
+                                    val currentValue = currentValues[fullKey]
+                                    com.lagradost.cloudstream3.desktop.ui.screens.PluginSettingItem(
+                                        schema = schema,
+                                        currentValue = currentValue,
+                                        pluginName = pluginName,
+                                        jarFile = jarFile,
+                                        onValueChanged = { newValue ->
+                                            viewModel.onEvent(PluginSettingsUiEvent.OnSettingChanged(schema, newValue))
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
-                }
                 }
             }
 

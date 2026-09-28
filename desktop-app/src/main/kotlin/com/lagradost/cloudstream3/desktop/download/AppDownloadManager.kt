@@ -64,7 +64,9 @@ data class DownloadTask(
     val etaSeconds: Long
         get() = if (speedBytesPerSec > 0 && totalBytes > bytesDownloaded) {
             (totalBytes - bytesDownloaded) / speedBytesPerSec
-        } else 0L
+        } else {
+            0L
+        }
 
     val etaFormatted: String
         get() = when {
@@ -92,9 +94,11 @@ object AppDownloadManager {
     private fun expectedReleaseDigest(downloadUrl: String): String {
         val uri = URI(downloadUrl)
         val segments = uri.path.trim('/').split('/')
-        require(uri.scheme == "https" && uri.host.equals("github.com", ignoreCase = true) &&
-            segments.size == 6 && segments[2] == "releases" && segments[3] == "latest" &&
-            segments[4] == "download") { "Executable download must be a GitHub latest release asset" }
+        require(
+            uri.scheme == "https" && uri.host.equals("github.com", ignoreCase = true) &&
+                segments.size == 6 && segments[2] == "releases" && segments[3] == "latest" &&
+                segments[4] == "download",
+        ) { "Executable download must be a GitHub latest release asset" }
 
         val apiUrl = "https://api.github.com/repos/${segments[0]}/${segments[1]}/releases/latest"
         val request = Request.Builder().url(apiUrl).header("Accept", "application/vnd.github+json").build()
@@ -198,8 +202,12 @@ object AppDownloadManager {
                     }
 
                     try {
-                        Files.move(tempFile.toPath(), targetFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                        Files.move(
+                            tempFile.toPath(),
+                            targetFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE,
+                        )
                     } catch (_: AtomicMoveNotSupportedException) {
                         Files.move(tempFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
                     }

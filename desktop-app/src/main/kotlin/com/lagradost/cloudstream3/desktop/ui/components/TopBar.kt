@@ -14,14 +14,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -34,8 +35,6 @@ import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.screens.profile.ProfileEditDialog
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.desktop.ui.theme.ClockDisplayMode
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.delay
 
@@ -203,7 +202,9 @@ fun TopBar(
                                         blurRadius = 24.dp,
                                     ),
                                 )
-                            } else Modifier
+                            } else {
+                                Modifier
+                            }
 
                             val pillShape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp)
                             Box(modifier = Modifier.height(52.dp).wrapContentWidth()) {
@@ -289,9 +290,9 @@ private fun TopBarProfilePill(
         show = pinPromptProfile != null,
         profile = pinPromptProfile,
         onDismiss = { pinPromptProfile = null },
-        onVerified = {
+        onVerified = { pin ->
             pinPromptProfile?.let { target ->
-                ProfileManager.switchProfile(target.id, target.pinCode ?: "")
+                ProfileManager.switchProfile(target.id, pin)
             }
             pinPromptProfile = null
         },

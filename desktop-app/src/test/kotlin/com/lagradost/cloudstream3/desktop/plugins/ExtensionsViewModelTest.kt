@@ -17,8 +17,6 @@ class ExtensionsViewModelTest {
         val state = ExtensionsUiState()
         assertFalse(state.isFetching)
         assertFalse(state.isUninstalling)
-        assertNull(state.pluginRequiringBypass)
-        assertNull(state.pluginRequiringPermission)
         assertNull(state.inspectedRepoName)
         assertTrue(state.installedPlugins.isEmpty())
         assertTrue(state.plugins.isEmpty())
@@ -37,32 +35,6 @@ class ExtensionsViewModelTest {
         // Simulate clearing inspection
         state = state.copy(inspectedRepoName = null)
         assertNull(state.inspectedRepoName)
-    }
-
-    @Test
-    fun testClearBypassAndPermissionRequests_StateReduction() {
-        val plugin = SitePlugin(
-            name = "TestPlugin",
-            internalName = "com.example.test",
-            url = "https://example.com/test.jar",
-            version = 1,
-        )
-
-        var state = ExtensionsUiState(
-            pluginRequiringBypass = Triple("MainRepo", plugin, "Untrusted bytecode"),
-            pluginRequiringPermission = Triple("MainRepo", plugin, "ACCESS_NETWORK"),
-            isDialogInstalling = true,
-        )
-
-        // Clear bypass
-        state = state.copy(pluginRequiringBypass = null, isDialogInstalling = false)
-        assertNull(state.pluginRequiringBypass)
-        assertFalse(state.isDialogInstalling)
-
-        // Clear permission request
-        state = state.copy(pluginRequiringPermission = null, isDialogInstalling = false)
-        assertNull(state.pluginRequiringPermission)
-        assertFalse(state.isDialogInstalling)
     }
 
     @Test

@@ -1,7 +1,6 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,8 +27,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.APIHolder
+import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.SearchResponse
@@ -42,7 +41,6 @@ import com.lagradost.cloudstream3.desktop.ui.screens.CategoryGridPageSource
 import com.lagradost.cloudstream3.desktop.ui.screens.categoryGridItemKey
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiState
-import com.lagradost.cloudstream3.desktop.ui.screens.home.DesktopHomeViewModel
 import com.lagradost.common.storage.DesktopBookmark
 import com.lagradost.common.storage.WatchHistory
 
@@ -301,7 +299,9 @@ private fun HomeDiscoveryRow(
             {
                 TextButton(onClick = onRetry) { Text("Retry ${state.failedSourceCount}") }
             }
-        } else null,
+        } else {
+            null
+        },
         rowContentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
         headerPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp),
     ) {
@@ -315,7 +315,7 @@ private fun HomeDiscoveryRow(
                 )
             }
         } else {
-            item(key = "${title}-loading-or-error") {
+            item(key = "$title-loading-or-error") {
                 Card(
                     modifier = Modifier.width(280.dp).height(112.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),

@@ -1,5 +1,5 @@
 [Setup]
-#include "version.iss"
+#include "..\desktop-app\build\generated\installer\version.iss"
 AppId={{C626E83F-8C3A-4D78-B5B3-FA19FE223E0C}}
 AppName=Auras Orbit
 AppVersion={#AppVersion}

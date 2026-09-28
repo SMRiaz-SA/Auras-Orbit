@@ -17,11 +17,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.request.crossfade
-import dev.chrisbanes.haze.hazeSource
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.screens.home.*
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
+import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun ComposeHomeScreen(
@@ -84,13 +84,7 @@ fun ComposeHomeScreen(
 
         // Main content area
         val allPages = remember(activeProviderApis, uiState.disabledCatalogs, uiState.refreshEpoch) {
-            activeProviderApis.flatMap { prov ->
-                val disabledForProv = uiState.disabledCatalogs[prov.name] ?: emptySet()
-                prov.mainPage
-                    .filter { it.name !in disabledForProv }
-                    .filterNot { isHiddenHomeCatalogTitle(it.name) }
-                    .map { prov to it }
-            }
+            homeCatalogPages(activeProviderApis, uiState.disabledCatalogs)
         }
 
         HomeManagementDialog(

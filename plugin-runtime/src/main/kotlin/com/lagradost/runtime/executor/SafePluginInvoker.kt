@@ -7,7 +7,6 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicReference
 
 sealed interface PluginCallResult<out T> {
     data class Success<T>(val data: T, val latencyMs: Long) : PluginCallResult<T>
@@ -27,7 +26,7 @@ sealed interface PluginCallResult<out T> {
  * Safe execution boundary for CloudStream plugins and scrapers.
  * Guarantees isolation from UI threads, provides timeout protection with thread interruption,
  * measures latency, integrates with [PluginCircuitBreaker], and traps all Throwables / Errors
- * so a plugin failure or infinite loop cannot crash or stall the host app.
+ * so callers can recover from timeout. Noncooperative code still requires process isolation.
  */
 object SafePluginInvoker {
 
@@ -54,6 +53,8 @@ object SafePluginInvoker {
         val loggerTag = if (tag.startsWith("SafePluginInvoker:") || tag.startsWith("Plugin:")) tag else "Plugin:$tag"
         val resolvedProvider = providerName ?: extractProviderName(tag)
 
+        AppLogger.d(loggerTag, "Starting execution (timeout: ${timeoutMs}ms)")
+
         if (resolvedProvider != null) {
             val (isAllowed, reason) = PluginCircuitBreaker.isExecutionAllowed(resolvedProvider)
             if (!isAllowed) {
@@ -62,35 +63,31 @@ object SafePluginInvoker {
             }
         }
 
-        val executingThread = AtomicReference<Thread?>(null)
         val compositeClassLoader = com.lagradost.runtime.loader.ExtensionLoader.createCompositeClassLoader(
             Thread.currentThread().contextClassLoader,
         )
         return try {
-            val result = withContext(PluginDispatcher + PluginClassLoaderElement(compositeClassLoader)) {
-                executingThread.set(Thread.currentThread())
-                try {
-                    withTimeout(timeoutMs) {
-                        block()
-                    }
-                } finally {
-                    executingThread.set(null)
-                }
+            val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withTimeout(timeoutMs) { PluginBlockingBoundary.call(compositeClassLoader, block) }
             }
             val elapsedMs = System.currentTimeMillis() - startMs
             if (resolvedProvider != null) {
                 PluginCircuitBreaker.recordSuccess(resolvedProvider, elapsedMs)
             }
+            AppLogger.i(loggerTag, "Completed successfully in ${elapsedMs}ms")
             PluginCallResult.Success(result, elapsedMs)
         } catch (e: TimeoutCancellationException) {
-            executingThread.get()?.interrupt()
             val elapsedMs = System.currentTimeMillis() - startMs
             if (penalizeOnTimeout && resolvedProvider != null) {
+                AppLogger.w(loggerTag, "Timed out: Operation timed out after ${elapsedMs}ms (limit was ${timeoutMs}ms)")
                 PluginCircuitBreaker.recordFailure(
                     providerName = resolvedProvider,
                     reason = "Timeout after ${elapsedMs}ms",
                     failureThreshold = failureThreshold,
                 )
+            } else if (!penalizeOnTimeout && resolvedProvider != null) {
+                AppLogger.d(loggerTag, "Scrape timed out (no penalty): ${elapsedMs}ms")
+                PluginCircuitBreaker.recordSuccess(resolvedProvider, elapsedMs)
             }
             PluginCallResult.Timeout(timeoutMs, elapsedMs)
         } catch (e: CancellationException) {
@@ -106,6 +103,7 @@ object SafePluginInvoker {
                     failureThreshold = failureThreshold,
                 )
             }
+            AppLogger.e(loggerTag, "Plugin execution failed after ${elapsedMs}ms: $reason", t)
             PluginCallResult.Failure(t, reason, elapsedMs)
         }
     }
@@ -130,89 +128,27 @@ object SafePluginInvoker {
         penalizeOnTimeout: Boolean = true,
         block: suspend CoroutineScope.() -> T,
     ): Result<T> {
-        val startMs = System.currentTimeMillis()
-        val loggerTag = if (tag.startsWith("SafePluginInvoker:") || tag.startsWith("Plugin:")) tag else "Plugin:$tag"
         val resolvedProvider = providerName ?: extractProviderName(tag)
-
-        // 1. Fast-fail check via PluginCircuitBreaker
-        if (resolvedProvider != null) {
-            val (isAllowed, reason) = PluginCircuitBreaker.isExecutionAllowed(resolvedProvider)
-            if (!isAllowed) {
-                val elapsedMs = System.currentTimeMillis() - startMs
-                AppLogger.w(loggerTag, "⚡ Fast-failing: $reason")
-                return Result.failure(PluginCircuitOpenException(resolvedProvider, reason ?: "Circuit OPEN"))
-            }
-        }
-
-        AppLogger.d(loggerTag, "Starting execution (timeout: ${timeoutMs}ms)")
-        val executingThread = AtomicReference<Thread?>(null)
-        val compositeClassLoader = com.lagradost.runtime.loader.ExtensionLoader.createCompositeClassLoader(
-            Thread.currentThread().contextClassLoader,
-        )
-
-        return try {
-            val result = withContext(PluginDispatcher + PluginClassLoaderElement(compositeClassLoader)) {
-                executingThread.set(Thread.currentThread())
-                try {
-                    withTimeout(timeoutMs) {
-                        block()
-                    }
-                } finally {
-                    executingThread.set(null)
-                }
-            }
-            val elapsedMs = System.currentTimeMillis() - startMs
-            AppLogger.i(loggerTag, "Completed successfully in ${elapsedMs}ms")
-
-            if (resolvedProvider != null) {
-                PluginCircuitBreaker.recordSuccess(resolvedProvider, elapsedMs)
-            }
-            Result.success(result)
-        } catch (e: TimeoutCancellationException) {
-            // Forcibly interrupt worker thread to break infinite synchronous loops or stuck native locks
-            executingThread.get()?.interrupt()
-
-            val elapsedMs = System.currentTimeMillis() - startMs
-            val msg = "Operation timed out after ${elapsedMs}ms (limit was ${timeoutMs}ms)"
-
-            if (penalizeOnTimeout) {
-                AppLogger.w(loggerTag, "Timed out: $msg")
-                if (resolvedProvider != null) {
-                    PluginCircuitBreaker.recordFailure(
-                        providerName = resolvedProvider,
-                        reason = "Timeout after ${elapsedMs}ms",
-                        failureThreshold = failureThreshold,
-                    )
-                }
-            } else {
-                // Not penalizing — this is a streaming scrape and results may have been
-                // delivered via callback before the timeout fired (partial success).
-                AppLogger.d(loggerTag, "Scrape timed out (no penalty): $msg")
-                if (resolvedProvider != null) {
-                    // Still record success so latency stats remain healthy
-                    PluginCircuitBreaker.recordSuccess(resolvedProvider, elapsedMs)
-                }
-            }
-            Result.failure(TimeoutException(msg))
-        } catch (e: CancellationException) {
-            // Coroutine lifecycle cancellation (e.g. navigation or query change) — do NOT penalize provider
-            val elapsedMs = System.currentTimeMillis() - startMs
-            AppLogger.d(loggerTag, "Cancelled after ${elapsedMs}ms")
-            throw e
-        } catch (t: Throwable) {
-            val elapsedMs = System.currentTimeMillis() - startMs
-            val reason = t.message ?: t.javaClass.simpleName
-            AppLogger.e(loggerTag, "Plugin execution failed after ${elapsedMs}ms: $reason", t)
-
-            if (resolvedProvider != null) {
-                PluginCircuitBreaker.recordFailure(
-                    providerName = resolvedProvider,
-                    reason = reason,
-                    throwable = t,
-                    failureThreshold = failureThreshold,
-                )
-            }
-            Result.failure(t)
+        return when (
+            val result = invokeDetailed(
+                tag = tag,
+                providerName = resolvedProvider,
+                timeoutMs = timeoutMs,
+                failureThreshold = failureThreshold,
+                penalizeOnTimeout = penalizeOnTimeout,
+                block = block,
+            )
+        ) {
+            is PluginCallResult.Success -> Result.success(result.data)
+            is PluginCallResult.Timeout -> Result.failure(
+                TimeoutException(
+                    "Operation timed out after ${result.elapsedMs}ms (limit was ${result.limitMs}ms)",
+                ),
+            )
+            is PluginCallResult.CircuitOpen -> Result.failure(
+                PluginCircuitOpenException(result.provider, result.reason),
+            )
+            is PluginCallResult.Failure -> Result.failure(result.error)
         }
     }
 

@@ -48,20 +48,20 @@ object DesktopTorrentEngine {
     fun isTorrentProvider(provider: com.lagradost.cloudstream3.MainAPI?): Boolean {
         if (provider == null) return false
         return provider.supportedTypes.any { it.name.contains("Torrent", ignoreCase = true) } ||
-                provider.name.contains("torrent", ignoreCase = true) ||
-                provider.name.equals("yts", ignoreCase = true) ||
-                provider.mainUrl.contains("yts", ignoreCase = true) ||
-                provider.mainUrl.contains("torrent", ignoreCase = true)
+            provider.name.contains("torrent", ignoreCase = true) ||
+            provider.name.equals("yts", ignoreCase = true) ||
+            provider.mainUrl.contains("yts", ignoreCase = true) ||
+            provider.mainUrl.contains("torrent", ignoreCase = true)
     }
 
     fun isTorrentLink(link: ExtractorLink): Boolean {
         val url = link.url.trim()
         return link.type == ExtractorLinkType.TORRENT ||
-                link.type == ExtractorLinkType.MAGNET ||
-                url.startsWith("magnet:", ignoreCase = true) ||
-                url.contains("magnet:?xt=", ignoreCase = true) ||
-                url.endsWith(".torrent", ignoreCase = true) ||
-                (url.length == 40 && url.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' })
+            link.type == ExtractorLinkType.MAGNET ||
+            url.startsWith("magnet:", ignoreCase = true) ||
+            url.contains("magnet:?xt=", ignoreCase = true) ||
+            url.endsWith(".torrent", ignoreCase = true) ||
+            (url.length == 40 && url.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' })
     }
 
     suspend fun transformLink(link: ExtractorLink): ExtractorLink = withContext(Dispatchers.IO) {
@@ -159,7 +159,9 @@ object DesktopTorrentEngine {
                         ((stats.preloadedBytes.toDouble() / stats.preloadSize) * 100).toInt().coerceIn(0, 100)
                     } else if (stats.torrentSize > 0) {
                         ((stats.loadedSize.toDouble() / stats.torrentSize) * 100).toInt().coerceIn(0, 100)
-                    } else 0
+                    } else {
+                        0
+                    }
 
                     val stateText = when {
                         stats.stat == 1 -> "Connecting to peers..."

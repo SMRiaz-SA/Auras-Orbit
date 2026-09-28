@@ -122,3 +122,15 @@ screenshots/
 settings.json
 appDataDir/
 vega-bridge/t e m p _ c o m p o s e _ n a v 2 . t x t
+# Local Kotlin compiler state
+.kotlin/
+
+# Personal planning notes and local tool metadata (keep out of public source)
+/AUDIT_FIX_EXECUTION.md
+/COMPLETION_PLAN.md
+/CORE_COMPLETION_PLAN.md
+/ECOSYSTEM_DIRECTION.md
+/PROJECT_COMPLETION_PLAN.md
+/TRACKER_COMPLETION_PLAN.md
+/TRACKER_INTEGRATIONS.md
+/skills-lock.json

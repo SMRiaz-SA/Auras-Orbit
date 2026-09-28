@@ -94,7 +94,7 @@ fun initNetwork() {
     val currentIntrospector = mapper.deserializationConfig.annotationIntrospector
     if (currentIntrospector != null) {
         mapper.setAnnotationIntrospector(
-            com.fasterxml.jackson.databind.introspect.SafeKotlinAnnotationIntrospector(currentIntrospector)
+            com.fasterxml.jackson.databind.introspect.SafeKotlinAnnotationIntrospector(currentIntrospector),
         )
         AppLogger.i("Installed SafeKotlinAnnotationIntrospector on global Jackson mapper")
     }
@@ -159,9 +159,15 @@ fun initNetwork() {
                                 .name(k)
                                 .value(v)
                                 .build()
-                        } catch (_: Exception) { null }
-                    } else null
-                } else null
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
             }
             if (cookie != null) {
                 app.baseClient.cookieJar.saveFromResponse(httpUrl, listOf(cookie))
@@ -179,7 +185,9 @@ fun initNetwork() {
             cfCookies.forEach { (k, v) -> merged[k] = v }
             if (merged.isNotEmpty()) {
                 merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
-            } else null
+            } else {
+                null
+            }
         } else {
             null
         }

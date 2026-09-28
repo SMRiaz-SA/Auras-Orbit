@@ -93,7 +93,8 @@ object PluginBytecodeTransformer {
                                             isInterface: Boolean,
                                         ) {
                                             if (owner == "java/io/File" && opcode == Opcodes.INVOKESTATIC &&
-                                                (methodName == "createTempFile" || methodName == "listRoots")) {
+                                                (methodName == "createTempFile" || methodName == "listRoots")
+                                            ) {
                                                 super.visitMethodInsn(
                                                     Opcodes.INVOKESTATIC,
                                                     "com/lagradost/runtime/loader/stubs/PluginFileSecurityStub",
@@ -215,7 +216,7 @@ object PluginBytecodeTransformer {
                                                 return
                                             }
 
-                                            // Intercept File constructors to enforce folder jail via PluginFileSecurityStub
+                                            // Retain the pass-through File adapters for compatibility with cached transformed plugins.
                                             if (opcode == Opcodes.INVOKESPECIAL && owner == "java/io/File" && methodName == "<init>") {
                                                 when (descriptor) {
                                                     "(Ljava/lang/String;)V" -> {
@@ -267,9 +268,11 @@ object PluginBytecodeTransformer {
 
                                             // Intercept Stream, RandomAccessFile, and Reader/Writer constructors to validate file paths
                                             if (opcode == Opcodes.INVOKESPECIAL &&
-                                                (owner == "java/io/FileInputStream" || owner == "java/io/FileOutputStream" ||
-                                                 owner == "java/io/FileReader" || owner == "java/io/FileWriter" ||
-                                                 owner == "java/io/RandomAccessFile") &&
+                                                (
+                                                    owner == "java/io/FileInputStream" || owner == "java/io/FileOutputStream" ||
+                                                        owner == "java/io/FileReader" || owner == "java/io/FileWriter" ||
+                                                        owner == "java/io/RandomAccessFile"
+                                                    ) &&
                                                 methodName == "<init>"
                                             ) {
                                                 when (descriptor) {

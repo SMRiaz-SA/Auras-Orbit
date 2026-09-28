@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,15 +29,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.request.crossfade
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.fixUrlNull
 import com.lagradost.cloudstream3.desktop.ui.components.shimmerBackground
-import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.common.storage.WatchHistory
-import com.lagradost.player.impl.PlayerLinkHandler
-import coil3.request.crossfade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -181,7 +177,7 @@ fun EpisodeCard(
                             } else {
                                 onPlay(ep)
                             }
-                        }
+                        },
                     )
                 }
                 .shadow(
@@ -191,8 +187,20 @@ fun EpisodeCard(
                     ambientColor = Color.Transparent,
                 )
                 .border(
-                    width = if (isHovered && isContextMenuEnabled && !isEpisodeLocked) 1.5.dp else if (isEpisodeLocked) 1.dp else 0.5.dp,
-                    color = if (isEpisodeLocked) Color(0xFFFFB74D).copy(alpha = 0.45f) else if (isHovered && isContextMenuEnabled) heroColor else Color.White.copy(alpha = 0.18f),
+                    width = if (isHovered && isContextMenuEnabled && !isEpisodeLocked) {
+                        1.5.dp
+                    } else if (isEpisodeLocked) {
+                        1.dp
+                    } else {
+                        0.5.dp
+                    },
+                    color = if (isEpisodeLocked) {
+                        Color(0xFFFFB74D).copy(alpha = 0.45f)
+                    } else if (isHovered && isContextMenuEnabled) {
+                        heroColor
+                    } else {
+                        Color.White.copy(alpha = 0.18f)
+                    },
                     shape = RoundedCornerShape(16.dp),
                 )
                 .clip(RoundedCornerShape(16.dp)),
@@ -252,8 +260,11 @@ fun EpisodeCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
-                                if (uiState?.isEnriching == true) Modifier.shimmerBackground()
-                                else Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                if (uiState?.isEnriching == true) {
+                                    Modifier.shimmerBackground()
+                                } else {
+                                    Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                                },
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -448,7 +459,9 @@ fun EpisodeCard(
                 val epNum = ep.episode
                 val epText = if (epNum != null) {
                     if (ep.season != null) "S${ep.season} • EPISODE $epNum" else "EPISODE $epNum"
-                } else "EPISODE"
+                } else {
+                    "EPISODE"
+                }
 
                 Text(
                     text = epText,
@@ -526,7 +539,7 @@ fun EpisodeCard(
                         Text(
                             text = formattedDate,
                             style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = if (compactLayout || isNarrow) 10.5.sp else 12.5.sp,
+                                fontSize = if (compactLayout || isNarrow) 10.5.sp else 12.5.sp,
                                 fontWeight = FontWeight.Medium,
                             ),
                             color = Color.White.copy(alpha = 0.55f),

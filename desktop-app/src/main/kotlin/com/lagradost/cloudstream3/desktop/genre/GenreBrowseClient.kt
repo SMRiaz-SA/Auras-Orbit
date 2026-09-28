@@ -50,7 +50,8 @@ enum class GenreBrowseSort(val label: String) {
     Newest("Newest first"),
     Oldest("Oldest first"),
     TopRated("Top rated · 200+ votes"),
-    MostVotes("Most votes");
+    MostVotes("Most votes"),
+    ;
 
     fun apiSortBy(mediaType: GenreBrowseMediaType): String = when (this) {
         Popularity -> "popularity.desc"
@@ -128,8 +129,13 @@ internal object GenreBrowseClient {
                 "science fiction", "fantasy", "documentary", "romance", "horror", "drama",
             )
             GenreBrowseMediaType.Series -> listOf(
-                "comedy", "action & adventure", "crime", "drama", "mystery",
-                "sci-fi & fantasy", "documentary",
+                "comedy",
+                "action & adventure",
+                "crime",
+                "drama",
+                "mystery",
+                "sci-fi & fantasy",
+                "documentary",
             )
         }
         val rank = preferredOrder.withIndex().associate { (index, name) -> name to index }
@@ -221,10 +227,14 @@ internal object GenreBrowseClient {
                 cacheTime = GENRE_CACHE_MINUTES,
             )
             val results = mapper.readTree(response.text)["results"]
-            if (results?.isArray != true) emptyList() else results.mapNotNull { node ->
-                val name = node["name"]?.asText()?.normalizeKeyword() ?: return@mapNotNull null
-                if (name !in exactNames) return@mapNotNull null
-                node["id"]?.asInt()
+            if (results?.isArray != true) {
+                emptyList()
+            } else {
+                results.mapNotNull { node ->
+                    val name = node["name"]?.asText()?.normalizeKeyword() ?: return@mapNotNull null
+                    if (name !in exactNames) return@mapNotNull null
+                    node["id"]?.asInt()
+                }
             }
         }.distinct()
 

@@ -2,16 +2,13 @@ package com.lagradost.cloudstream3.desktop.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,6 +23,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -34,9 +32,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import coil3.request.crossfade
-import com.lagradost.cloudstream3.desktop.profile.ProfileAvatar
-import com.lagradost.cloudstream3.desktop.profile.ProfileManager
-import com.lagradost.cloudstream3.desktop.ui.components.DockItem
 import com.lagradost.cloudstream3.desktop.ui.components.TopBar
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.theme.LocalDesktopAppearance
@@ -442,42 +437,42 @@ fun DesktopAppShell(
 
                 com.lagradost.cloudstream3.desktop.ui.components.ProfileWelcomeToast()
 
-            if (showDock) {
-                if (isCompact) {
-                    MobileBottomNavBar(
-                        modifier = Modifier.align(Alignment.BottomCenter).zIndex(90f),
-                        currentTitle = title ?: "",
-                        onNavigate = onNavigate,
-                        onSearchClick = {
-                            onNavigate(Config.Search)
-                        },
-                    )
-                } else if (effectiveDockPosition != com.lagradost.cloudstream3.desktop.ui.DockPosition.TOP) {
-                    // Navigation Dock (Desktop: LEFT, RIGHT, BOTTOM)
-                    val dockAlignment = when (effectiveDockPosition) {
-                        com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT -> Alignment.CenterEnd
-                        com.lagradost.cloudstream3.desktop.ui.DockPosition.BOTTOM -> Alignment.BottomCenter
-                        else -> Alignment.CenterStart
+                if (showDock) {
+                    if (isCompact) {
+                        MobileBottomNavBar(
+                            modifier = Modifier.align(Alignment.BottomCenter).zIndex(90f),
+                            currentTitle = title ?: "",
+                            onNavigate = onNavigate,
+                            onSearchClick = {
+                                onNavigate(Config.Search)
+                            },
+                        )
+                    } else if (effectiveDockPosition != com.lagradost.cloudstream3.desktop.ui.DockPosition.TOP) {
+                        // Navigation Dock (Desktop: LEFT, RIGHT, BOTTOM)
+                        val dockAlignment = when (effectiveDockPosition) {
+                            com.lagradost.cloudstream3.desktop.ui.DockPosition.RIGHT -> Alignment.CenterEnd
+                            com.lagradost.cloudstream3.desktop.ui.DockPosition.BOTTOM -> Alignment.BottomCenter
+                            else -> Alignment.CenterStart
+                        }
+                        NavigationDock(
+                            modifier = Modifier.align(dockAlignment),
+                            currentTitle = title ?: "",
+                            dockPosition = effectiveDockPosition,
+                            railCollapsed = dockCollapsed,
+                            railWidth = navigationRailWidth,
+                            onToggleRailCollapsed = {
+                                com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.setDockCollapsed(!dockCollapsed)
+                            },
+                            onNavigate = onNavigate,
+                            onSearchClick = {
+                                onNavigate(Config.Search)
+                            },
+                        )
                     }
-                    NavigationDock(
-                        modifier = Modifier.align(dockAlignment),
-                        currentTitle = title ?: "",
-                        dockPosition = effectiveDockPosition,
-                        railCollapsed = dockCollapsed,
-                        railWidth = navigationRailWidth,
-                        onToggleRailCollapsed = {
-                            com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.setDockCollapsed(!dockCollapsed)
-                        },
-                        onNavigate = onNavigate,
-                        onSearchClick = {
-                            onNavigate(Config.Search)
-                        },
-                    )
                 }
             }
         }
     }
-}
 }
 
 @Composable
@@ -558,7 +553,13 @@ private fun NavigationDock(
                 onDrawWithContent {
                     drawContent()
                     drawLine(
-                        color = if (isLightMode) desktopTheme.Divider else if (amoledMode) Color.White.copy(0.12f) else Color.White.copy(0.12f),
+                        color = if (isLightMode) {
+                            desktopTheme.Divider
+                        } else if (amoledMode) {
+                            Color.White.copy(0.12f)
+                        } else {
+                            Color.White.copy(0.12f)
+                        },
                         start = Offset(0f, 0f),
                         end = Offset(size.width, 0f),
                         strokeWidth = 1.dp.toPx(),
@@ -569,7 +570,13 @@ private fun NavigationDock(
                 onDrawWithContent {
                     drawContent()
                     drawLine(
-                        color = if (isLightMode) desktopTheme.Divider else if (amoledMode) Color.White.copy(0.12f) else Color.White.copy(0.12f),
+                        color = if (isLightMode) {
+                            desktopTheme.Divider
+                        } else if (amoledMode) {
+                            Color.White.copy(0.12f)
+                        } else {
+                            Color.White.copy(0.12f)
+                        },
                         start = Offset(0f, size.height),
                         end = Offset(size.width, size.height),
                         strokeWidth = 1.dp.toPx(),
@@ -906,4 +913,3 @@ private fun MobileTabItem(
         )
     }
 }
-

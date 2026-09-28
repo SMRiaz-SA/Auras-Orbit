@@ -1,5 +1,6 @@
 package com.lagradost.common.net
 
+import com.lagradost.common.logging.LogBuffer
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,6 +18,14 @@ object NetworkTrafficBuffer {
     private val idCounter = AtomicLong(1)
     private val buffer = ConcurrentLinkedDeque<NetworkRequestEntry>()
     private val activeRequests = ConcurrentHashMap<Long, NetworkRequestEntry>()
+    private val SENSITIVE_HEADER_NAME = Regex(
+        "(?i)(authorization|cookie|token|secret|password|api[-_]?key|auth[-_]?key|access[-_]?key)",
+    )
+
+    private fun sanitizeHeaders(headers: Map<String, String>): Map<String, String> =
+        headers.mapValues { (name, value) ->
+            if (SENSITIVE_HEADER_NAME.containsMatchIn(name)) "***MASKED***" else LogBuffer.sanitize(value)
+        }
 
     private val _networkFlow = MutableSharedFlow<NetworkRequestEntry>(
         replay = 0,
@@ -38,11 +47,11 @@ object NetworkTrafficBuffer {
             id = id,
             timestamp = System.currentTimeMillis(),
             method = method,
-            url = url,
-            host = host,
-            path = path,
-            requestHeaders = requestHeaders,
-            requestBody = requestBody,
+            url = LogBuffer.sanitize(url),
+            host = LogBuffer.sanitize(host),
+            path = LogBuffer.sanitize(path),
+            requestHeaders = sanitizeHeaders(requestHeaders),
+            requestBody = requestBody?.let(LogBuffer::sanitize),
         )
 
         activeRequests[id] = entry
@@ -77,13 +86,13 @@ object NetworkTrafficBuffer {
             )
             ).copy(
             statusCode = statusCode,
-            statusMessage = statusMessage,
+            statusMessage = LogBuffer.sanitize(statusMessage),
             durationMs = durationMs,
-            responseHeaders = responseHeaders,
-            responseBody = responseBody,
+            responseHeaders = sanitizeHeaders(responseHeaders),
+            responseBody = responseBody?.let(LogBuffer::sanitize),
             responseSize = responseSize,
-            contentType = contentType,
-            error = error,
+            contentType = contentType?.let(LogBuffer::sanitize),
+            error = error?.let(LogBuffer::sanitize),
         )
 
         // Replace in buffer

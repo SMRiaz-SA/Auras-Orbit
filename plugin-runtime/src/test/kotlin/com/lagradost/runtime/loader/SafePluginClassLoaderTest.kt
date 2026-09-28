@@ -4,8 +4,42 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SafePluginClassLoaderTest {
+
+    @Test
+    fun cloudStreamApisAreAvailableRegardlessOfTrustMetadata() {
+        for (trusted in listOf(false, true)) {
+            val loader = SafePluginClassLoader(javaClass.classLoader, trusted)
+            val apiClasses = listOf(
+                "com.lagradost.cloudstream3.syncproviders.AccountManager",
+                "com.lagradost.cloudstream3.utils.DataStore",
+            )
+            for (className in apiClasses) {
+                assertEquals(className, loader.loadClass(className).name)
+                assertTrue(com.lagradost.runtime.security.PluginSecurityPolicy.isClassAllowed(className, isTrusted = trusted))
+            }
+        }
+    }
+
+    @Test
+    fun pluginsCanLoadNormalJvmApisWithoutAnAllowlist() {
+        val classLoader = SafePluginClassLoader(this::class.java.classLoader)
+        val classes = listOf(
+            "java.lang.Thread",
+            "java.lang.ProcessBuilder",
+            "java.nio.file.Files",
+            "java.nio.file.Path",
+            "java.net.Socket",
+            "com.lagradost.cloudstream3.syncproviders.AccountManager",
+        )
+
+        for (className in classes) {
+            assertEquals(className, classLoader.loadClass(className).name)
+            assertTrue(com.lagradost.runtime.security.PluginSecurityPolicy.isClassAllowed(className))
+        }
+    }
 
     @Test
     fun testAllowedClassesLoadedNormally() {
@@ -22,7 +56,7 @@ class SafePluginClassLoaderTest {
         val charsetsClass = classLoader.loadClass("java.nio.charset.StandardCharsets")
         assertEquals("java.nio.charset.StandardCharsets", charsetsClass.name)
 
-        // File and FileInputStream are allowed (jailed at runtime via PluginFileSecurityStub)
+        // File APIs retain normal JVM behavior.
         val fileClass = classLoader.loadClass("java.io.File")
         assertEquals("java.io.File", fileClass.name)
 
@@ -31,11 +65,10 @@ class SafePluginClassLoaderTest {
     }
 
     @Test
-    fun testDangerousClassesBlocked() {
+    fun testNormalJvmClassesAreNotBlocked() {
         val classLoader = SafePluginClassLoader(this::class.java.classLoader)
 
-        // These should throw SecurityException
-        val blockedClasses = listOf(
+        val regularClasses = listOf(
             "java.lang.Thread",
             "java.lang.ProcessBuilder",
             "java.lang.ProcessHandle",
@@ -55,13 +88,11 @@ class SafePluginClassLoaderTest {
             "sun.misc.Unsafe",
         )
 
-        for (className in blockedClasses) {
-            assertFailsWith<SecurityException>("Expected $className to be blocked") {
-                classLoader.loadClass(className)
-            }
+        for (className in regularClasses) {
+            assertEquals(className, classLoader.loadClass(className).name)
         }
 
-        // Native library loading must return null
+        // The JVM may resolve plugin native libraries through java.library.path.
         assertNull(classLoader.findLibrary("native_exploit"))
     }
 
@@ -97,12 +128,11 @@ class SafePluginClassLoaderTest {
     }
 
     @Test
-    fun testSystemStubSafeReturns() {
-        assertEquals("\n", com.lagradost.runtime.loader.stubs.SystemStub.getProperty("line.separator"))
-        assertEquals("/", com.lagradost.runtime.loader.stubs.SystemStub.getProperty("file.separator"))
-        assertEquals("17", com.lagradost.runtime.loader.stubs.SystemStub.getProperty("java.version"))
-        assertNull(com.lagradost.runtime.loader.stubs.SystemStub.getProperty("user.home"))
-        assertNull(com.lagradost.runtime.loader.stubs.SystemStub.getenv("AWS_SECRET_KEY"))
-        assertEquals(emptyMap(), com.lagradost.runtime.loader.stubs.SystemStub.getenv())
+    fun testSystemStubMatchesNormalJvmValues() {
+        assertEquals(System.getProperty("line.separator"), com.lagradost.runtime.loader.stubs.SystemStub.getProperty("line.separator"))
+        assertEquals(System.getProperty("user.home"), com.lagradost.runtime.loader.stubs.SystemStub.getProperty("user.home"))
+        assertEquals(System.getenv("PATH"), com.lagradost.runtime.loader.stubs.SystemStub.getenv("PATH"))
+        assertEquals(System.getenv(), com.lagradost.runtime.loader.stubs.SystemStub.getenv())
+        assertEquals(System.getProperties(), com.lagradost.runtime.loader.stubs.SystemStub.getProperties())
     }
 }

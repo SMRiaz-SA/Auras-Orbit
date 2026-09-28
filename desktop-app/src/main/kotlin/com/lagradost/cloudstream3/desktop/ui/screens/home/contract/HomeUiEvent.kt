@@ -2,8 +2,8 @@ package com.lagradost.cloudstream3.desktop.ui.screens.home.contract
 
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeDiscoveryKind
 import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
+import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeDiscoveryKind
 
 sealed interface HomeUiEvent : UiEvent {
 

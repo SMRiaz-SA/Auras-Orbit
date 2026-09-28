@@ -5,8 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -14,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -27,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -95,7 +91,13 @@ fun darkDesktopColors(
         SurfaceElevated = surfaceElevated,
         TextPrimary = Color.White,
         TextMuted = Color.White.copy(alpha = 0.7f),
-        Divider = if (isAmoled) Color(0xFF1C1C22) else if (backgroundTheme == "Custom") surfaceElevated.copy(alpha = 0.6f) else Color(0xFF2A2A38),
+        Divider = if (isAmoled) {
+            Color(0xFF1C1C22)
+        } else if (backgroundTheme == "Custom") {
+            surfaceElevated.copy(alpha = 0.6f)
+        } else {
+            Color(0xFF2A2A38)
+        },
         isLightMode = false,
         isAmoled = isAmoled,
     )

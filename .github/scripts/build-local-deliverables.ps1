@@ -19,12 +19,6 @@ if ($null -eq $versionLine) { throw 'APP_VERSION was not found in gradle.propert
 $version = ($versionLine -split '=', 2)[1].Trim()
 if ($version -notmatch '^\d+(?:\.\d+){2,3}$') { throw "Invalid APP_VERSION: $version" }
 
-$versionFile = Join-Path $repoRoot 'installer/version.iss'
-$versionMatch = [regex]::Match((Get-Content -Raw -LiteralPath $versionFile), '#define\s+AppVersion\s+"([^"]+)"')
-if (-not $versionMatch.Success -or $versionMatch.Groups[1].Value -ne $version) {
-    throw "installer/version.iss does not match APP_VERSION $version."
-}
-
 $distribution = Join-Path $repoRoot 'desktop-app/build/compose/binaries/main/app/Auras-Orbit'
 $outputDirectory = Join-Path $repoRoot 'desktop-app/build/outputs'
 $portableZip = Join-Path $outputDirectory "Auras-Orbit-Portable-$version.zip"
@@ -44,7 +38,12 @@ $excludedSecret = '(^|/)(\.env(?:\..*)?|local\.properties|keystore\.properties|s
 
 function Add-SourceFile([string] $BaseDirectory, [string] $RelativePath, [string] $ArchivePrefix) {
     $normalizedRelativePath = $RelativePath.Replace('\', '/')
-    if ($normalizedRelativePath -match $script:excludedPath -or $normalizedRelativePath -match $script:excludedSecret) {
+    $isBundledWebView2Sdk = $normalizedRelativePath.StartsWith(
+        'desktop-app/src/main/cpp/webview2/build/',
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+    if (($normalizedRelativePath -match $script:excludedPath -and -not $isBundledWebView2Sdk) -or
+        $normalizedRelativePath -match $script:excludedSecret) {
         return
     }
 
@@ -80,6 +79,8 @@ if ($sourceItems.Count -eq 0) { throw 'The source package file list is empty.' }
 foreach ($requiredSource in @(
     "Auras-Orbit-Source-$version/gradlew.bat",
     "Auras-Orbit-Source-$version/desktop-app/build.gradle.kts",
+    "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/include/WebView2.h",
+    "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/x64/WebView2Loader.dll",
     "Auras-Orbit-Source-$version/desktop-app/src/main/kotlin/com/lagradost/cloudstream3/desktop/ui/screens/home/HomeDiscovery.kt",
     "Auras-Orbit-Source-$version/.github/scripts/build-local-deliverables.ps1",
     "Auras-Orbit-Source-$version/android-reference/library/build.gradle.kts"
@@ -103,7 +104,7 @@ if (-not $mpvReady -or (Get-FileHash -LiteralPath $mpvDll -Algorithm SHA256).Has
 
 Push-Location $repoRoot
 try {
-    & (Join-Path $repoRoot 'gradlew.bat') ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':desktop-app:createDistributable' '--no-daemon'
+    & (Join-Path $repoRoot 'gradlew.bat') 'spotlessCheck' ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':desktop-app:nativeTest' ':desktop-app:createDistributable' '-PorbitDistribution=release' '--no-daemon'
     if ($LASTEXITCODE -ne 0) { throw "Gradle build/test failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location
@@ -166,6 +167,8 @@ try {
     foreach ($requiredSource in @(
         "Auras-Orbit-Source-$version/gradlew.bat",
         "Auras-Orbit-Source-$version/desktop-app/build.gradle.kts",
+        "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/include/WebView2.h",
+        "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/x64/WebView2Loader.dll",
         "Auras-Orbit-Source-$version/desktop-app/src/main/kotlin/com/lagradost/cloudstream3/desktop/ui/screens/home/HomeDiscovery.kt",
         "Auras-Orbit-Source-$version/.github/scripts/build-local-deliverables.ps1",
         "Auras-Orbit-Source-$version/android-reference/library/build.gradle.kts"

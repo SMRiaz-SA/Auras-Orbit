@@ -23,8 +23,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.cloudstream3.desktop.ui.PremiumIcons
+import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 
 @Composable
 fun DockItemsList(
@@ -215,40 +215,42 @@ fun DockItem(
             )
         }
 
-        if (!expanded) AnimatedVisibility(
-            visible = selected,
-            enter = fadeIn() + when {
-                indicatorAtTop -> slideInVertically { -it / 2 }
-                isHorizontal -> slideInHorizontally { it / 2 }
-                else -> slideInVertically { it / 2 }
-            },
-            exit = fadeOut() + when {
-                indicatorAtTop -> slideOutVertically { -it / 2 }
-                isHorizontal -> slideOutHorizontally { it / 2 }
-                else -> slideOutVertically { it / 2 }
-            },
-            modifier = Modifier.align(
-                when {
-                    indicatorAtTop -> Alignment.TopCenter
-                    isHorizontal -> Alignment.BottomCenter
-                    else -> Alignment.CenterStart
+        if (!expanded) {
+            AnimatedVisibility(
+                visible = selected,
+                enter = fadeIn() + when {
+                    indicatorAtTop -> slideInVertically { -it / 2 }
+                    isHorizontal -> slideInHorizontally { it / 2 }
+                    else -> slideInVertically { it / 2 }
                 },
-            ),
-        ) {
-            Box(
-                modifier = Modifier
-                    .run {
-                        when {
-                            indicatorAtTop -> padding(top = 2.dp).width(18.dp).height(3.dp)
-                                .clip(RoundedCornerShape(1.5.dp))
-                            isHorizontal -> padding(bottom = 2.dp).width(18.dp).height(3.dp)
-                                .clip(RoundedCornerShape(1.5.dp))
-                            else -> padding(start = 2.dp).width(3.dp).height(18.dp)
-                                .clip(RoundedCornerShape(1.5.dp))
+                exit = fadeOut() + when {
+                    indicatorAtTop -> slideOutVertically { -it / 2 }
+                    isHorizontal -> slideOutHorizontally { it / 2 }
+                    else -> slideOutVertically { it / 2 }
+                },
+                modifier = Modifier.align(
+                    when {
+                        indicatorAtTop -> Alignment.TopCenter
+                        isHorizontal -> Alignment.BottomCenter
+                        else -> Alignment.CenterStart
+                    },
+                ),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .run {
+                            when {
+                                indicatorAtTop -> padding(top = 2.dp).width(18.dp).height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                isHorizontal -> padding(bottom = 2.dp).width(18.dp).height(3.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                                else -> padding(start = 2.dp).width(3.dp).height(18.dp)
+                                    .clip(RoundedCornerShape(1.5.dp))
+                            }
                         }
-                    }
-                    .background(MaterialTheme.colorScheme.primary),
-            )
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
         }
 
         if (expanded) {
@@ -271,48 +273,50 @@ fun DockItem(
                     maxLines = 1,
                 )
             }
-        } else Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    icon,
-                    contentDescription = label,
-                    tint = iconTint,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer(scaleX = scale, scaleY = scale),
-                )
-
-                if (badge != null) {
-                    Box(
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = label,
+                        tint = iconTint,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 2.dp, y = (-2).dp)
-                            .size(8.dp)
-                            .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape),
+                            .size(22.dp)
+                            .graphicsLayer(scaleX = scale, scaleY = scale),
                     )
-                }
-            }
 
-            if (showLabel) {
-                AnimatedVisibility(
-                    visible = isHovered,
-                    enter = fadeIn() + expandVertically() + slideInVertically { it / 2 },
-                    exit = fadeOut() + shrinkVertically() + slideOutVertically { it / 2 },
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = label,
-                            color = if (selected) theme.TextPrimary else theme.TextMuted,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+                    if (badge != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 2.dp, y = (-2).dp)
+                                .size(8.dp)
+                                .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape),
                         )
+                    }
+                }
+
+                if (showLabel) {
+                    AnimatedVisibility(
+                        visible = isHovered,
+                        enter = fadeIn() + expandVertically() + slideInVertically { it / 2 },
+                        exit = fadeOut() + shrinkVertically() + slideOutVertically { it / 2 },
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = label,
+                                color = if (selected) theme.TextPrimary else theme.TextMuted,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+                            )
+                        }
                     }
                 }
             }

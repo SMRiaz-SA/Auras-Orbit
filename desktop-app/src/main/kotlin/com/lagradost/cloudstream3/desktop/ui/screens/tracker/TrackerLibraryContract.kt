@@ -1,11 +1,11 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.tracker
 
 import androidx.compose.runtime.Immutable
+import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
+import com.lagradost.cloudstream3.desktop.ui.base.UiState
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.SyncWatchType
 import com.lagradost.cloudstream3.ui.library.ListSorting
-import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
-import com.lagradost.cloudstream3.desktop.ui.base.UiState
 
 @Immutable
 data class TrackerProviderOption(

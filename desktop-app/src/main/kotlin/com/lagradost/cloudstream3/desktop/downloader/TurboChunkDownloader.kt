@@ -2,16 +2,26 @@ package com.lagradost.cloudstream3.desktop.downloader
 
 import com.lagradost.common.logging.AppLogger
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellableContinuation
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class TurboChunkDownloader(
     private val maxWorkers: Int = 8,
@@ -25,18 +35,21 @@ class TurboChunkDownloader(
         val totalBytes: Long,
         val supportsRange: Boolean,
         val contentType: String?,
+        val validator: String? = null,
     )
 
-    suspend fun probe(url: String, headers: Map<String, String>): ProbeResult = withContext(Dispatchers.IO) {
+    suspend fun probe(url: String, headers: Map<String, String>): ProbeResult {
         try {
             val reqBuilder = Request.Builder().url(url)
             headers.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
-            reqBuilder.addHeader("Range", "bytes=0-0")
+            reqBuilder.header("Range", "bytes=0-0").header("Accept-Encoding", "identity")
 
-            client.newCall(reqBuilder.build()).execute().use { res ->
+            return executeCancellable(reqBuilder.build()) { res ->
                 val contentRange = res.header("Content-Range")
                 val contentLength = res.header("Content-Length")?.toLongOrNull() ?: 0L
-                val acceptRanges = res.header("Accept-Ranges")
+                // Read at most one byte so small probe responses complete cleanly and
+                // servers do not remain blocked writing a body that we never consume.
+                res.body.byteStream().use { it.read() }
 
                 val totalBytes = if (!contentRange.isNullOrBlank() && contentRange.contains("/")) {
                     contentRange.substringAfter("/").toLongOrNull() ?: contentLength
@@ -44,16 +57,19 @@ class TurboChunkDownloader(
                     contentLength
                 }
 
-                val supportsRange = res.code == 206 || acceptRanges?.equals("bytes", ignoreCase = true) == true
+                val supportsRange = res.code == 206 && contentRange?.startsWith("bytes 0-0/") == true
                 ProbeResult(
                     totalBytes = totalBytes,
                     supportsRange = supportsRange && totalBytes > 1_000_000L,
                     contentType = res.header("Content-Type"),
+                    validator = res.header("ETag")?.takeUnless { it.startsWith("W/") } ?: res.header("Last-Modified"),
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.w("Probe failed: ${e.message}")
-            ProbeResult(0L, false, null)
+            return ProbeResult(0L, false, null)
         }
     }
 
@@ -72,39 +88,85 @@ class TurboChunkDownloader(
         destinationFile.parentFile?.mkdirs()
         tempPartFile.parentFile?.mkdirs()
 
+        // Resume only the same validated entity with the same layout. File length alone
+        // cannot establish progress for a preallocated segmented download.
+        val identityFile = File(tempPartFile.path + ".identity")
+        val identity = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$url|${probe.validator}|$totalBytes|$maxWorkers|${probe.supportsRange}".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val completionFile = File(tempPartFile.path + ".complete")
+        if (probe.validator == null || identityFile.takeIf { it.isFile }?.readText() != identity) {
+            java.io.RandomAccessFile(tempPartFile, "rw").use { it.setLength(0) }
+            File(tempPartFile.path + ".download.meta").delete()
+            File(tempPartFile.path + ".offsets").delete()
+            completionFile.delete()
+        }
+        identityFile.writeText(identity)
+        val useParallel = probe.supportsRange && totalBytes > 5_000_000L
+
+        val hasValidCompletionMarker = runCatching { completionFile.readText() == identity }.getOrDefault(false)
+        val hasExpectedSize = totalBytes <= 0L || tempPartFile.length() == totalBytes
+        if (hasValidCompletionMarker && tempPartFile.isFile && tempPartFile.length() > 0L && hasExpectedSize) {
+            onProgress(tempPartFile.length(), totalBytes.coerceAtLeast(tempPartFile.length()), 0L)
+            return@withContext true
+        }
+
+        completionFile.delete()
+        // A full-sized temp file may be a sparse pre-allocation left by a crash. Only the
+        // completion marker, written after byte-count validation, can certify completion.
+        if (!useParallel && totalBytes > 0L && tempPartFile.isFile && tempPartFile.length() == totalBytes) {
+            java.io.RandomAccessFile(tempPartFile, "rw").use { it.setLength(0) }
+            File(tempPartFile.path + ".download.meta").delete()
+            File(tempPartFile.path + ".offsets").delete()
+        }
+
+        val downloadHeaders = headers.toMutableMap().apply {
+            put("Accept-Encoding", "identity")
+            probe.validator?.let { put("If-Range", it) }
+        }
+
         val speedTracker = SpeedTracker()
 
-        val downloadOk = if (probe.supportsRange && totalBytes > 5_000_000L) {
-            AppLogger.i("Starting parallel $maxWorkers-connection download for ${totalBytes / 1024 / 1024} MB ($url)")
-            downloadParallel(
-                url = url,
-                headers = headers,
-                tempFile = tempPartFile,
-                totalBytes = totalBytes,
-                numWorkers = maxWorkers,
-                speedTracker = speedTracker,
-                onProgress = onProgress,
-                isCancelled = isCancelled,
-            )
-        } else {
-            AppLogger.i("Server does not support range requests. Downloading progressive stream ($url)")
-            downloadSingleStream(
-                url = url,
-                headers = headers,
-                tempFile = tempPartFile,
-                totalBytes = totalBytes,
-                speedTracker = speedTracker,
-                onProgress = onProgress,
-                isCancelled = isCancelled,
-            )
+        val downloadOk = try {
+            if (useParallel) {
+                AppLogger.i("Starting parallel $maxWorkers-connection download for ${totalBytes / 1024 / 1024} MB ($url)")
+                downloadParallel(
+                    url = url,
+                    headers = downloadHeaders,
+                    tempFile = tempPartFile,
+                    totalBytes = totalBytes,
+                    numWorkers = maxWorkers,
+                    speedTracker = speedTracker,
+                    onProgress = onProgress,
+                    isCancelled = isCancelled,
+                )
+            } else {
+                AppLogger.i("Server does not support range requests. Downloading progressive stream ($url)")
+                downloadSingleStream(
+                    url = url,
+                    headers = downloadHeaders,
+                    tempFile = tempPartFile,
+                    totalBytes = totalBytes,
+                    speedTracker = speedTracker,
+                    onProgress = onProgress,
+                    isCancelled = isCancelled,
+                )
+            }
+        } catch (_: RangeRejectedException) {
+            java.io.RandomAccessFile(tempPartFile, "rw").use { it.setLength(0) }
+            File(tempPartFile.path + ".download.meta").delete()
+            File(tempPartFile.path + ".offsets").delete()
+            downloadSingleStream(url, downloadHeaders, tempPartFile, totalBytes, speedTracker, onProgress, isCancelled)
         }
 
         if (isCancelled() || !downloadOk) {
             return@withContext false
         }
 
-        if (tempPartFile.exists() && tempPartFile.length() > 0L) {
+        if (tempPartFile.exists() && tempPartFile.length() > 0L && (totalBytes <= 0 || tempPartFile.length() == totalBytes)) {
             AppLogger.i("Download writing completed -> ${tempPartFile.absolutePath} (${tempPartFile.length() / 1024 / 1024} MB)")
+            ensureActive()
+            writeCompletionMarker(completionFile, identity)
             true
         } else {
             false
@@ -154,10 +216,12 @@ class TurboChunkDownloader(
 
         // Restore worker progress from state file if resuming
         val workerProgress = Array(numWorkers) { AtomicLong(0L) }
-        val activeMetaFile = if (stateFile.exists()) stateFile else if (legacyStateFile.exists()) legacyStateFile else null
-        if (activeMetaFile != null && tempFile.exists() && tempFile.length() >= totalBytes) {
+        if (legacyStateFile.exists()) legacyStateFile.delete()
+        val stateLines = runCatching { stateFile.takeIf { it.isFile }?.readLines().orEmpty() }.getOrDefault(emptyList())
+        val stateGeometryMatches = stateLines.contains("TOTAL:$totalBytes") && stateLines.contains("WORKERS:$numWorkers")
+        if (stateGeometryMatches && tempFile.exists() && tempFile.length() >= totalBytes) {
             try {
-                activeMetaFile.readLines().forEach { line ->
+                stateLines.forEach { line ->
                     val trimmed = line.trim()
                     if (trimmed.startsWith("TOTAL:") || trimmed.startsWith("WORKERS:")) {
                         // Header metadata
@@ -178,6 +242,9 @@ class TurboChunkDownloader(
             } catch (e: Exception) {
                 AppLogger.w("Failed to read download state: ${e.message}")
             }
+        } else if (stateFile.exists()) {
+            AppLogger.w("Discarding download progress with mismatched worker geometry or file size")
+            stateFile.delete()
         }
 
         val initialBytes = (0 until numWorkers).sumOf { workerProgress[it].get() }
@@ -234,9 +301,19 @@ class TurboChunkDownloader(
                         headers.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
                         reqBuilder.addHeader("Range", "bytes=$requestStartByte-$endByte")
 
-                        client.newCall(reqBuilder.build()).execute().use { response ->
+                        executeCancellable(reqBuilder.build()) { response ->
+                            if (response.code == 416) {
+                                throw RangeRejectedException()
+                            }
                             if (response.code !in 200..299) {
                                 throw IllegalStateException("Thread $workerIdx HTTP ${response.code}")
+                            }
+                            if (
+                                response.code != 206 ||
+                                response.header("Content-Range") != "bytes $requestStartByte-$endByte/$totalBytes" ||
+                                rangeValidatorMismatch(headers, response)
+                            ) {
+                                throw RangeRejectedException()
                             }
 
                             val body = response.body
@@ -248,6 +325,7 @@ class TurboChunkDownloader(
                                 while (!isCancelled() && !hasError.get()) {
                                     val read = input.read(buffer)
                                     if (read <= 0) break
+                                    if (writePos + read > endByte + 1) throw RangeRejectedException()
 
                                     byteBuffer.position(0)
                                     byteBuffer.limit(read)
@@ -278,6 +356,8 @@ class TurboChunkDownloader(
                             }
                         }
                         break // Success on this worker
+                    } catch (e: RangeRejectedException) {
+                        throw e
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -315,7 +395,7 @@ class TurboChunkDownloader(
             val startByte = workerIdx * chunkSize
             val endByte = ((workerIdx + 1) * chunkSize - 1).coerceAtMost(totalBytes - 1)
             val expectedChunkLength = (endByte - startByte + 1).coerceAtLeast(0L)
-            workerProgress[workerIdx].get() >= expectedChunkLength
+            workerProgress[workerIdx].get() == expectedChunkLength
         }
 
         if (!allChunksValid) {
@@ -340,9 +420,6 @@ class TurboChunkDownloader(
         isCancelled: () -> Boolean,
     ): Boolean = withContext(Dispatchers.IO) {
         val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
-        if (totalBytes > 0 && existingBytes >= totalBytes) {
-            return@withContext true
-        }
 
         // Emit initial progress immediately on startup or resume
         if (existingBytes > 0L) {
@@ -365,11 +442,27 @@ class TurboChunkDownloader(
             }
 
             try {
-                client.newCall(reqBuilder.build()).execute().use { response ->
+                executeCancellable(reqBuilder.build()) { response ->
+                    if (response.code == 416 && currentExisting > 0L) {
+                        throw RangeRejectedException()
+                    }
                     if (!response.isSuccessful) {
                         throw IllegalStateException("Download HTTP ${response.code}")
                     }
                     val isPartial = response.code == 206
+                    if (isPartial) {
+                        val range = parseContentRange(response.header("Content-Range"))
+                            ?: throw IllegalStateException("Invalid resumed Content-Range")
+                        val expectedTotal = if (totalBytes > 0L) totalBytes else range.total
+                        if (
+                            range.start != currentExisting ||
+                            range.total != expectedTotal ||
+                            range.end != expectedTotal - 1L ||
+                            rangeValidatorMismatch(headers, response)
+                        ) {
+                            throw RangeRejectedException()
+                        }
+                    }
                     val append = isPartial && currentExisting > 0L
                     val body = response.body
                     val buffer = ByteArray(64 * 1024)
@@ -380,6 +473,10 @@ class TurboChunkDownloader(
                             while (!isCancelled()) {
                                 val read = input.read(buffer)
                                 if (read <= 0) break
+                                if (totalBytes > 0L && (downloaded > totalBytes || read.toLong() > totalBytes - downloaded)) {
+                                    output.channel.truncate(0L)
+                                    throw IOException("Response body exceeded the expected download size")
+                                }
                                 output.write(buffer, 0, read)
                                 downloaded += read
                                 speedTracker.record(read.toLong())
@@ -394,7 +491,22 @@ class TurboChunkDownloader(
                         }
                     }
                 }
-                return@withContext tempFile.exists() && tempFile.length() > 0L
+                val complete = !isCancelled() && tempFile.exists() && tempFile.length() > 0L &&
+                    (totalBytes <= 0L || tempFile.length() == totalBytes)
+                if (complete) return@withContext true
+
+                attempts++
+                AppLogger.w("Single stream response ended before the expected size (attempt $attempts/$maxAttempts)")
+                if (attempts < maxAttempts) delay(1000L * attempts)
+            } catch (e: RangeRejectedException) {
+                attempts++
+                if (currentExisting > 0L) {
+                    FileOutputStream(tempFile, false).use { }
+                    AppLogger.w("Resume range was rejected; restarting from byte zero")
+                } else {
+                    AppLogger.w("Download range was rejected (attempt $attempts/$maxAttempts)")
+                }
+                if (attempts < maxAttempts) delay(1000L * attempts)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -404,6 +516,74 @@ class TurboChunkDownloader(
             }
         }
         false
+    }
+
+    private class RangeRejectedException : java.io.IOException("Server ignored or changed the requested byte range")
+
+    private fun rangeValidatorMismatch(headers: Map<String, String>, response: Response): Boolean {
+        val expectedValidator = headers.entries.firstOrNull { it.key.equals("If-Range", ignoreCase = true) }?.value ?: return false
+        val responseValidator = response.header("ETag")?.takeUnless { it.startsWith("W/") }
+            ?: response.header("Last-Modified")
+        return responseValidator != expectedValidator
+    }
+
+    private data class ContentRange(val start: Long, val end: Long, val total: Long)
+
+    private fun parseContentRange(value: String?): ContentRange? {
+        val match = value?.trim()?.let { CONTENT_RANGE.matchEntire(it) } ?: return null
+        val start = match.groupValues[1].toLongOrNull() ?: return null
+        val end = match.groupValues[2].toLongOrNull() ?: return null
+        val total = match.groupValues[3].toLongOrNull() ?: return null
+        return ContentRange(start, end, total).takeIf { start <= end && end < total }
+    }
+
+    private suspend fun <T> executeCancellable(request: Request, consume: (Response) -> T): T =
+        suspendCancellableCoroutine { continuation: CancellableContinuation<T> ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            try {
+                call.enqueue(
+                    object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            if (continuation.isActive) {
+                                runCatching { continuation.resumeWithException(e) }
+                            }
+                        }
+
+                        override fun onResponse(call: Call, response: Response) {
+                            if (!continuation.isActive) {
+                                response.close()
+                                return
+                            }
+                            val value = try {
+                                response.use(consume)
+                            } catch (e: Throwable) {
+                                if (continuation.isActive) {
+                                    runCatching { continuation.resumeWithException(e) }
+                                }
+                                return
+                            }
+                            if (continuation.isActive) {
+                                runCatching { continuation.resume(value) }
+                            }
+                        }
+                    },
+                )
+            } catch (e: Throwable) {
+                if (continuation.isActive) {
+                    runCatching { continuation.resumeWithException(e) }
+                }
+            }
+        }
+
+    private fun writeCompletionMarker(marker: File, identity: String) {
+        val temporary = File(marker.parentFile, "${marker.name}.tmp")
+        temporary.writeText(identity)
+        try {
+            Files.move(temporary.toPath(), marker.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary.toPath(), marker.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     private class SpeedTracker {
@@ -425,5 +605,9 @@ class TurboChunkDownloader(
 
         @Synchronized
         fun getCurrentSpeed(): Long = currentSpeed
+    }
+
+    private companion object {
+        val CONTENT_RANGE = Regex("^bytes (\\d+)-(\\d+)/(\\d+)$")
     }
 }

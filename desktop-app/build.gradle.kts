@@ -27,12 +27,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 
 configurations.all {
     exclude(group = "org.slf4j", module = "slf4j-simple")
-    // Override the library module's strict constraint — desktop-app is pure JVM
-    // and needs a newer jackson version to handle Kotlin 2.x @Metadata in plugins.
-    resolutionStrategy.force("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-databind:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-core:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-annotations:2.18.3")
 }
 
 dependencies {
@@ -110,11 +104,12 @@ val orbitDistribution = project.findProperty("orbitDistribution")?.toString() ?:
 require(orbitDistribution == "release" || orbitDistribution == "tester") {
     "orbitDistribution must be either 'release' or 'tester' (was '$orbitDistribution')."
 }
-val testerDefaultRepositoryJvmArg = if (orbitDistribution == "tester") {
-    "-Dauras.tester.defaultRepositoryUrl=https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
-} else {
-    null
-}
+val testerDefaultRepositoryJvmArg =
+    if (orbitDistribution == "tester") {
+        "-Dauras.tester.defaultRepositoryUrl=https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
+    } else {
+        null
+    }
 
 // Compose Desktop application configuration
 compose.desktop {
@@ -122,7 +117,6 @@ compose.desktop {
         mainClass = "com.lagradost.cloudstream3.desktop.MainKt"
         jvmArgs +=
             listOf(
-                "-Djava.security.manager=allow",
                 "-Djava.net.preferIPv6Addresses=true",
                 "-Djava.library.path=\$APPDIR/resources/jni",
                 "-Djna.library.path=\$APPDIR/resources/mpv",
@@ -166,7 +160,7 @@ compose.desktop {
                 "jdk.compiler", // Required by Rhino JS compiler
                 "jdk.localedata", // Required by Rhino JS Date functions
             )
-            appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
+            appResourcesRootDir.set(project.layout.buildDirectory.dir("generated/appResources"))
 
             windows {
                 iconFile.set(project.file("src/main/resources/app_icon.ico"))
@@ -180,19 +174,22 @@ compose.desktop {
 }
 
 tasks.matching { it.name == "run" }.configureEach {
+    dependsOn("compileNativeBridge")
     val runTask = this as JavaExec
     runTask.jvmArgs(
         "-Djna.library.path=${project.file("appResources/windows/mpv").absolutePath}",
-        "-Djava.library.path=${project.file("appResources/windows/jni").absolutePath}",
+        "-Djava.library.path=${project.file("build/native/jni").absolutePath}",
         "-Dcloudstream.version=${project.findProperty("APP_VERSION")}",
     )
     testerDefaultRepositoryJvmArg?.let { runTask.jvmArgs(it) }
 }
 
 val generateInstallerVersion by tasks.registering {
-    val versionFile = project.file("../installer/version.iss")
+    val versionFile = layout.buildDirectory.file("generated/installer/version.iss").get().asFile
+    inputs.property("APP_VERSION", project.findProperty("APP_VERSION")?.toString() ?: "0.2.0.00")
     outputs.file(versionFile)
     doLast {
+        versionFile.parentFile.mkdirs()
         val appVer = project.findProperty("APP_VERSION")?.toString()?.takeIf { it.isNotBlank() } ?: "0.2.0.00"
         versionFile.writeText("#define AppVersion \"$appVer\"")
     }
@@ -214,17 +211,60 @@ tasks.named<Copy>("processResources") {
     }
 }
 
-val copyDistributionLegalNotices by tasks.registering(Copy::class) {
-    val requiredFiles = listOf(
-        rootProject.file("LICENSE"),
-        rootProject.file("NOTICE.md"),
-        rootProject.file("THIRD-PARTY-NOTICES.md"),
-        rootProject.file("android-reference/LICENSE"),
-        project.file("src/main/cpp/webview2/LICENSE.txt"),
-        project.file("src/main/cpp/webview2/NOTICE.txt"),
-        project.file("appResources/legal/mpv-LICENSE.GPL.txt"),
-        project.file("appResources/legal/MPV-PROVENANCE.txt"),
+tasks.register<Test>("nativeTest") {
+    dependsOn("compileNativeBridge")
+    dependsOn("testControlsUrlPolicy")
+    description = "Runs native MPV integration checks with bundled runtime libraries."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("native") }
+    systemProperty("jna.library.path", project.file("appResources/windows/mpv").absolutePath)
+    systemProperty("java.library.path", project.file("build/native/jni").absolutePath)
+}
+
+tasks.register<Exec>("testControlsUrlPolicy") {
+    group = "verification"
+    description = "Compiles and runs native WebView controls navigation policy checks."
+    workingDir = rootProject.projectDir
+    commandLine(
+        "pwsh",
+        "-NoProfile",
+        "-File",
+        project.file("src/test/cpp/run_controls_url_policy_tests.ps1").absolutePath,
     )
+}
+
+val compileNativeBridge by tasks.registering(Exec::class) {
+    group = "build"
+    workingDir = rootProject.projectDir
+    inputs.file(rootProject.file("compile_jni.ps1"))
+    inputs.file(rootProject.file(".github/scripts/fetch-native-toolchain.ps1"))
+    inputs.dir("src/main/cpp")
+    outputs.dir(layout.buildDirectory.dir("native/jni"))
+    commandLine("pwsh", "-NoProfile", "-File", rootProject.file("compile_jni.ps1").absolutePath)
+}
+
+val prepareRuntimeResources by tasks.registering(Sync::class) {
+    dependsOn(compileNativeBridge)
+    from("appResources") { exclude("windows/jni/player_bridge.dll") }
+    from(layout.buildDirectory.dir("native/jni")) { into("windows/jni") }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    into(layout.buildDirectory.dir("generated/appResources"))
+}
+
+val copyDistributionLegalNotices by tasks.registering(Copy::class) {
+    val requiredFiles =
+        listOf(
+            rootProject.file("LICENSE"),
+            rootProject.file("NOTICE.md"),
+            rootProject.file("THIRD-PARTY-NOTICES.md"),
+            rootProject.file("android-reference/LICENSE"),
+            project.file("src/main/cpp/webview2/LICENSE.txt"),
+            project.file("src/main/cpp/webview2/NOTICE.txt"),
+            project.file("appResources/legal/mpv-LICENSE.GPL.txt"),
+            project.file("appResources/legal/MPV-PROVENANCE.txt"),
+        )
     inputs.files(requiredFiles)
     into(layout.buildDirectory.dir("compose/binaries/main/app/Auras-Orbit"))
 
@@ -269,22 +309,30 @@ val copyDistributionLegalNotices by tasks.registering(Copy::class) {
     }
 }
 
-tasks.matching { it.name == "createDistributable" }.configureEach {
-    finalizedBy(copyDistributionLegalNotices)
+tasks.matching { it.name == "createDistributable" || it.name == "prepareAppResources" }.configureEach {
+    dependsOn(prepareRuntimeResources)
+    if (name == "createDistributable") {
+        // Compose's distributable task does not reliably fingerprint this generated
+        // runtime-resource directory. Track it so a rebuilt JNI bridge cannot leave
+        // a stale player_bridge.dll in an otherwise up-to-date app image.
+        inputs.dir(layout.buildDirectory.dir("generated/appResources"))
+        finalizedBy(copyDistributionLegalNotices)
+    }
 }
 
-tasks.withType<Test> {
+tasks.named<Test>("test") {
     useJUnitPlatform {
         // Exclude integration tests that require native binaries (e.g. libmpv-2.dll)
-        // Run them manually with: ./gradlew :desktop-app:test -Dtags=native
+        // Run them manually with: ./gradlew :desktop-app:nativeTest
         excludeTags("native")
     }
 }
 
 tasks.register<JavaExec>("runTestWebViewPlayer") {
+    dependsOn(compileNativeBridge)
     mainClass.set("com.lagradost.cloudstream3.desktop.test.TestWebViewPlayerKt")
     classpath = sourceSets["main"].runtimeClasspath
-    jvmArgs("-Djava.library.path=appResources/windows/jni", "-Djna.library.path=appResources/windows/mpv")
+    jvmArgs("-Djava.library.path=build/native/jni", "-Djna.library.path=appResources/windows/mpv")
 }
 
 tasks.register<JavaExec>("runTestMpvPlayer") {

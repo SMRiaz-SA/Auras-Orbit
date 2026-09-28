@@ -71,7 +71,7 @@ object ExploreCatalogClient {
                         description = description,
                         rating = rating,
                         genres = genresList,
-                    )
+                    ),
                 )
             }
             items

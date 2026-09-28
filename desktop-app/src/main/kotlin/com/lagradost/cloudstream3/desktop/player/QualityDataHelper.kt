@@ -1,10 +1,10 @@
 package com.lagradost.cloudstream3.desktop.player
 
+import com.lagradost.cloudstream3.desktop.player.ytdl.DesktopYtDlpBinary
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
-import com.lagradost.cloudstream3.desktop.player.ytdl.DesktopYtDlpBinary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,8 +112,22 @@ object QualityDataHelper {
         DesktopDataStore.setKey(PREF_SOURCE_PRIORITIES, emptyMap<String, Int>())
     }
 
-    private val seekabilityCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    enum class Seekability {
+        SEEKABLE,
+        NON_SEEKABLE,
+        UNKNOWN,
+    }
+
+    private val seekabilityCache = java.util.concurrent.ConcurrentHashMap<String, Seekability>()
     private val RESOLUTION_REGEX = Regex("(?i)(?:^|[^0-9a-z])(2160p|4k|uhd|1440p|2k|qhd|1080p|fhd|720p|hd|480p|sd|360p|1080|720)(?:[^0-9a-z]|$)")
+
+    internal fun classifyRangeSupport(code: Int, contentRange: String?, acceptRanges: String?): Seekability {
+        return when {
+            code == 206 || contentRange != null || acceptRanges?.contains("bytes", ignoreCase = true) == true -> Seekability.SEEKABLE
+            code == 200 && !acceptRanges.isNullOrBlank() -> Seekability.NON_SEEKABLE
+            else -> Seekability.UNKNOWN
+        }
+    }
 
     fun extractEffectiveQuality(link: ExtractorLink): Int {
         if (link.quality > 0 && link.quality != Qualities.Unknown.value) {
@@ -239,40 +253,40 @@ object QualityDataHelper {
         return isHd + (langTier * 200) + qualRank + srcPriority
     }
 
-    fun isSeekableLink(link: ExtractorLink): Boolean {
+    fun getSeekability(link: ExtractorLink): Seekability {
         if (link.isM3u8 || link.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.M3U8 ||
-            link.isDash || link.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.DASH) {
-            return true
+            link.isDash || link.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.DASH
+        ) {
+            return Seekability.SEEKABLE
         }
         val url = link.url.trim()
         val cached = seekabilityCache[url]
-        if (cached != null) {
-            return cached
-        }
+        if (cached != null) return cached
         val urlLower = url.lowercase()
-        if (urlLower.contains(".m3u8") || urlLower.contains(".mpd")) return true
+        if (urlLower.contains(".m3u8") || urlLower.contains(".mpd")) return Seekability.SEEKABLE
 
-        return false
+        return Seekability.UNKNOWN
     }
 
-    suspend fun probeRangeSeekability(link: ExtractorLink): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    fun isSeekableLink(link: ExtractorLink): Boolean = getSeekability(link) == Seekability.SEEKABLE
+
+    suspend fun probeRangeSeekability(link: ExtractorLink): Seekability = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (link.isM3u8 || link.isDash || link.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.M3U8 || link.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.DASH) {
-            return@withContext true
+            return@withContext Seekability.SEEKABLE
         }
         val url = link.url.trim()
-        val cached = seekabilityCache[url]
-        if (cached != null) return@withContext cached
+        val cached = getSeekability(link)
+        if (cached != Seekability.UNKNOWN) return@withContext cached
 
         if (link.extractorData == "yt-dlp" || DesktopYtDlpBinary.isYouTubeUrl(url)) {
             val isLive = link.name.contains("Live", ignoreCase = true) || url.contains("live", ignoreCase = true)
-            val isSeekable = !isLive
-            seekabilityCache[url] = isSeekable
-            return@withContext isSeekable
+            val seekability = if (isLive) Seekability.NON_SEEKABLE else Seekability.SEEKABLE
+            seekabilityCache[url] = seekability
+            return@withContext seekability
         }
 
         if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
-            seekabilityCache[url] = false
-            return@withContext false
+            return@withContext Seekability.UNKNOWN
         }
 
         try {
@@ -293,15 +307,14 @@ object QualityDataHelper {
                 val code = response.code
                 val acceptRanges = response.header("Accept-Ranges")
                 val contentRange = response.header("Content-Range")
-                val isSeekable = code == 206 || contentRange != null || (code == 200 && acceptRanges?.contains("bytes", ignoreCase = true) == true)
-                seekabilityCache[url] = isSeekable
-                AppLogger.i("QualityDataHelper", "Range probe for ${link.name} (HTTP $code, Range=$contentRange, AcceptRanges=$acceptRanges) -> seekable=$isSeekable")
-                isSeekable
+                val seekability = classifyRangeSupport(code, contentRange, acceptRanges)
+                if (seekability != Seekability.UNKNOWN) seekabilityCache[url] = seekability
+                AppLogger.i("QualityDataHelper", "Range probe for ${link.name} (HTTP $code, Range=$contentRange, AcceptRanges=$acceptRanges) -> seekability=$seekability")
+                seekability
             }
         } catch (e: Exception) {
             AppLogger.w("QualityDataHelper", "Range probe failed for ${link.name}: ${e.message}")
-            seekabilityCache[url] = false
-            false
+            Seekability.UNKNOWN
         }
     }
 
@@ -318,10 +331,15 @@ object QualityDataHelper {
 
     fun sortLinks(links: List<ExtractorLink>): List<ExtractorLink> {
         val preferredQuality = DesktopDataStore.getKey<String>(PlayerConfig.PREF_PREFERRED_QUALITY) ?: "Auto"
+        return sortLinks(links, preferredQuality)
+    }
+
+    internal fun sortLinks(links: List<ExtractorLink>, preferredQuality: String): List<ExtractorLink> {
         return links.sortedWith(
-            // Tier 1: Seekability (must not freeze or fail on scrubbing)
-            compareByDescending<ExtractorLink> { if (isSeekableLink(it)) 1 else 0 }
-                // Tier 2: Desktop Usable Quality Floor (HD >= 720p strictly prioritized over potato SD < 720p)
+            // Only a confirmed lack of byte-range support should demote a source.
+            // Unknown is neutral so a slow/blocked range probe cannot push 4K below SD.
+            compareByDescending<ExtractorLink> { if (getSeekability(it) == Seekability.NON_SEEKABLE) 0 else 1 }
+                // Tier 2: Desktop Usable Quality Floor (HD >= 720p strictly prioritized over SD)
                 .thenByDescending { if (extractEffectiveQuality(it) >= Qualities.P720.value) 1 else 0 }
                 // Tier 3: Language Match (Direct Match [3] > Multi-Audio [2] > Neutral [1] > Other Language [0])
                 .thenByDescending { getLanguageMatchTier(it) }
@@ -331,8 +349,10 @@ object QualityDataHelper {
                 .thenByDescending { getSourcePriority(it.source) }
                 // Tier 6: Fast streaming protocol (HLS / DASH preferred when tied)
                 .thenByDescending { if (it.isM3u8 || it.isDash) 1 else 0 }
-                // Tier 7: Deterministic tie-breaker
-                .thenBy { it.name }
+                // Prefer verified seekability only after resolution and source preference.
+                .thenByDescending { if (getSeekability(it) == Seekability.SEEKABLE) 1 else 0 }
+                // Tier 8: Deterministic tie-breaker
+                .thenBy { it.name },
         )
     }
 

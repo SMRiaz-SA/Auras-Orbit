@@ -57,7 +57,13 @@ fun SettingsAppearanceScreen(onNavigateToSubScreen: (SettingsSubScreen) -> Unit 
             icon = Icons.Default.Palette,
             title = "Theme, Colors & Wallpaper",
             subtitle = "Light/Dark mode, AMOLED pure black, curated accent swatches, custom hex color picker, typography fonts, ambient glow, and custom wallpaper.",
-            badge = if (isLightMode) "Light Theme" else if (amoledMode) "AMOLED Black" else "$themeAccent Accent",
+            badge = if (isLightMode) {
+                "Light Theme"
+            } else if (amoledMode) {
+                "AMOLED Black"
+            } else {
+                "$themeAccent Accent"
+            },
             onClick = { onNavigateToSubScreen(SettingsSubScreen.APPEARANCE_THEME_WALLPAPER) },
         )
 

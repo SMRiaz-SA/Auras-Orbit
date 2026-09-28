@@ -8,7 +8,7 @@ import com.lagradost.common.storage.DesktopDataStore
  * Initializes security-related subsystems:
  * - Uncaught exception handler
  * - BouncyCastle security provider (Android AES-GCM compat)
- * - DataStore pre-initialization (prevents SecurityManager issues)
+ * - DataStore and profile pre-initialization before plugins load
  */
 fun initSecurity() {
     // Uncaught exception handler
@@ -37,7 +37,4 @@ fun initSecurity() {
     DesktopDataStore.activeProfileProvider = { com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId }
     com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig.reloadFromDataStore()
     com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.reloadFromDataStore()
-
-    // Rhino JavaScript Security ClassShutter (prevents plugins from reflecting/importing Java classes in JS)
-    com.lagradost.runtime.security.RhinoSecurity.init()
 }

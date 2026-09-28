@@ -31,8 +31,6 @@ import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamCustomDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.File
 
 @Composable
@@ -48,7 +46,7 @@ fun ProfileEditDialog(
     var customAvatarPath by remember(profile) { mutableStateOf(profile?.customAvatarPath ?: "") }
     var avatarMode by remember(profile) { mutableStateOf(if (!profile?.customAvatarPath.isNullOrBlank()) 1 else 0) }
     var hasPin by remember(profile) { mutableStateOf(profile?.hasPin == true) }
-    var pinCode by remember(profile) { mutableStateOf(profile?.pinCode ?: "") }
+    var pinCode by remember(profile) { mutableStateOf("") }
     var isKids by remember(profile) { mutableStateOf(profile?.isKids == true) }
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -161,115 +159,118 @@ fun ProfileEditDialog(
                 )
             }
 
-    var showCropperForPath by remember { mutableStateOf<String?>(null) }
+            var showCropperForPath by remember { mutableStateOf<String?>(null) }
 
-    if (showCropperForPath != null) {
-        AvatarCropperDialog(
-            imagePathOrUrl = showCropperForPath!!,
-            onDismiss = { showCropperForPath = null },
-            onCropCompleted = { croppedPath ->
-                customAvatarPath = croppedPath
-                showCropperForPath = null
-            },
-        )
-    }
-
-    if (avatarMode == 0) {
-        // Avatar Color Palette Grid
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Choose Color Gradient", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                ProfilePalette.colors.indices.forEach { index ->
-                    val isSelected = selectedColorIndex == index
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(ProfilePalette.getBrush(index))
-                            .clickable { selectedColorIndex = index }
-                            .then(
-                                if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                else Modifier
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (isSelected) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        // Custom Image / GIF (Local File + URL + Cropper)
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(
-                value = customAvatarPath,
-                onValueChange = { customAvatarPath = it },
-                label = { Text("Image / Animated GIF URL or Local Path") },
-                placeholder = { Text("https://example.com/avatar.gif") },
-                singleLine = true,
-                trailingIcon = {
-                    if (customAvatarPath.isNotEmpty()) {
-                        IconButton(onClick = { customAvatarPath = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        val pickedFile = com.lagradost.cloudstream3.desktop.utils.NativeFileDialog.open(
-                            title = "Choose Avatar Image / GIF",
-                            allowedExtensions = listOf(".png", ".jpg", ".jpeg", ".webp", ".gif"),
-                            category = com.lagradost.cloudstream3.desktop.utils.NativeFileDialog.Category.WALLPAPER,
-                        )
-                        if (pickedFile != null && pickedFile.exists()) {
-                            val fullPath = pickedFile.absolutePath
-                            customAvatarPath = fullPath
-                            showCropperForPath = fullPath
-                        }
+            if (showCropperForPath != null) {
+                AvatarCropperDialog(
+                    imagePathOrUrl = showCropperForPath!!,
+                    onDismiss = { showCropperForPath = null },
+                    onCropCompleted = { croppedPath ->
+                        customAvatarPath = croppedPath
+                        showCropperForPath = null
                     },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Browse PC", maxLines = 1)
-                }
+                )
+            }
 
-                if (customAvatarPath.isNotEmpty()) {
-                    OutlinedButton(
-                        onClick = {
-                            customAvatarPath = ""
-                            avatarMode = 0
-                        },
+            if (avatarMode == 0) {
+                // Avatar Color Palette Grid
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose Color Gradient", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Reset")
+                        ProfilePalette.colors.indices.forEach { index ->
+                            val isSelected = selectedColorIndex == index
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(ProfilePalette.getBrush(index))
+                                    .clickable { selectedColorIndex = index }
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier.border(2.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
                     }
+                }
+            } else {
+                // Custom Image / GIF (Local File + URL + Cropper)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = customAvatarPath,
+                        onValueChange = { customAvatarPath = it },
+                        label = { Text("Image / Animated GIF URL or Local Path") },
+                        placeholder = { Text("https://example.com/avatar.gif") },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (customAvatarPath.isNotEmpty()) {
+                                IconButton(onClick = { customAvatarPath = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
-                    Button(
-                        onClick = { showCropperForPath = customAvatarPath },
-                        colors = ButtonDefaults.filledTonalButtonColors(),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Default.Crop, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Crop & Adjust")
+                        OutlinedButton(
+                            onClick = {
+                                val pickedFile = com.lagradost.cloudstream3.desktop.utils.NativeFileDialog.open(
+                                    title = "Choose Avatar Image / GIF",
+                                    allowedExtensions = listOf(".png", ".jpg", ".jpeg", ".webp", ".gif"),
+                                    category = com.lagradost.cloudstream3.desktop.utils.NativeFileDialog.Category.WALLPAPER,
+                                )
+                                if (pickedFile != null && pickedFile.exists()) {
+                                    val fullPath = pickedFile.absolutePath
+                                    customAvatarPath = fullPath
+                                    showCropperForPath = fullPath
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Browse PC", maxLines = 1)
+                        }
+
+                        if (customAvatarPath.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    customAvatarPath = ""
+                                    avatarMode = 0
+                                },
+                            ) {
+                                Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Reset")
+                            }
+
+                            Button(
+                                onClick = { showCropperForPath = customAvatarPath },
+                                colors = ButtonDefaults.filledTonalButtonColors(),
+                            ) {
+                                Icon(Icons.Default.Crop, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Crop & Adjust")
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
@@ -320,7 +321,7 @@ fun ProfileEditDialog(
                                 pinCode = input
                             }
                         },
-                        label = { Text("Enter 4 to 6 Digit PIN") },
+                        label = { Text(if (profile?.hasPin == true) "New PIN (blank keeps current PIN)" else "Enter 4 to 6 Digit PIN") },
                         supportingText = {
                             Text("${pinCode.length}/6 digits (min 4)", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
                         },
@@ -410,7 +411,7 @@ fun ProfileEditDialog(
                                                 name.trim(),
                                                 selectedColorIndex,
                                                 finalPath,
-                                                if (hasPin && pinCode.isNotBlank()) pinCode.trim() else null,
+                                                if (hasPin) pinCode.trim().ifBlank { profile?.pinCode.orEmpty() }.takeIf { it.isNotBlank() } else null,
                                                 isKids,
                                             )
                                             isSaving = false
@@ -422,14 +423,14 @@ fun ProfileEditDialog(
                                         name.trim(),
                                         selectedColorIndex,
                                         trimmedCustom,
-                                        if (hasPin && pinCode.isNotBlank()) pinCode.trim() else null,
+                                        if (hasPin) pinCode.trim().ifBlank { profile?.pinCode.orEmpty() }.takeIf { it.isNotBlank() } else null,
                                         isKids,
                                     )
                                     onDismiss()
                                 }
                             }
                         },
-                        enabled = name.isNotBlank() && (!hasPin || pinCode.length >= 4) && !isSaving,
+                        enabled = name.isNotBlank() && (!hasPin || pinCode.length >= 4 || (pinCode.isBlank() && profile?.hasPin == true)) && !isSaving,
                     ) {
                         if (isSaving) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

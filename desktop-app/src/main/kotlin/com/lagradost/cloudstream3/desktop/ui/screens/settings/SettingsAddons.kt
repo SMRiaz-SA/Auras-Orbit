@@ -1,16 +1,12 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.settings
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,12 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -206,17 +198,19 @@ fun SettingsAddons(viewModel: ExtensionsViewModel) {
                             if (inputUrl.isNotBlank()) {
                                 isInstalling = true
                                 statusMessage = null
-                                viewModel.onEvent(ExtensionsUiEvent.OnAddStremioAddon(inputUrl) { result ->
-                                    isInstalling = false
-                                    result.onSuccess { addon ->
-                                        inputUrl = ""
-                                        isErrorStatus = false
-                                        statusMessage = "Installed '${addon.name}' successfully!"
-                                    }.onFailure { err ->
-                                        isErrorStatus = true
-                                        statusMessage = err.message ?: "Failed to install addon"
-                                    }
-                                })
+                                viewModel.onEvent(
+                                    ExtensionsUiEvent.OnAddStremioAddon(inputUrl) { result ->
+                                        isInstalling = false
+                                        result.onSuccess { addon ->
+                                            inputUrl = ""
+                                            isErrorStatus = false
+                                            statusMessage = "Installed '${addon.name}' successfully!"
+                                        }.onFailure { err ->
+                                            isErrorStatus = true
+                                            statusMessage = err.message ?: "Failed to install addon"
+                                        }
+                                    },
+                                )
                             }
                         },
                         enabled = inputUrl.isNotBlank() && !isInstalling,
@@ -536,7 +530,6 @@ private fun AddonItemCard(
         }
     }
 }
-
 
 @Composable
 private fun CapabilityChip(label: String, color: Color) {

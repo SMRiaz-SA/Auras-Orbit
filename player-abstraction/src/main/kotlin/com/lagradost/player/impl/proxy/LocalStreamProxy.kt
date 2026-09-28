@@ -2,6 +2,7 @@ package com.lagradost.player.impl.proxy
 
 import com.lagradost.cloudstream3.app
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -25,9 +26,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Response
 import java.io.IOException
-import java.net.URI
 import java.util.Base64
 import java.util.UUID
 import kotlin.coroutines.resume
@@ -90,6 +91,7 @@ object LocalStreamProxy {
     private val initSegmentCache = java.util.concurrent.ConcurrentHashMap<String, InitCacheEntry>()
     private val rawInitSegmentCache = java.util.concurrent.ConcurrentHashMap<String, InitCacheEntry>()
     private const val INIT_CACHE_TTL_MS = 600_000L // 10 minutes
+    private const val MAX_ENCODED_PROXY_URL_LENGTH = 65_536
 
     // Decrypted media segment cache (60 seconds TTL, 150 entries max)
     data class SegmentCacheEntry(val data: ByteArray, val timestamp: Long)
@@ -99,7 +101,7 @@ object LocalStreamProxy {
 
     // Prefetching scope and tracker
     private val prefetchScope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob()
+        kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob(),
     )
     private val prefetchingUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
@@ -157,6 +159,7 @@ object LocalStreamProxy {
         val cacheDir = java.io.File(com.lagradost.common.platform.PlatformPaths.appDataDir, "image_cache_http").also { it.mkdirs() }
         app.baseClient.newBuilder()
             .fastFallback(true)
+            .dns(ImageProxyDns(app.baseClient.dns))
             .followRedirects(true)
             .followSslRedirects(true)
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
@@ -173,6 +176,7 @@ object LocalStreamProxy {
 
     fun start() {
         if (server != null) return
+        auxiliaryCapability = UUID.randomUUID().toString()
         val s = embeddedServer(Netty, port = 0, host = "127.0.0.1") {
             routing {
                 get("/proxy") {
@@ -182,9 +186,17 @@ object LocalStreamProxy {
                     handleRequest(call)
                 }
                 get("/image") {
+                    if (call.request.queryParameters["cap"] != auxiliaryCapability) {
+                        call.respond(HttpStatusCode.Forbidden)
+                        return@get
+                    }
                     handleImageRequest(call)
                 }
                 get("/trailer") {
+                    if (call.request.queryParameters["cap"] != auxiliaryCapability) {
+                        call.respond(HttpStatusCode.Forbidden)
+                        return@get
+                    }
                     val id = call.request.queryParameters["id"] ?: ""
                     val u = call.request.queryParameters["u"] ?: ""
                     if (id.isNotBlank() && !id.matches(Regex("[A-Za-z0-9_-]{11}"))) {
@@ -192,7 +204,8 @@ object LocalStreamProxy {
                         return@get
                     }
                     if (id.isBlank() && !u.startsWith("https://", ignoreCase = true) &&
-                        !u.startsWith("http://", ignoreCase = true)) {
+                        !u.startsWith("http://", ignoreCase = true)
+                    ) {
                         call.respond(HttpStatusCode.BadRequest)
                         return@get
                     }
@@ -290,6 +303,7 @@ object LocalStreamProxy {
     }
 
     fun stop() {
+        auxiliaryCapability = UUID.randomUUID().toString()
         server?.stop(1000, 2000)
         server = null
         sessions.clear()
@@ -306,6 +320,9 @@ object LocalStreamProxy {
         return sessionId
     }
 
+    /** Revoke a playback capability and discard its session-scoped playlist caches. */
+    fun unregisterSession(sessionId: String): Boolean = sessions.remove(sessionId) != null
+
     fun buildProxyUrl(sessionId: String, url: String, action: String? = null, clearKey: String? = null): String {
         val encodedUrl = Base64.getUrlEncoder().withoutPadding().encodeToString(url.toByteArray(Charsets.UTF_8))
         var proxy = "http://127.0.0.1:$port/proxy?s=$sessionId&u=$encodedUrl"
@@ -316,7 +333,18 @@ object LocalStreamProxy {
 
     fun buildImageUrl(url: String): String {
         val encodedUrl = Base64.getUrlEncoder().withoutPadding().encodeToString(url.toByteArray(Charsets.UTF_8))
-        return "http://127.0.0.1:$port/image?u=$encodedUrl"
+        return "http://127.0.0.1:$port/image?cap=$auxiliaryCapability&u=$encodedUrl"
+    }
+
+    @Volatile private var auxiliaryCapability = UUID.randomUUID().toString()
+
+    fun buildTrailerUrl(id: String? = null, url: String? = null): String {
+        val query = if (id != null) {
+            "id=${java.net.URLEncoder.encode(id, "UTF-8")}"
+        } else {
+            "u=${java.net.URLEncoder.encode(url.orEmpty(), "UTF-8")}"
+        }
+        return "http://127.0.0.1:$port/trailer?cap=$auxiliaryCapability&$query"
     }
 
     fun prefetchM3u8(sessionId: String, url: String) {
@@ -358,7 +386,7 @@ object LocalStreamProxy {
                     throw Exception("Prefetch HTTP failed. Code: $code Error: ${lastError?.message}")
                 }
 
-                val m3u8Content = response.body?.source()?.readUtf8() ?: ""
+                val m3u8Content = response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
                 val finalUrl = response.request.url.toString()
                 response.body?.close()
 
@@ -394,31 +422,31 @@ object LocalStreamProxy {
                 call.respond(io.ktor.http.HttpStatusCode.NotFound)
                 return
             }
-            var url = String(java.util.Base64.getUrlDecoder().decode(encodedUrl), Charsets.UTF_8).trim()
-            if (url.startsWith("//")) {
-                url = "https:$url"
-            }
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                call.respond(io.ktor.http.HttpStatusCode.BadRequest)
+            val parsedUrl = ImageProxyUrlPolicy.parse(
+                String(java.util.Base64.getUrlDecoder().decode(encodedUrl), Charsets.UTF_8),
+            )
+            if (parsedUrl == null) {
+                call.respond(HttpStatusCode.BadRequest)
                 return
             }
+            val url = parsedUrl.toString()
 
             val requestBuilder = okhttp3.Request.Builder().url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
                 .header("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
 
-            val isThirdPartyCdn = url.contains("image.tmdb.org", ignoreCase = true) ||
-                url.contains("anilist.co", ignoreCase = true) ||
-                url.contains("kitsu.app", ignoreCase = true) ||
-                url.contains("kitsu.io", ignoreCase = true) ||
-                url.contains("fanart.tv", ignoreCase = true) ||
-                url.contains("imgur.com", ignoreCase = true)
+            val host = parsedUrl.host.lowercase(java.util.Locale.ROOT)
+            val isThirdPartyCdn = setOf(
+                "image.tmdb.org",
+                "anilist.co",
+                "kitsu.app",
+                "kitsu.io",
+                "fanart.tv",
+                "imgur.com",
+            ).any { host == it || host.endsWith(".$it") }
 
             if (!isThirdPartyCdn) {
-                try {
-                    val uri = java.net.URI(url)
-                    requestBuilder.header("Referer", "${uri.scheme}://${uri.host}/")
-                } catch (_: Exception) {}
+                requestBuilder.header("Referer", "${parsedUrl.scheme}://${parsedUrl.host}/")
             }
 
             val response = imageProxyClient.newCall(requestBuilder.build()).await()
@@ -428,12 +456,19 @@ object LocalStreamProxy {
                 return
             }
             val contentType = response.header("Content-Type") ?: "image/jpeg"
-            val bytes = response.body?.bytes()
-            if (bytes != null) {
-                call.respondBytes(bytes, io.ktor.http.ContentType.parse(contentType), io.ktor.http.HttpStatusCode.fromValue(response.code))
-            } else {
-                call.respond(io.ktor.http.HttpStatusCode.NotFound)
+            if (!ImageProxyResponsePolicy.accepts(contentType, response.body.contentLength())) {
+                response.close()
+                call.respond(HttpStatusCode.BadRequest)
+                return
             }
+            val bytes = response.use { ImageProxyResponsePolicy.readBounded(it.body.byteStream()) }
+            if (!ImageProxyResponsePolicy.isWithinLimit(bytes)) {
+                call.respond(HttpStatusCode.BadRequest)
+                return
+            }
+            call.respondBytes(bytes, io.ktor.http.ContentType.parse(contentType), io.ktor.http.HttpStatusCode.fromValue(response.code))
+        } catch (e: BlockedImageHostException) {
+            call.respond(HttpStatusCode.Forbidden)
         } catch (e: Exception) {
             com.lagradost.common.logging.AppLogger.e("Proxy:LocalStream", "Image proxy failed", e)
             call.respond(io.ktor.http.HttpStatusCode.InternalServerError)
@@ -454,21 +489,33 @@ object LocalStreamProxy {
             val initUrl = encodedInit?.let {
                 try {
                     String(Base64.getUrlDecoder().decode(it), Charsets.UTF_8)
-                } catch (_: Exception) { null }
+                } catch (_: Exception) {
+                    null
+                }
             }
 
-            com.lagradost.common.logging.AppLogger.i("Proxy:LocalStream", "Action=$action, rep=$rep, hasCk=${clearKey != null}, hasKid=${kid != null}, hasK=${k != null}, encodedUrl=$encodedUrl")
+            com.lagradost.common.logging.AppLogger.d("Proxy:LocalStream", "Action=$action, rep=$rep")
 
-            if (sessionId == null || encodedUrl == null) {
+            if (sessionId.isNullOrBlank() || encodedUrl.isNullOrBlank() || encodedUrl.length > MAX_ENCODED_PROXY_URL_LENGTH) {
+                call.respond(HttpStatusCode.BadRequest)
+                return
+            }
+
+            val session = sessions[sessionId]
+            if (session == null) {
                 call.respond(HttpStatusCode.NotFound)
                 return
             }
 
-            val url = String(Base64.getUrlDecoder().decode(encodedUrl), Charsets.UTF_8)
-            val session = sessions[sessionId]
-
-            if (session == null) {
-                call.respond(HttpStatusCode.NotFound)
+            val url = try {
+                String(Base64.getUrlDecoder().decode(encodedUrl), Charsets.UTF_8)
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest)
+                return
+            }
+            val parsedUrl = url.toHttpUrlOrNull()
+            if (parsedUrl == null || parsedUrl.scheme !in setOf("http", "https")) {
+                call.respond(HttpStatusCode.BadRequest)
                 return
             }
 
@@ -619,7 +666,7 @@ object LocalStreamProxy {
 
             if (action == "init_decrypt") {
                 val rawBytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.source()?.readByteArray() ?: ByteArray(0)
+                    response.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) } ?: ByteArray(0)
                 }
                 response.body?.close()
                 rawInitSegmentCache[url] = InitCacheEntry(rawBytes, System.currentTimeMillis())
@@ -633,7 +680,7 @@ object LocalStreamProxy {
 
             if (action == "decrypt") {
                 val mediaBytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.source()?.readByteArray() ?: ByteArray(0)
+                    response.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) } ?: ByteArray(0)
                 }
                 response.body?.close()
 
@@ -646,7 +693,7 @@ object LocalStreamProxy {
                             mergedHeaders.forEach { (k, v) -> initReqBuilder.header(k, v) }
                             val initResp = client.newCall(initReqBuilder.build()).await()
                             if (initResp.isSuccessful) {
-                                val fetchedRaw = initResp.body?.source()?.readByteArray()
+                                val fetchedRaw = initResp.body?.use { it.byteStream().readBoundedBytes(16 * 1024 * 1024) }
                                 initResp.body?.close()
                                 if (fetchedRaw != null && fetchedRaw.isNotEmpty()) {
                                     rawInitBytes = fetchedRaw
@@ -697,7 +744,7 @@ object LocalStreamProxy {
 
             if (action == "dash") {
                 val mpdContent = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.source()?.readUtf8() ?: ""
+                    response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
                 }
                 response.body?.close()
                 session.mpdCache[url] = MpdCacheEntry(mpdContent, System.currentTimeMillis())
@@ -746,7 +793,7 @@ object LocalStreamProxy {
             if (isM3u8) {
                 try {
                     val m3u8Content = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        response.body?.source()?.readUtf8() ?: ""
+                        response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
                     }
 
                     val finalUrl = response.request.url.toString()
@@ -781,7 +828,7 @@ object LocalStreamProxy {
                                                 for (attempt in 1..2) {
                                                     try {
                                                         val segResp = client.newCall(reqBuilder.build()).await()
-                                                        val segText = segResp.body?.source()?.readUtf8() ?: ""
+                                                        val segText = segResp.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
                                                         segResp.body?.close()
                                                         if (segResp.isSuccessful && segText.isNotBlank()) {
                                                             content = segText
@@ -866,7 +913,9 @@ object LocalStreamProxy {
                 val cl = response.body?.contentLength() ?: -1L
                 val contentLengthParam = if (skipBytes == 0L && cl >= 0) {
                     if (detectedTsOffset > 0) cl - detectedTsOffset else cl
-                } else null
+                } else {
+                    null
+                }
 
                 val parsedContentType = try {
                     ContentType.parse(contentTypeStr)
@@ -1100,9 +1149,9 @@ object LocalStreamProxy {
             val paddedNextNum = if (numStr.startsWith("0")) nextNum.toString().padStart(numLength, '0') else nextNum.toString()
             val nextUrl = currentSegmentUrl.replace(
                 match.value,
-                "$prefix$paddedNextNum$suffix"
+                "$prefix$paddedNextNum$suffix",
             )
-            val nextCacheKey = "${nextUrl}_${kid}_${k}"
+            val nextCacheKey = "${nextUrl}_${kid}_$k"
 
             if (decryptedSegmentCache.containsKey(nextCacheKey) || !prefetchingUrls.add(nextCacheKey)) {
                 continue
@@ -1115,7 +1164,7 @@ object LocalStreamProxy {
                     headers.forEach { (hKey, hVal) -> reqBuilder.header(hKey, hVal) }
                     val resp = client.newCall(reqBuilder.build()).await()
                     if (resp.isSuccessful) {
-                        val bytes = resp.body?.source()?.readByteArray()
+                        val bytes = resp.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
                         resp.body?.close()
                         if (bytes != null && bytes.isNotEmpty()) {
                             val decrypted = StreamDecryptor.decryptMediaSegment(
@@ -1144,7 +1193,8 @@ object LocalStreamProxy {
         for (i in 0 until length - packetSize * 2) {
             if (buffer[i] == syncByte &&
                 buffer[i + packetSize] == syncByte &&
-                buffer[i + packetSize * 2] == syncByte) {
+                buffer[i + packetSize * 2] == syncByte
+            ) {
                 return i
             }
         }

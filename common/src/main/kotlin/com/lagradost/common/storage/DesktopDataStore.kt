@@ -9,7 +9,6 @@ import com.lagradost.common.db.DatabaseFactory
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import java.io.File
 
 enum class DesktopWatchType(val id: Int, val stringRes: String) {
@@ -20,6 +19,8 @@ enum class DesktopWatchType(val id: Int, val stringRes: String) {
     PLANTOWATCH(4, "Plan to Watch"),
     REWATCHING(5, "Re-watching"),
 }
+
+private val PROFILE_SCOPED_BOOKMARK_ID = Regex("""^p\d+_""")
 
 data class DesktopBookmark(
     val id: String,
@@ -66,7 +67,9 @@ object DesktopDataStore {
     private val dataFile = File(PlatformPaths.dataDir, "datastore.json")
 
     val rawKeyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-    @Volatile @PublishedApi internal var isPreCacheLoaded = false
+
+    @Volatile @PublishedApi
+    internal var isPreCacheLoaded = false
 
     val historyUpdates = MutableStateFlow(0)
     val pluginUpdatesFlow = MutableStateFlow(0)
@@ -102,6 +105,7 @@ object DesktopDataStore {
                                     }
                                 } catch (e: Exception) {
                                     AppLogger.e("Failed to migrate bookmarks", e)
+                                    throw e
                                 }
                             }
                             "user_watch_history" -> {
@@ -117,6 +121,7 @@ object DesktopDataStore {
                                     }
                                 } catch (e: Exception) {
                                     AppLogger.e("Failed to migrate watch history", e)
+                                    throw e
                                 }
                             }
                             "plugin_updates_history_v2" -> {
@@ -127,40 +132,45 @@ object DesktopDataStore {
                                     }
                                 } catch (e: Exception) {
                                     AppLogger.e("Failed to migrate plugin updates", e)
+                                    throw e
                                 }
                             }
                             else -> {
-                                rawKeyCache[key] = jsonStr
                                 db.cloudstreamDBQueries.insertKeyValue(key, jsonStr)
                             }
                         }
                     }
                 }
                 val bakFile = File(PlatformPaths.dataDir, "datastore.json.bak")
-                dataFile.renameTo(bakFile)
+                db.cloudstreamDBQueries.selectAllKeyValues().executeAsList().forEach { rawKeyCache[it.key] = it.value_ }
+                java.nio.file.Files.move(dataFile.toPath(), bakFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
                 AppLogger.i("Migration complete. Old file renamed to datastore.json.bak")
             } catch (e: Exception) {
                 AppLogger.e("Critical failure migrating datastore.json", e)
+                throw IllegalStateException("Legacy data migration failed; the original datastore.json was preserved for recovery", e)
             }
         }
     }
 
-    private val ioScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
-
     fun <T> setKey(key: String, value: T) {
-        try {
-            val json = mapper.writeValueAsString(value)
-            rawKeyCache[key] = json
-            ioScope.launch {
-                try {
-                    DatabaseFactory.database.cloudstreamDBQueries.insertKeyValue(key, json)
-                } catch (e: Exception) {
-                    AppLogger.e("Failed to persist key $key to SQLite", e)
-                }
-            }
-        } catch (e: Exception) {
-            AppLogger.e("Failed to serialize key $key", e)
+        setKeys(mapOf(key to value))
+    }
+
+    /** Returns only after the complete mutation is committed. Failures propagate to the caller. */
+    @Synchronized
+    fun setKeys(values: Map<String, Any?>, removed: Set<String> = emptySet()) {
+        val deleted = getKey<List<Int>>("deleted_profile_ids_v1").orEmpty().toSet()
+        check(values.keys.none { key -> deleted.any { key.startsWith("$it/") || key.endsWith("_profile_$it") } }) {
+            "Cannot write data for a deleted profile"
         }
+        val serialized = values.mapValues { mapper.writeValueAsString(it.value) }
+        val queries = DatabaseFactory.database.cloudstreamDBQueries
+        queries.transaction {
+            removed.forEach { queries.deleteKeyValue(it) }
+            serialized.forEach { (key, json) -> queries.insertKeyValue(key, json) }
+        }
+        removed.forEach { rawKeyCache.remove(it) }
+        rawKeyCache.putAll(serialized)
     }
 
     fun <T> getKey(key: String, clazz: Class<T>): T? {
@@ -204,14 +214,38 @@ object DesktopDataStore {
     }
 
     fun removeKey(key: String) {
-        rawKeyCache.remove(key)
-        ioScope.launch {
-            try {
-                DatabaseFactory.database.cloudstreamDBQueries.deleteKeyValue(key)
-            } catch (e: Exception) {
-                AppLogger.e("Failed to delete key $key from SQLite", e)
+        setKeys(emptyMap(), setOf(key))
+    }
+
+    @Synchronized
+    fun deleteProfileData(profileId: Int, profileValues: Map<String, Any?>) {
+        val committedValues = profileValues + ("deleted_profile_ids_v1" to (getKey<List<Int>>("deleted_profile_ids_v1").orEmpty() + profileId).distinct())
+        val prefix = "p${profileId}_"
+        val suffix = if (profileId == 0) "_default" else "_profile_$profileId"
+        val queries = DatabaseFactory.database.cloudstreamDBQueries
+        val removed = queries.selectAllKeyValues().executeAsList().map { it.key }.filter {
+            it.startsWith("$profileId/") ||
+                ((it.startsWith("auth_tokens_") || it.startsWith("tracker_credentials_v1_")) && it.endsWith(suffix))
+        }.toSet()
+        queries.transaction {
+            queries.selectAllBookmarks().executeAsList().filter {
+                it.id.startsWith(prefix) || (profileId == 0 && !PROFILE_SCOPED_BOOKMARK_ID.containsMatchIn(it.id))
             }
+                .forEach { queries.deleteBookmark(it.id) }
+            queries.selectAllWatchHistory().executeAsList().filter { it.parentId.startsWith(prefix) || (profileId == 0 && !it.parentId.matches(Regex("p\\d+_.*"))) }
+                .forEach { queries.deleteWatchHistoryByParent(it.parentId) }
+            removed.forEach { queries.deleteKeyValue(it) }
+            committedValues.forEach { (key, value) -> queries.insertKeyValue(key, mapper.writeValueAsString(value)) }
         }
+        removed.forEach { rawKeyCache.remove(it) }
+        committedValues.forEach { (key, value) -> rawKeyCache[key] = mapper.writeValueAsString(value) }
+    }
+
+    fun isProfileDeleted(profileId: Int): Boolean = profileId in getKey<List<Int>>("deleted_profile_ids_v1").orEmpty()
+
+    private fun isHistoryOwnerDeleted(parentId: String): Boolean {
+        val profileId = Regex("^p(\\d+)_").find(parentId)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        return isProfileDeleted(profileId)
     }
 
     var activeProfileProvider: () -> Int = { 0 }
@@ -245,21 +279,34 @@ object DesktopDataStore {
 
     fun getBookmarks(profileId: Int = activeProfileId): List<DesktopBookmark> {
         val prefix = "p${profileId}_"
-        return DatabaseFactory.database.cloudstreamDBQueries.selectAllBookmarks().executeAsList()
-            .filter {
-                if (profileId == 0) {
-                    it.id.startsWith(prefix) || !it.id.startsWith("p")
-                } else {
-                    it.id.startsWith(prefix)
-                }
+        val rows = DatabaseFactory.database.cloudstreamDBQueries.selectAllBookmarks().executeAsList()
+        val legacyDefaultRows = if (profileId == 0) {
+            rows.filter { !it.id.startsWith(prefix) && !PROFILE_SCOPED_BOOKMARK_ID.containsMatchIn(it.id) }
+        } else {
+            emptyList()
+        }
+        val scopedRows = rows.filter { it.id.startsWith(prefix) }
+        return (legacyDefaultRows + scopedRows)
+            .map { row ->
+                DesktopBookmark(
+                    id = row.id.removePrefix(prefix),
+                    name = row.name,
+                    url = row.url,
+                    apiName = row.apiName,
+                    posterUrl = row.posterUrl,
+                    watchType = row.watchType?.toInt() ?: 0,
+                    dateAdded = row.dateAdded ?: 0L,
+                )
             }
-            .map {
-                DesktopBookmark(it.id, it.name, it.url, it.apiName, it.posterUrl, it.watchType?.toInt() ?: 0, it.dateAdded ?: 0L)
-            }
+            .associateBy { it.id }
+            .values
+            .toList()
     }
 
+    @Synchronized
     fun addBookmark(bookmark: DesktopBookmark, profileId: Int = activeProfileId) {
-        val resolvedId = if (bookmark.id.startsWith("p")) bookmark.id else "p${profileId}_${bookmark.id}"
+        if (isProfileDeleted(profileId)) return
+        val resolvedId = "p${profileId}_${bookmark.id}"
         DatabaseFactory.database.cloudstreamDBQueries.insertBookmark(
             resolvedId,
             bookmark.name,
@@ -272,18 +319,19 @@ object DesktopDataStore {
     }
 
     fun removeBookmark(id: String, profileId: Int = activeProfileId) {
-        val resolvedId = if (id.startsWith("p")) id else "p${profileId}_$id"
+        val resolvedId = "p${profileId}_$id"
         DatabaseFactory.database.cloudstreamDBQueries.deleteBookmark(resolvedId)
-        if (profileId == 0) {
+        if (profileId == 0 && !PROFILE_SCOPED_BOOKMARK_ID.containsMatchIn(id)) {
             DatabaseFactory.database.cloudstreamDBQueries.deleteBookmark(id)
         }
     }
 
     fun isBookmarked(id: String, profileId: Int = activeProfileId): Boolean {
-        val resolvedId = if (id.startsWith("p")) id else "p${profileId}_$id"
+        val resolvedId = "p${profileId}_$id"
         val exists = DatabaseFactory.database.cloudstreamDBQueries.selectBookmarkById(resolvedId).executeAsOneOrNull() != null
         if (exists) return true
-        return profileId == 0 && DatabaseFactory.database.cloudstreamDBQueries.selectBookmarkById(id).executeAsOneOrNull() != null
+        return profileId == 0 && !PROFILE_SCOPED_BOOKMARK_ID.containsMatchIn(id) &&
+            DatabaseFactory.database.cloudstreamDBQueries.selectBookmarkById(id).executeAsOneOrNull() != null
     }
 
     fun getAllWatchHistory(profileId: Int = activeProfileId): List<WatchHistory> {
@@ -341,7 +389,9 @@ object DesktopDataStore {
         DatabaseFactory.database.cloudstreamDBQueries.deleteWatchHistoryByParent(parentId)
         val legacyId = if (parentId.startsWith("p") && parentId.contains("_")) {
             parentId.substringAfter("_")
-        } else null
+        } else {
+            null
+        }
         if (legacyId != null && legacyId != parentId) {
             DatabaseFactory.database.cloudstreamDBQueries.deleteWatchHistoryByParent(legacyId)
         }
@@ -358,7 +408,9 @@ object DesktopDataStore {
         val allParentIds = mutableListOf(parentId)
         val legacyId = if (parentId.startsWith("p") && parentId.contains("_")) {
             parentId.substringAfter("_")
-        } else null
+        } else {
+            null
+        }
         if (legacyId != null && legacyId != parentId) {
             allParentIds.add(legacyId)
         }
@@ -394,7 +446,9 @@ object DesktopDataStore {
         val allParentIds = (listOf(parentId) + extraParentIds).toMutableList()
         val legacyId = if (parentId.startsWith("p") && parentId.contains("_")) {
             parentId.substringAfter("_")
-        } else null
+        } else {
+            null
+        }
         if (legacyId != null && !allParentIds.contains(legacyId)) {
             allParentIds.add(legacyId)
         }
@@ -426,7 +480,9 @@ object DesktopDataStore {
         }
     }
 
+    @Synchronized
     fun setLastWatched(history: WatchHistory, forceNotify: Boolean = false) {
+        if (isHistoryOwnerDeleted(history.parentId)) return
         val normalizedDuration = history.duration.coerceAtLeast(0)
         val normalizedPosition = if (normalizedDuration > 0) {
             history.position.coerceIn(0, normalizedDuration)
@@ -454,10 +510,12 @@ object DesktopDataStore {
         notifyHistoryChanged(force = forceNotify)
     }
 
+    @Synchronized
     fun setMultipleLastWatched(histories: List<WatchHistory>) {
         if (histories.isEmpty()) return
         DatabaseFactory.database.cloudstreamDBQueries.transaction {
             histories.forEach { history ->
+                if (isHistoryOwnerDeleted(history.parentId)) return@forEach
                 val normalizedDuration = history.duration.coerceAtLeast(0)
                 val normalizedPosition = if (normalizedDuration > 0) {
                     history.position.coerceIn(0, normalizedDuration)
@@ -685,13 +743,8 @@ object DesktopDataStore {
             current.remove(cleanName)
             current.remove(internalName.lowercase().trim())
         }
-        val list = current.toList()
-        try {
-            val json = mapper.writeValueAsString(list)
-            rawKeyCache[TRUSTED_PLUGINS_KEY] = json
-            DatabaseFactory.database.cloudstreamDBQueries.insertKeyValue(TRUSTED_PLUGINS_KEY, json)
-        } catch (e: Exception) {
-            AppLogger.e("Failed to save trusted plugins", e)
-        }
+        // Keep memory and disk aligned: setKeys commits before updating the cache and propagates
+        // SQLite errors so callers cannot treat a failed trust change as successful.
+        setKey(TRUSTED_PLUGINS_KEY, current.toList())
     }
 }

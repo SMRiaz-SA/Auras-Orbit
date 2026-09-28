@@ -13,13 +13,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     }
 }
 
-configurations.all {
-    resolutionStrategy.force("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-databind:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-core:2.18.3")
-    resolutionStrategy.force("com.fasterxml.jackson.core:jackson-annotations:2.18.3")
-}
-
 dependencies {
     // Needs access to stubs to pass to plugins
     implementation(project(":android-stubs"))
@@ -33,7 +26,7 @@ dependencies {
     implementation(project(":common"))
 
     // Coroutines for plugin dispatcher & invoker isolation
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
     // Dalvik-to-JVM transcompiler
     implementation("de.femtopedia.dex2jar:dex-tools:2.4.38")
@@ -53,7 +46,7 @@ dependencies {
     implementation("net.dongliu:apk-parser:2.6.10")
 
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
 tasks.withType<Test> {

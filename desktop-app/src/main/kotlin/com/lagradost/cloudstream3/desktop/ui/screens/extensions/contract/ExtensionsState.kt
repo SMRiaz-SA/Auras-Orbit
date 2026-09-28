@@ -10,8 +10,6 @@ data class ExtensionsUiState(
     val statusText: String = "Press Sync (sidebar) or Fetch below to load plugins from your repositories.",
     val plugins: List<Pair<String, SitePlugin>> = emptyList(),
     val installedPlugins: List<LocalPlugin> = emptyList(),
-    val pluginRequiringBypass: Triple<String, SitePlugin, String>? = null,
-    val pluginRequiringPermission: Triple<String, SitePlugin, String>? = null,
     val inspectedRepoName: String? = null,
     val savedRepositories: List<com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData> = emptyList(),
     val remotePluginIcons: Map<String, String?> = emptyMap(),
@@ -19,6 +17,5 @@ data class ExtensionsUiState(
     val extensionsDir: java.io.File = java.io.File("."),
     val isSyncing: Boolean = false,
     val installingPlugins: Set<String> = emptySet(),
-    val isDialogInstalling: Boolean = false,
     val updatesHistory: List<com.lagradost.common.storage.PluginUpdateRecord> = emptyList(),
 ) : UiState

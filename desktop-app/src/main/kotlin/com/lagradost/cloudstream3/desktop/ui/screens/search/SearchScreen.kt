@@ -265,7 +265,9 @@ fun ComposeSearchScreen(
                     },
                     onFillSuggestion = { title ->
                         viewModel.onEvent(SearchUiEvent.OnSelectSuggestion(title, submitSearch = false))
-                        try { focusRequester.requestFocus() } catch (_: Exception) {}
+                        try {
+                            focusRequester.requestFocus()
+                        } catch (_: Exception) {}
                     },
                 )
             }

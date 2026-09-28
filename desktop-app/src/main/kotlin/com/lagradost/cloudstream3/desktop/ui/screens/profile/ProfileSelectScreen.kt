@@ -19,8 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,10 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lagradost.cloudstream3.desktop.profile.Profile
 import com.lagradost.cloudstream3.desktop.profile.ProfileAvatar
-import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.DesktopAppShell
 import com.lagradost.cloudstream3.desktop.ui.components.PinCodeDialog
-import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.profile.contract.ProfileUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.profile.contract.ProfileUiEvent
 
@@ -63,9 +59,9 @@ fun ProfileSelectScreen(
         show = uiState.pinPromptProfile != null,
         profile = uiState.pinPromptProfile,
         onDismiss = { viewModel.onEvent(ProfileUiEvent.OnDismissPinPrompt) },
-        onVerified = {
+        onVerified = { pin ->
             uiState.pinPromptProfile?.let { target ->
-                viewModel.onEvent(ProfileUiEvent.OnVerifyPin(target.pinCode ?: ""))
+                viewModel.onEvent(ProfileUiEvent.OnVerifyPin(pin))
             }
         },
     )
@@ -339,8 +335,11 @@ private fun AddProfileCardItem(
                 }
                 .clip(RoundedCornerShape(18.dp))
                 .background(
-                    if (isHovered) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                    if (isHovered) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                    },
                 )
                 .border(
                     1.dp,
