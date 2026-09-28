@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && '["self-hosted", "Windows", "X64", "auras-orbit"]' || '"windows-latest"') }}
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
@@ -33,8 +34,17 @@ jobs:
     - name: Verify Kotlin and Gradle formatting
       run: .\gradlew.bat spotlessCheck --no-daemon
 
-    - name: Run Tests and Build Portable App
-      run: .\gradlew.bat test :desktop-app:nativeTest :desktop-app:createDistributable -PorbitDistribution=tester --no-daemon
+    - name: Run JVM tests
+      timeout-minutes: 20
+      run: .\gradlew.bat test --no-daemon --console=plain --stacktrace --info --max-workers=2
+
+    - name: Run native tests
+      timeout-minutes: 10
+      run: .\gradlew.bat :desktop-app:nativeTest --no-daemon --console=plain --stacktrace --max-workers=2
+
+    - name: Build portable app
+      timeout-minutes: 20
+      run: .\gradlew.bat :desktop-app:createDistributable -PorbitDistribution=tester --no-daemon --console=plain --stacktrace --max-workers=2
 
     - name: Verify distribution version and notices
       shell: pwsh
