@@ -139,7 +139,7 @@ object PluginProviderWorkerRegistry {
                 ) {
                     invokePluginCallback(worker, canonicalPath, "invokeVideoClickAction", ProviderRpcJson.mapper.createObjectNode().put("actionId", actionId))
                 }.also { action ->
-                    action.sourcePlugin = canonicalPath
+                    action.sourcePlugin = pluginFile.absolutePath
                     VideoClickActionHolder.allVideoClickActions.add(action)
                 }
             }
