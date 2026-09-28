@@ -1,8 +1,10 @@
 # Auras Orbit
 
-Auras Orbit is a portable Windows desktop media client for CloudStream-compatible extensions. It gives you a native Kotlin/Compose desktop interface, local profiles and watch history, and MPV playback without an Android emulator.
+### Your extensions. Your library. One desktop app.
 
-Orbit does not host or distribute media streams or catalogs. You choose which extension repositories and sources to use, and availability depends on those providers.
+Browse with the CloudStream-compatible extensions you choose, watch with MPV, and keep your progress, history, and bookmarks in local Auras profiles. Auras Orbit brings it together in a Windows desktop app, with no Android emulator or separate watch-tracking account.
+
+Orbit does not host media or curate provider catalogs. You choose which extensions to install, and what you can browse depends on those providers.
 
 **Current source version:** `0.2.0.15`<br>
 **Development status:** Pre-alpha<br>
@@ -11,21 +13,20 @@ Orbit does not host or distribute media streams or catalogs. You choose which ex
 
 ## Navigate this guide
 
-[What you get](#what-you-get) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Privacy](#privacy) · [Build from source](#build-from-source)
+[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Privacy](#privacy) · [Build from source](#build-from-source)
 
-## What you get
+## Why Orbit
 
-- Browse, search, and play titles through compatible extensions you install.
-- Home shelves for discovery, recent activity, bookmarks, and provider-backed catalogs when an extension supplies them.
-- Genre Browser and topic filters for providers that expose the supported catalog data.
-- Local profiles, bookmarks, watch history, and playback progress.
-- Native MPV playback with a WebView2-based player interface.
+- **Pick your extensions.** Browse, search, and play through providers you install. Adding a repository lets you review its catalog; it does not install every extension in it.
+- **Keep your library in Auras.** Local profiles hold your watch history, playback progress, and bookmarks. There is no external watch-tracking service or watch-sync account.
+- **Find your next watch.** Home and Explore bring together discovery shelves, recent activity, provider catalogs, genres, and topics when an extension supplies that data.
+- **Made for the desktop.** MPV handles playback, with a WebView2-based player interface. No Android emulator needed.
 
-Extensions are user-selected. Adding a repository makes its catalog available for review; it does not install every extension in that repository.
+Orbit is a client, not a streaming service: you decide which providers to use, and their catalogs and availability can change.
 
 ## Visual tour
 
-These screenshots were captured from the running desktop application. Home shows the first-run extensions setup before a repository has been configured; the profile selector shows the active local profile and profile-management options.
+Take a look around the running app. Home shows the first-run extension setup; the profile selector shows the active local profile and its management options.
 
 ![Auras Orbit Home with the extension onboarding card](assets/auras-orbit-home.jpg)
 
