@@ -75,8 +75,7 @@ fun rememberFullscreenHelper(): FullscreenHelperState {
     val onKeyEvent = remember(controller, toggleFunc) {
         { keyEvent: KeyEvent ->
             if (keyEvent.key == Key.F1 && keyEvent.type == KeyEventType.KeyDown) {
-                com.lagradost.cloudstream3.desktop.ui.screens.settings.SettingsSession.selectedLeaf = com.lagradost.cloudstream3.desktop.ui.screens.settings.LeafTab.SHORTCUTS
-                com.lagradost.cloudstream3.desktop.ui.screens.settings.SettingsSession.activeSubScreen = null
+                com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen = true
                 true
             } else if (keyEvent.key == Key.F11 && keyEvent.type == KeyEventType.KeyDown) {
                 toggleFunc()

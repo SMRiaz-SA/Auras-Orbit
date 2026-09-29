@@ -161,6 +161,9 @@ fun ProfileSelectScreen(
 
                 // Bottom Actions
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedButton(onClick = { com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen = true }) {
+                        Text("Help & Manual")
+                    }
                     if (uiState.isManageMode) {
                         Button(
                             onClick = { viewModel.onEvent(ProfileUiEvent.OnToggleManageMode(false)) },

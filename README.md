@@ -6,8 +6,8 @@ Browse with the CloudStream-compatible extensions you choose, watch with MPV, an
 
 Orbit does not host media or curate provider catalogs. You choose which extensions to install, and what you can browse depends on those providers.
 
-**Current source version:** `0.2.0.15`<br>
-**Development status:** Pre-alpha<br>
+**Current source version:** Beta `0.2.0.16`<br>
+**Development status:** Beta<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
@@ -63,13 +63,23 @@ Orbit keeps profiles, local history, bookmarks, settings, extension data, and su
 
 Source builds require Git with submodules, JDK 21, PowerShell 7, and an internet connection to retrieve the hash-pinned native build tools and MPV development package. The MPV runtime binary is downloaded and verified for packaging; it is not stored in Git.
 
+For a local portable build to test, run:
+
+```powershell
+.\gradlew.bat :desktop-app:createDistributable
+```
+
+The app folder is written to `desktop-app/build/compose/binaries/main/app/Auras-Orbit/`. Keep `Auras-Orbit.exe`, `app/`, `runtime/`, and `legal/` together. Add an empty `portable.txt` beside the executable to keep test data in `AurasOrbitData/` beside the app. This local test build does not create an archive.
+
+For release packaging, the helper script below runs formatting checks, compilation, tests, native tests, and distribution verification. It creates one versioned portable ZIP and one source ZIP under `desktop-app/build/outputs/`.
+
 ```powershell
 git clone --recursive https://github.com/SMRiaz-SA/Auras-Orbit.git
 cd Auras-Orbit
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ```
 
-The script runs formatting checks, compilation, tests, native tests, and distribution verification on your computer. It creates one versioned portable ZIP and one source ZIP under `desktop-app/build/outputs/`. The portable application tree is written to `desktop-app/build/compose/binaries/main/app/Auras-Orbit/` and includes the WebView2 SDK and required license/provenance notices under `legal/`.
+The portable application tree includes the WebView2 SDK and required license/provenance notices under `legal/`.
 
 The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with `-PuseMavenLocal=true`. Set `APP_VERSION` in `gradle.properties` to change the app version; installer version metadata is generated under `desktop-app/build/generated/installer/`.
 

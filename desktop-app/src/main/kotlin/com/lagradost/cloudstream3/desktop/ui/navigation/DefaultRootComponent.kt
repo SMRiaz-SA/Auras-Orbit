@@ -68,6 +68,7 @@ class DefaultRootComponent(
             is Config.Settings -> RootComponent.Child.Settings(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.SettingsComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
             )
+            is Config.Help -> RootComponent.Child.Help
             is Config.Details -> RootComponent.Child.Details(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.DetailsComponent(componentContext, config),
             )
@@ -126,6 +127,7 @@ class DefaultRootComponent(
             is Config.History,
             is Config.Extensions,
             is Config.Settings,
+            is Config.Help,
             -> {
                 // Top-level Dock destinations are anchored directly to Home.
                 // Pressing Back on any top-level tab cleanly returns to Home!

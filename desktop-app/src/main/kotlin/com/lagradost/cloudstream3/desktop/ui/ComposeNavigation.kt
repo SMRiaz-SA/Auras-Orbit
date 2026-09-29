@@ -172,6 +172,23 @@ fun CloudstreamApp(rootComponent: RootComponent) {
             ) {
                 androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
                     com.lagradost.cloudstream3.desktop.ui.components.UniversalUpdateDialog()
+                    if (com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen) {
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen = false },
+                            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+                        ) {
+                            androidx.compose.material3.Surface(
+                                modifier = androidx.compose.ui.Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            ) {
+                                com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualScreen(
+                                    onBack = { com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen = false },
+                                    onClose = { com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualState.isOpen = false },
+                                )
+                            }
+                        }
+                    }
                     if (showStartupProfileSelect || showProfileManagerModal) {
                         com.lagradost.cloudstream3.desktop.ui.screens.profile.ProfileSelectScreen(
                             onNavigateHome = {
@@ -246,6 +263,7 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                     is RootComponent.Child.Library -> "Library"
                                     is RootComponent.Child.Downloads -> "Downloads"
                                     is RootComponent.Child.Settings -> "Settings"
+                                    is RootComponent.Child.Help -> "Help & Manual"
                                     is RootComponent.Child.CategoryGrid -> activeInstance.component.title
                                     is RootComponent.Child.Details -> activeInstance.component.config.preloadedName?.let { "Details: $it" } ?: "Details"
                                     is RootComponent.Child.Person -> activeInstance.component.config.name
@@ -493,6 +511,11 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                                             viewModel = child.component.viewModel,
                                                         )
                                                     }
+                                                    is RootComponent.Child.Help -> {
+                                                        com.lagradost.cloudstream3.desktop.ui.screens.help.HelpManualScreen(
+                                                            onBack = { rootComponent.pop() },
+                                                        )
+                                                    }
                                                     is RootComponent.Child.CategoryGrid -> {
                                                         val api = com.lagradost.cloudstream3.APIHolder.getApiFromNameNull(child.component.providerName)
                                                         if (api != null) {
@@ -580,7 +603,7 @@ internal fun GlobalDevelopmentWatermark(modifier: Modifier = Modifier) {
                     .background(MaterialTheme.colorScheme.primary),
             )
             Text(
-                text = "PRE-ALPHA • v${com.lagradost.cloudstream3.desktop.AppConfig.APP_VERSION} • $dateStr",
+                text = "BETA • v${com.lagradost.cloudstream3.desktop.AppConfig.APP_VERSION} • $dateStr",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 10.sp,
                     letterSpacing = 0.5.sp,

@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.syncproviders
 
 import com.lagradost.cloudstream3.desktop.profile.ProfileManager
+import com.lagradost.cloudstream3.syncproviders.providers.AniListApi
 import com.lagradost.cloudstream3.syncproviders.providers.OpenSubtitlesStremioApi
 import com.lagradost.cloudstream3.syncproviders.providers.SubDlApi
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,11 @@ import kotlinx.coroutines.launch
 
 class AccountManager {
     companion object {
+        // Android-built extensions such as StreamPlay resolve this getter while their providers
+        // are constructed. The desktop AniList API is currently unauthenticated; SyncRepo keeps
+        // account-only pages unavailable until desktop account sync is implemented.
+        val aniListApi = AniListApi()
+
         @JvmStatic
         val openSubtitlesStremioApi = OpenSubtitlesStremioApi()
 

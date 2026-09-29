@@ -23,6 +23,7 @@ interface RootComponent {
         class Library(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.LibraryComponent) : Child()
         class Downloads(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.DownloadsComponent) : Child()
         class Settings(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.SettingsComponent) : Child()
+        data object Help : Child()
         class Details(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.DetailsComponent) : Child()
         class CategoryGrid(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.CategoryGridComponent) : Child()
         class Person(val component: com.lagradost.cloudstream3.desktop.ui.navigation.components.PersonComponent) : Child()

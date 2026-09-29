@@ -13,6 +13,7 @@ sealed class Config {
     data object Library : Config()
     data object Downloads : Config()
     data object Settings : Config()
+    data object Help : Config()
     data class Details(
         val providerName: String,
         val url: String,
