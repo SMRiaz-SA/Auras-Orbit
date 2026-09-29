@@ -74,9 +74,16 @@ import java.io.FileOutputStream
 import java.io.PrintStream
 import java.lang.reflect.Proxy
 import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.jar.Attributes
+import java.util.jar.JarOutputStream
+import java.util.jar.Manifest
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
@@ -105,6 +112,7 @@ object PluginProviderWorkerRegistry {
     private val externalExtractorGeneration = AtomicLong()
     private val externalRouteStates = ConcurrentHashMap<String, ExternalRouteState>()
     private val externalRouteLocks = ConcurrentHashMap<String, Mutex>()
+    private val workerClassPathLock = Any()
 
     fun movePluginProvidersToWorkers(
         pluginFile: File,
@@ -413,6 +421,48 @@ object PluginProviderWorkerRegistry {
         return response.get("value") ?: ProviderRpcJson.mapper.nullNode()
     }
 
+    private fun windowsWorkerClassPath(classPath: String, appDataDirectory: File): String = synchronized(workerClassPathLock) {
+        val cacheDirectory = File(appDataDirectory, "plugin-worker")
+        if (!cacheDirectory.isDirectory && !cacheDirectory.mkdirs()) {
+            throw IllegalStateException("Could not create plugin worker cache directory")
+        }
+
+        val cacheId = UUID.nameUUIDFromBytes(
+            (cacheDirectory.canonicalPath + "\u0000" + classPath).toByteArray(StandardCharsets.UTF_8),
+        )
+        val classPathJar = File(cacheDirectory, "classpath-$cacheId.jar")
+        if (classPathJar.isFile) return@synchronized classPathJar.absolutePath
+
+        val classPathUrls = classPath.split(File.pathSeparatorChar)
+            .filter(String::isNotBlank)
+            .joinToString(" ") { entry -> File(entry).absoluteFile.toURI().toASCIIString() }
+        check(classPathUrls.isNotBlank()) { "Cannot create a plugin worker classpath from an empty classpath" }
+
+        val manifest = Manifest().apply {
+            mainAttributes[Attributes.Name.MANIFEST_VERSION] = "1.0"
+            mainAttributes.putValue("Class-Path", classPathUrls)
+        }
+        val temporaryJar = File.createTempFile("classpath-$cacheId-", ".jar.tmp", cacheDirectory)
+        try {
+            JarOutputStream(FileOutputStream(temporaryJar), manifest).use { }
+            try {
+                Files.move(temporaryJar.toPath(), classPathJar.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: FileAlreadyExistsException) {
+                // Another application process may have cached this same classpath first.
+            } catch (_: AtomicMoveNotSupportedException) {
+                try {
+                    Files.move(temporaryJar.toPath(), classPathJar.toPath())
+                } catch (_: FileAlreadyExistsException) {
+                    // Another application process may have cached this same classpath first.
+                }
+            }
+        } finally {
+            Files.deleteIfExists(temporaryJar.toPath())
+        }
+        check(classPathJar.isFile) { "Could not create the plugin worker classpath archive" }
+        classPathJar.absolutePath
+    }
+
     private fun workerCommand(pluginFile: File, providerIndex: Int, appDataDirectory: File): List<String> {
         val currentCommand = ProcessHandle.current().info().command().orElse(null)
         val packagedExecutable = currentCommand?.let(::File)?.takeIf { file ->
@@ -426,10 +476,15 @@ object PluginProviderWorkerRegistry {
         val javaExecutable = File(System.getProperty("java.home"), "bin/java${if (PlatformPaths.currentOS == PlatformPaths.OS.WINDOWS) ".exe" else ""}")
         val classPath = System.getProperty("java.class.path")
         check(javaExecutable.isFile && classPath.isNotBlank()) { "Cannot locate the Java runtime for a plugin worker" }
+        val workerClassPath = if (PlatformPaths.currentOS == PlatformPaths.OS.WINDOWS) {
+            windowsWorkerClassPath(classPath, appDataDirectory)
+        } else {
+            classPath
+        }
         return listOf(
             javaExecutable.absolutePath,
             "-cp",
-            classPath,
+            workerClassPath,
             "com.lagradost.cloudstream3.desktop.MainKt",
             "--auras-plugin-worker",
             pluginFile.canonicalPath,
