@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && '["self-hosted", "Windows", "X64", "auras-orbit"]' || '"windows-latest"') }}
+    runs-on: [self-hosted, Windows, X64, auras-orbit]
     timeout-minutes: 60
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
