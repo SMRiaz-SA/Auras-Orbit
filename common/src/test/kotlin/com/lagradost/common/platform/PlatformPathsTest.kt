@@ -33,7 +33,7 @@ class PlatformPathsTest {
     }
 
     @Test
-    fun explicitAurasDataDirectoryStillOverridesDefault() {
+    fun explicitDataDirectoryOverridesDefault() {
         val basePath = Files.createTempDirectory("auras-custom-paths").toFile()
         try {
             val customPath = File(basePath, "custom-data")
