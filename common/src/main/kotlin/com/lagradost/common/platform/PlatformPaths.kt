@@ -12,7 +12,6 @@ import java.io.File
  *   Windows: %APPDATA%/AurasOrbit/
  *   macOS:   ~/Library/Application Support/AurasOrbit/
  *   Linux:   ~/.local/share/AurasOrbit/
- * Existing installations continue using their legacy CloudStreamDesktop or AurasDesktop directory.
  */
 object PlatformPaths {
     enum class OS { WINDOWS, MACOS, LINUX, UNKNOWN }
@@ -31,23 +30,7 @@ object PlatformPaths {
     val appDataDir: File by lazy {
         val customDirProp = System.getProperty("auras.data.dir")
             ?.takeIf { it.isNotBlank() }
-            ?: System.getProperty("cloudstream.data.dir")
-        if (!customDirProp.isNullOrBlank()) {
-            return@lazy File(customDirProp).also { it.mkdirs() }
-        }
-
         val userDir = System.getProperty("user.dir")
-        if (File(userDir, "portable.txt").exists()) {
-            val legacyPortableDir = File(userDir, "CloudStreamData")
-            val portableDir = if (legacyPortableDir.exists()) {
-                legacyPortableDir
-            } else {
-                val previousAurasDir = File(userDir, "AurasData")
-                if (previousAurasDir.exists()) previousAurasDir else File(userDir, "AurasOrbitData")
-            }
-            return@lazy portableDir.also { it.mkdirs() }
-        }
-
         val basePath =
             when (currentOS) {
                 OS.WINDOWS -> {
@@ -58,16 +41,9 @@ object PlatformPaths {
                 OS.LINUX -> System.getProperty("user.home") + "/.local/share"
                 OS.UNKNOWN -> System.getProperty("user.home")
             }
-        // Keep existing installations on their established data root so upgrades do not
-        // appear to lose profiles, history, preferences, or installed extensions.
-        val legacyAppDataDir = File(basePath, "CloudStreamDesktop")
-        val previousAurasAppDataDir = File(basePath, "AurasDesktop")
-        val resolvedAppDataDir = when {
-            legacyAppDataDir.exists() -> legacyAppDataDir
-            previousAurasAppDataDir.exists() -> previousAurasAppDataDir
-            else -> File(basePath, "AurasOrbit")
-        }
-        resolvedAppDataDir.also { it.mkdirs() }
+        val portable = File(userDir, "portable.txt").exists()
+        resolveAppDataDirectory(File(userDir), File(basePath), portable, customDirProp)
+            .also { it.mkdirs() }
     }
 
     /** Directory for persistent data store (bookmarks, history, preferences). */
@@ -123,3 +99,13 @@ object PlatformPaths {
             return targetDir.also { it.mkdirs() }
         }
 }
+
+internal fun resolveAppDataDirectory(
+    userDir: File,
+    basePath: File,
+    portable: Boolean,
+    customDir: String? = null,
+): File = customDir
+    ?.takeIf { it.isNotBlank() }
+    ?.let(::File)
+    ?: if (portable) File(userDir, "AurasOrbitData") else File(basePath, "AurasOrbit")

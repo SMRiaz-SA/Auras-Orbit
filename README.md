@@ -43,7 +43,7 @@ Download the portable ZIP or Windows installer from the [GitHub Releases page](h
 5. Open **Extensions**, add a repository you trust, and install only the providers you want to use.
 6. Return to **Home** or **Explore** to browse. Use **Library** for bookmarks and local history.
 
-The portable folder stores the application runtime and legal notices only. Your profiles, settings, extension files, credentials, watch history, and bookmarks are created in the app's data location at runtime; they are not part of the public source or portable deliverables.
+The portable folder stores the application runtime and legal notices only. Your profiles, settings, extension files, credentials, watch history, and bookmarks are created in the app's data location at runtime; they are not part of the public source or portable deliverables. Standard Windows installs use `%APPDATA%\AurasOrbit`; portable copies store data in `AurasOrbitData` beside the app.
 
 ## Playback requirements
 

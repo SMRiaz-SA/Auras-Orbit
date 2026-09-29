@@ -33,7 +33,7 @@ foreach ($archive in @($portableZip, $sourceZip)) {
 
 $sourceItems = [System.Collections.Generic.List[object]]::new()
 $seenSourcePaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-$excludedPath = '(^|/)(\.git|\.gradle|\.kotlin|build|out|dist|node_modules|\.idea|CloudStreamData|AurasData|AurasOrbitData|CloudStreamDesktop|AurasDesktop|AurasOrbit|shared_prefs)(/|$)'
+$excludedPath = '(^|/)(\.git|\.gradle|\.kotlin|build|out|dist|node_modules|\.idea|AurasOrbitData|shared_prefs)(/|$)'
 $excludedSecret = '(^|/)(\.env(?:\..*)?|local\.properties|keystore\.properties|settings\.json|auth_tokens(?:\..*)?|tracker_credentials(?:\..*)?|[^/]*\.(?:db|sqlite|sqlite3)(?:-shm|-wal)?|[^/]*\.(?:jks|keystore|p12|pfx|pem|key))$'
 
 function Add-SourceFile([string] $BaseDirectory, [string] $RelativePath, [string] $ArchivePrefix) {
@@ -104,7 +104,19 @@ if (-not $mpvReady -or (Get-FileHash -LiteralPath $mpvDll -Algorithm SHA256).Has
 
 Push-Location $repoRoot
 try {
-    & (Join-Path $repoRoot 'gradlew.bat') 'spotlessCheck' ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':desktop-app:nativeTest' ':desktop-app:createDistributable' '-PorbitDistribution=release' '--no-daemon'
+    $testDataDirectory = Join-Path $repoRoot 'build/local-deliverable-test-data'
+    $testDataDirectoryForGradle = $testDataDirectory.Replace('\', '/')
+    $testDataInitScript = Join-Path $repoRoot 'build/local-deliverables-test-data.init.gradle'
+    @"
+allprojects {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+        systemProperty 'auras.data.dir', '$testDataDirectoryForGradle'
+    }
+}
+"@ | Set-Content -LiteralPath $testDataInitScript -Encoding utf8
+
+    # Keep persistence and plugin-worker tests away from the developer's real app data.
+    & (Join-Path $repoRoot 'gradlew.bat') '--init-script' $testDataInitScript 'spotlessCheck' ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':desktop-app:nativeTest' ':desktop-app:createDistributable' '-PorbitDistribution=release' '--no-daemon'
     if ($LASTEXITCODE -ne 0) { throw "Gradle build/test failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location

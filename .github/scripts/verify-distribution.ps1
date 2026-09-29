@@ -50,8 +50,7 @@ if (-not (Test-Path -LiteralPath $distribution -PathType Container)) {
     throw "Portable distribution directory is missing: $distribution"
 }
 $privateDirectoryNames = @(
-    'CloudStreamData', 'AurasData', 'AurasOrbitData',
-    'CloudStreamDesktop', 'AurasDesktop', 'AurasOrbit',
+    'AurasOrbitData',
     'data', 'shared_prefs', 'profiles', 'Extensions', 'logs', 'downloads'
 )
 $privateFileName = '^(settings\.json|auth_tokens(?:\..*)?|tracker_credentials(?:\..*)?|.*\.(?:db|sqlite|sqlite3)(?:-shm|-wal)?)$'
