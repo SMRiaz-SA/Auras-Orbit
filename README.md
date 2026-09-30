@@ -13,7 +13,7 @@ Orbit does not host media or curate provider catalogs. You choose which extensio
 
 ## Navigate this guide
 
-[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Privacy](#privacy) · [Build from source](#build-from-source)
+[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Torrent playback](#torrent-playback) · [Privacy](#privacy) · [Build from source](#build-from-source)
 
 ## Why Orbit
 
@@ -51,6 +51,12 @@ Orbit includes its MPV native library in the portable package. Windows must prov
 
 If Orbit reports that WebView2 is missing, install the [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/#download-section) while online, or the x64 Evergreen Standalone Installer on an offline PC. Return to Orbit and choose **Check again after installing**; restart Orbit if the player still cannot start.
 
+## Torrent playback
+
+Magnet links and torrent links supplied by compatible providers can be streamed through Orbit's TorrServer engine. Enable **Settings → Network → Enable P2P Torrent Streaming** to use this feature; it is off by default. If TorrServer is not installed, Orbit downloads it the first time you play a torrent.
+
+Torrent playback connects to other peers in a swarm, so your public IP address is visible to those peers. Only play content you are authorized to access.
+
 ## Watch history and lists
 
 Auras Orbit manages watch history, playback progress, and bookmarks locally for each profile. External watch-tracking accounts and playback syncing are not supported.
@@ -78,6 +84,8 @@ git clone --recursive https://github.com/SMRiaz-SA/Auras-Orbit.git
 cd Auras-Orbit
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ```
+
+GitHub Actions CI runs on pushes to `main`, pull requests, and manual dispatches using the project's self-hosted Windows x64 runner. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with `v`.
 
 The portable application tree includes the WebView2 SDK and required license/provenance notices under `legal/`.
 
