@@ -7,6 +7,8 @@ import com.lagradost.cloudstream3.desktop.explore.client.ExploreCatalogDiscovere
 import com.lagradost.cloudstream3.desktop.explore.models.ExploreItem
 import com.lagradost.cloudstream3.desktop.explore.models.ManifestCatalogDescriptor
 import com.lagradost.cloudstream3.desktop.explore.models.ProviderMatch
+import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
+import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient.StremioVideo
 import com.lagradost.cloudstream3.desktop.stremio.ManagedStremioAddon
 import com.lagradost.cloudstream3.desktop.stremio.StremioAddonManager
 import com.lagradost.cloudstream3.desktop.ui.badges.CardTitleSanitizer
@@ -14,6 +16,7 @@ import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.base.UiEffect
 import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
+import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.*
@@ -51,6 +54,7 @@ data class ExploreUiState(
     val filteredCatalogs: List<ManifestCatalogDescriptor> = emptyList(),
     val selectedCatalog: ManifestCatalogDescriptor? = null,
     val selectedGenre: String = "All",
+    val selectedExtraArgs: Map<String, String> = emptyMap(),
     val selectedYear: String = "All Years",
     val searchQuery: String = "",
     val rawItems: List<ExploreItem> = emptyList(),
@@ -61,16 +65,27 @@ data class ExploreUiState(
     val selectedItemForMatch: ExploreItem? = null,
     val providerMatches: List<ProviderMatch> = emptyList(),
     val isSearchingProviders: Boolean = false,
+    val stremioItem: ExploreItem? = null,
+    val stremioVideos: List<StremioVideo> = emptyList(),
+    val selectedStremioVideo: StremioVideo? = null,
+    val stremioStreams: List<ExtractorLink> = emptyList(),
+    val isLoadingStremioStreams: Boolean = false,
+    val stremioStreamMessage: String? = null,
 ) : UiState
 
 sealed interface ExploreUiEvent : UiEvent {
     data class SelectType(val type: String) : ExploreUiEvent
     data class SelectCatalog(val catalog: ManifestCatalogDescriptor) : ExploreUiEvent
     data class SelectGenre(val genre: String) : ExploreUiEvent
+    data class ApplyCatalogExtras(val values: Map<String, String>) : ExploreUiEvent
     data class SelectYear(val year: String) : ExploreUiEvent
     data class UpdateSearchQuery(val query: String) : ExploreUiEvent
     data object ClearSearchQuery : ExploreUiEvent
     data class OpenProviderPicker(val item: ExploreItem) : ExploreUiEvent
+    data class OpenStremioStreams(val item: ExploreItem) : ExploreUiEvent
+    data class SelectStremioVideo(val video: StremioVideo) : ExploreUiEvent
+    data object BackToStremioVideos : ExploreUiEvent
+    data object CloseStremioStreams : ExploreUiEvent
     data object CloseProviderPicker : ExploreUiEvent
     data class SelectProviderMatch(val match: ProviderMatch) : ExploreUiEvent
     data object LoadMore : ExploreUiEvent
@@ -88,6 +103,8 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private var loadJob: Job? = null
     private var loadMoreJob: Job? = null
     private var providerSearchJob: Job? = null
+    private var stremioStreamJob: Job? = null
+    private var remoteSearchJob: Job? = null
     private val searchSemaphore = Semaphore(8)
 
     companion object {
@@ -105,6 +122,8 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     init {
         viewModelScope.launch {
             StremioAddonManager.addons.collect {
+                ExploreCatalogDiscoverer.clearCache()
+                catalogItemsCache.clear()
                 refreshCatalogs()
             }
         }
@@ -115,10 +134,15 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             is ExploreUiEvent.SelectType -> selectType(event.type)
             is ExploreUiEvent.SelectCatalog -> selectCatalog(event.catalog)
             is ExploreUiEvent.SelectGenre -> selectGenre(event.genre)
+            is ExploreUiEvent.ApplyCatalogExtras -> applyCatalogExtras(event.values)
             is ExploreUiEvent.SelectYear -> selectYear(event.year)
             is ExploreUiEvent.UpdateSearchQuery -> updateSearchQuery(event.query)
             is ExploreUiEvent.ClearSearchQuery -> updateSearchQuery("")
             is ExploreUiEvent.OpenProviderPicker -> openProviderPicker(event.item)
+            is ExploreUiEvent.OpenStremioStreams -> openStremioStreams(event.item)
+            is ExploreUiEvent.SelectStremioVideo -> selectStremioVideo(event.video)
+            is ExploreUiEvent.BackToStremioVideos -> backToStremioVideos()
+            is ExploreUiEvent.CloseStremioStreams -> closeStremioStreams()
             is ExploreUiEvent.CloseProviderPicker -> closeProviderPicker()
             is ExploreUiEvent.SelectProviderMatch -> selectProviderMatch(event.match)
             is ExploreUiEvent.LoadMore -> loadMore()
@@ -171,6 +195,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                         availableTypes = emptyList(),
                         filteredCatalogs = emptyList(),
                         selectedCatalog = null,
+                        selectedExtraArgs = emptyMap(),
                         rawItems = emptyList(),
                         displayItems = emptyList(),
                         isLoading = false,
@@ -185,6 +210,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                         filteredCatalogs = forType,
                         selectedCatalog = nextCat,
                         selectedGenre = "All",
+                        selectedExtraArgs = emptyMap(),
                         selectedYear = "All Years",
                         searchQuery = "",
                     )
@@ -206,6 +232,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 filteredCatalogs = forType,
                 selectedCatalog = nextCat,
                 selectedGenre = "All",
+                selectedExtraArgs = emptyMap(),
                 selectedYear = "All Years",
                 searchQuery = "",
             )
@@ -215,12 +242,17 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun selectCatalog(catalog: ManifestCatalogDescriptor) {
-        if (uiState.value.selectedCatalog?.id == catalog.id && uiState.value.selectedCatalog?.addonBaseUrl == catalog.addonBaseUrl) return
+        if (uiState.value.selectedCatalog?.id == catalog.id &&
+            uiState.value.selectedCatalog?.addonManifestUrl == catalog.addonManifestUrl
+        ) {
+            return
+        }
 
         updateState {
             copy(
                 selectedCatalog = catalog,
                 selectedGenre = "All",
+                selectedExtraArgs = emptyMap(),
                 selectedYear = "All Years",
                 searchQuery = "",
             )
@@ -253,6 +285,24 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 displayItems = applyFilters(rawItems, query, selectedYear),
             )
         }
+        remoteSearchJob?.cancel()
+        if (uiState.value.selectedCatalog?.supportsSearch == true) {
+            remoteSearchJob = viewModelScope.launch {
+                delay(350)
+                loadCurrentCatalog()
+            }
+        }
+    }
+
+    private fun applyCatalogExtras(values: Map<String, String>) {
+        updateState {
+            copy(
+                selectedExtraArgs = values.filterValues { it.isNotBlank() },
+                rawItems = emptyList(),
+                displayItems = emptyList(),
+            )
+        }
+        loadCurrentCatalog()
     }
 
     internal fun applyFilters(items: List<ExploreItem>, query: String, year: String): List<ExploreItem> {
@@ -288,8 +338,42 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     private fun loadCurrentCatalog(skip: Int = 0) {
         val cat = uiState.value.selectedCatalog ?: return
-        val genreArg = if (uiState.value.selectedGenre.equals("All", ignoreCase = true)) null else uiState.value.selectedGenre
-        val cacheKey = "${cat.addonBaseUrl}_${cat.type}_${cat.id}_${genreArg ?: "all"}_$skip"
+        val state = uiState.value
+        val genreArg = if (state.selectedGenre.equals("All", ignoreCase = true)) null else state.selectedGenre
+        val queryArg = state.searchQuery.takeIf { cat.supportsSearch && it.isNotBlank() }
+        val requestExtras = state.selectedExtraArgs.filterKeys { key ->
+            !key.equals("genre", ignoreCase = true) && !key.equals("search", ignoreCase = true) && !key.equals("skip", ignoreCase = true)
+        }
+        val missingRequired = cat.extras.filter { it.isRequired }.firstOrNull { extra ->
+            when (extra.name.lowercase(Locale.US)) {
+                "genre" -> genreArg.isNullOrBlank()
+                "search" -> queryArg.isNullOrBlank()
+                "skip" -> false
+                else -> requestExtras[extra.name].isNullOrBlank()
+            }
+        }
+        if (missingRequired != null) {
+            updateState {
+                copy(
+                    isInitializing = false,
+                    isLoading = false,
+                    isLoadingMore = false,
+                    rawItems = emptyList(),
+                    displayItems = emptyList(),
+                    canLoadMore = false,
+                )
+            }
+            return
+        }
+        val cacheKey = listOf(
+            cat.addonManifestUrl,
+            cat.type,
+            cat.id,
+            genreArg.orEmpty(),
+            queryArg.orEmpty(),
+            requestExtras.toSortedMap().entries.joinToString("&") { "${it.key}=${it.value}" },
+            skip.toString(),
+        ).joinToString("_")
 
         // Instant display if already in memory
         if (skip == 0) {
@@ -318,8 +402,11 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     type = cat.type,
                     catalogId = cat.id,
                     genre = genreArg,
+                    search = queryArg,
                     skip = skip,
                     manifestUrl = cat.addonManifestUrl,
+                    addonName = cat.addonName,
+                    extraArgs = requestExtras,
                 )
 
                 val distinctFetched = fetched.distinctBy { it.id }
@@ -355,6 +442,10 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
         val cat = state.selectedCatalog
         val genreArg = if (state.selectedGenre.equals("All", ignoreCase = true)) null else state.selectedGenre
+        val queryArg = state.searchQuery.takeIf { state.selectedCatalog.supportsSearch && it.isNotBlank() }
+        val requestExtras = state.selectedExtraArgs.filterKeys { key ->
+            !key.equals("genre", ignoreCase = true) && !key.equals("search", ignoreCase = true) && !key.equals("skip", ignoreCase = true)
+        }
         val skip = state.rawItems.size
 
         loadMoreJob?.cancel()
@@ -366,8 +457,11 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     type = cat.type,
                     catalogId = cat.id,
                     genre = genreArg,
+                    search = queryArg,
                     skip = skip,
                     manifestUrl = cat.addonManifestUrl,
+                    addonName = cat.addonName,
+                    extraArgs = requestExtras,
                 )
 
                 if (fetched.isEmpty()) {
@@ -526,6 +620,143 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 selectedItemForMatch = null,
                 providerMatches = emptyList(),
                 isSearchingProviders = false,
+            )
+        }
+    }
+
+    private fun openStremioStreams(item: ExploreItem) {
+        providerSearchJob?.cancel()
+        stremioStreamJob?.cancel()
+        updateState {
+            copy(
+                selectedItemForMatch = null,
+                providerMatches = emptyList(),
+                isSearchingProviders = false,
+                stremioItem = item,
+                stremioVideos = emptyList(),
+                selectedStremioVideo = null,
+                stremioStreams = emptyList(),
+                isLoadingStremioStreams = true,
+                stremioStreamMessage = if (item.type.equals("series", ignoreCase = true)) {
+                    "Loading series video IDs from enabled metadata add-ons…"
+                } else {
+                    "Searching enabled Stremio stream add-ons…"
+                },
+            )
+        }
+
+        stremioStreamJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val mediaType = item.type.lowercase(Locale.US)
+                val needsVideoIds = mediaType == "series"
+                val shouldCheckMetadataVideos = needsVideoIds || mediaType !in setOf("movie", "tv")
+                if (shouldCheckMetadataVideos) {
+                    val metadataCandidates = StremioAddonClient.getMetaCandidates(
+                        id = item.id,
+                        type = item.type,
+                        preferredManifestUrl = item.sourceManifestUrl,
+                    )
+                    val metaWithVideos = metadataCandidates.firstOrNull { candidate ->
+                        candidate.videos.orEmpty().any { !it.id.isNullOrBlank() }
+                    }
+                    val meta = metaWithVideos ?: metadataCandidates.firstOrNull()
+                    val videos = metaWithVideos?.videos.orEmpty()
+                        .filter { !it.id.isNullOrBlank() }
+                        .sortedWith(compareBy<StremioVideo> { it.season ?: Int.MAX_VALUE }.thenBy { it.episode ?: Int.MAX_VALUE })
+                    if (videos.isNotEmpty()) {
+                        updateState {
+                            copy(
+                                stremioVideos = videos,
+                                isLoadingStremioStreams = false,
+                                stremioStreamMessage = "Choose a video to query compatible stream add-ons.",
+                            )
+                        }
+                    } else if (needsVideoIds) {
+                        updateState {
+                            copy(
+                                isLoadingStremioStreams = false,
+                                stremioStreamMessage = if (meta?.videos.isNullOrEmpty()) {
+                                    "No enabled metadata add-on returned video IDs for this series. The app will not guess a season or episode ID."
+                                } else {
+                                    "The metadata add-on returned episodes without protocol video IDs, so no stream request was sent."
+                                },
+                            )
+                        }
+                    } else {
+                        queryStremioStreams(item, video = null)
+                    }
+                } else {
+                    queryStremioStreams(item, video = null)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Stremio stream lookup failed for ${item.type}:${item.id}: ${e.message}")
+                updateState {
+                    copy(
+                        isLoadingStremioStreams = false,
+                        stremioStreamMessage = "The enabled Stremio add-ons could not be queried. Check the add-on connection and try again.",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun selectStremioVideo(video: StremioVideo) {
+        val item = uiState.value.stremioItem ?: return
+        if (video.id.isNullOrBlank()) return
+        stremioStreamJob?.cancel()
+        updateState {
+            copy(
+                selectedStremioVideo = video,
+                stremioStreams = emptyList(),
+                isLoadingStremioStreams = true,
+                stremioStreamMessage = "Searching enabled Stremio stream add-ons…",
+            )
+        }
+        stremioStreamJob = viewModelScope.launch(Dispatchers.IO) {
+            queryStremioStreams(item, video)
+        }
+    }
+
+    private suspend fun queryStremioStreams(item: ExploreItem, video: StremioVideo?) {
+        val requestId = video?.id ?: item.id
+        val streams = StremioAddonManager.searchStreamsById(item.type, requestId)
+        updateState {
+            copy(
+                stremioStreams = streams,
+                isLoadingStremioStreams = false,
+                stremioStreamMessage = if (streams.isEmpty()) {
+                    "No playable streams were returned by enabled add-ons that declare support for this exact media ID."
+                } else {
+                    null
+                },
+            )
+        }
+    }
+
+    private fun backToStremioVideos() {
+        stremioStreamJob?.cancel()
+        updateState {
+            copy(
+                selectedStremioVideo = null,
+                stremioStreams = emptyList(),
+                isLoadingStremioStreams = false,
+                stremioStreamMessage = "Choose an episode to query compatible stream add-ons.",
+            )
+        }
+    }
+
+    private fun closeStremioStreams() {
+        stremioStreamJob?.cancel()
+        updateState {
+            copy(
+                stremioItem = null,
+                stremioVideos = emptyList(),
+                selectedStremioVideo = null,
+                stremioStreams = emptyList(),
+                isLoadingStremioStreams = false,
+                stremioStreamMessage = null,
             )
         }
     }

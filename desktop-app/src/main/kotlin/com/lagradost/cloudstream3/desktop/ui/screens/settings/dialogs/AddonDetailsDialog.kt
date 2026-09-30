@@ -272,6 +272,20 @@ fun AddonDetailsDialog(
                 }
             }
 
+            if (addon.configurationRequired) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.65f),
+                ) {
+                    Text(
+                        text = "This add-on requires configuration. Orbit does not host its setup page; install the configured manifest URL supplied by the add-on.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+
             // Supported Types & Prefixes
             if (addon.types.isNotEmpty() || addon.idPrefixes.isNotEmpty()) {
                 Row(

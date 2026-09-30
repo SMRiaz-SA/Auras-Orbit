@@ -15,19 +15,23 @@ object ExploreCatalogClient {
         type: String,
         catalogId: String,
         genre: String? = null,
+        search: String? = null,
         skip: Int = 0,
         manifestUrl: String? = null,
+        addonName: String = "",
+        extraArgs: Map<String, String> = emptyMap(),
     ): List<ExploreItem> {
         return try {
-            // Stremio extras are route segments (for example /genre=Drama/skip=20),
-            // not a query string. Keep the manifest query so configured addons receive
-            // the same token/profile parameters as their manifest request.
+            // Keep manifest configuration and serialize declared extras using Stremio's
+            // single stringified extraArgs route segment.
             val url = StremioTransport.buildCatalogUrl(
                 manifestOrBaseUrl = manifestUrl?.takeIf { it.isNotBlank() } ?: baseUrl,
                 type = type,
                 catalogId = catalogId,
+                search = search,
                 genre = genre,
                 skip = skip,
+                extraArgs = extraArgs,
             )
             AppLogger.d(TAG, "Fetching catalog from: $url")
 
@@ -71,6 +75,9 @@ object ExploreCatalogClient {
                         description = description,
                         rating = rating,
                         genres = genresList,
+                        sourceAddonName = addonName,
+                        sourceManifestUrl = manifestUrl?.takeIf { it.isNotBlank() }
+                            ?: StremioTransport.normalizeManifestUrl(baseUrl),
                     ),
                 )
             }

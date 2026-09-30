@@ -31,11 +31,19 @@ object ExploreCatalogDiscoverer {
 
                     val genres = mutableListOf<String>()
                     var supportsSearch = false
+                    val extras = mutableListOf<com.lagradost.cloudstream3.desktop.stremio.StremioCatalogExtra>()
 
                     val extraNode = cat["extra"]
                     if (extraNode != null && extraNode.isArray) {
                         for (ex in extraNode) {
                             val exName = ex["name"]?.asText()
+                            if (!exName.isNullOrBlank()) {
+                                extras += com.lagradost.cloudstream3.desktop.stremio.StremioCatalogExtra(
+                                    name = exName,
+                                    options = ex["options"]?.mapNotNull { option -> option.asText(null) } ?: emptyList(),
+                                    isRequired = ex["isRequired"]?.asBoolean() ?: false,
+                                )
+                            }
                             if (exName.equals("genre", ignoreCase = true)) {
                                 val opts = ex["options"]
                                 if (opts != null && opts.isArray) {
@@ -58,6 +66,7 @@ object ExploreCatalogDiscoverer {
                             name = name,
                             genres = genres,
                             supportsSearch = supportsSearch,
+                            extras = extras,
                             addonManifestUrl = addon.manifestUrl,
                         ),
                     )

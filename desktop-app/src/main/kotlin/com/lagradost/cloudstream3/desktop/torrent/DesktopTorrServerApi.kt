@@ -130,25 +130,4 @@ class DesktopTorrServerApi(
             false
         }
     }
-
-    suspend fun preloadTorrent(hash: String, fileIdx: Int): Boolean = withContext(Dispatchers.IO) {
-        val payload = mapOf(
-            "action" to "preload",
-            "hash" to hash,
-            "index" to fileIdx,
-        )
-        try {
-            val jsonStr = mapper.writeValueAsString(payload)
-            val req = Request.Builder()
-                .url("${binary.baseUrl}/torrents")
-                .post(jsonStr.toRequestBody(jsonMedia))
-                .build()
-
-            httpClient.newCall(req).execute().use { res ->
-                res.isSuccessful
-            }
-        } catch (e: Exception) {
-            false
-        }
-    }
 }

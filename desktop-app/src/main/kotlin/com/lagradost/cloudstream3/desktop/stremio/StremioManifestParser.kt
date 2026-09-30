@@ -55,7 +55,23 @@ object StremioManifestParser {
                 val catName = node["name"]?.asText() ?: catId
                 val catType = node["type"]?.asText() ?: ""
                 if (catName.isNotBlank()) {
-                    catalogs.add(StremioCatalogDescriptor(id = catId, name = catName, type = catType))
+                    val extras = node["extra"]?.mapNotNull { extraNode ->
+                        if (!extraNode.isObject) return@mapNotNull null
+                        val extraName = extraNode["name"]?.asText() ?: return@mapNotNull null
+                        StremioCatalogExtra(
+                            name = extraName,
+                            options = extraNode["options"]?.mapNotNull { it.asText() } ?: emptyList(),
+                            isRequired = extraNode["isRequired"]?.asBoolean() ?: false,
+                        )
+                    } ?: emptyList()
+                    catalogs.add(
+                        StremioCatalogDescriptor(
+                            id = catId,
+                            name = catName,
+                            type = catType,
+                            extra = extras,
+                        ),
+                    )
                 }
             }
         }

@@ -45,6 +45,7 @@ fun ExploreProviderDialog(
     onDismissRequest: () -> Unit,
     onSelectMatch: ((ProviderMatch) -> Unit)? = null,
     onOpenDetails: ((providerName: String, url: String, title: String) -> Unit)? = null,
+    onSearchStremio: (() -> Unit)? = null,
 ) {
     if (item == null) return
 
@@ -134,19 +135,26 @@ fun ExploreProviderDialog(
                     }
                 }
 
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.07f)),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(15.dp),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (onSearchStremio != null) {
+                        TextButton(onClick = onSearchStremio) {
+                            Text("Search Stremio add-ons", fontSize = 11.sp)
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.07f)),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
                 }
             }
 

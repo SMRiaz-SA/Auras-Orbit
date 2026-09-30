@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SearchResponseList
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine
 import com.lagradost.cloudstream3.newAnimeSearchResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class PluginProviderRpcCodecTest {
     private val provider = object : MainAPI() {
@@ -142,6 +144,44 @@ class PluginProviderRpcCodecTest {
         assertEquals(standard.url, decoded[2].url)
         assertEquals(standard.type, decoded[2].type)
         assertEquals(standard.headers, decoded[2].headers)
+    }
+
+    @Test
+    fun extractorLinkRpcPreservesTorrentAndMagnetTypes() = runBlocking {
+        val magnet = newExtractorLink(
+            source = "Fixture torrent provider",
+            name = "Magnet result",
+            url = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            type = ExtractorLinkType.MAGNET,
+        )
+        val torrentFile = newExtractorLink(
+            source = "Fixture torrent provider",
+            name = "Torrent file result",
+            url = "https://fixture.example/video.torrent",
+            type = ExtractorLinkType.TORRENT,
+        )
+
+        val decoded = ProviderRpcJson.decodeExtractorLinks(
+            ProviderRpcJson.encodeExtractorLinks(listOf(magnet, torrentFile)),
+        )
+
+        assertEquals(listOf(ExtractorLinkType.MAGNET, ExtractorLinkType.TORRENT), decoded.map { it.type })
+        assertEquals(listOf(magnet.url, torrentFile.url), decoded.map { it.url })
+    }
+
+    @Test
+    fun torrentPluginMagnetSurvivesRpcAndIsRecognizedAtPlaybackBoundary() = runBlocking {
+        val providerMagnet = newExtractorLink(
+            source = "Fixture torrent provider",
+            name = "Magnet result",
+            url = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            type = ExtractorLinkType.MAGNET,
+        )
+
+        val decoded = ProviderRpcJson.decodeExtractorLink(ProviderRpcJson.encodeExtractorLink(providerMagnet))
+
+        assertEquals(ExtractorLinkType.MAGNET, decoded.type)
+        assertTrue(DesktopTorrentEngine.isTorrentLink(decoded))
     }
 
     @Test

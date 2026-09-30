@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.explore.models
 
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.desktop.stremio.StremioCatalogExtra
 
 data class ExploreItem(
     val id: String,
@@ -13,6 +14,8 @@ data class ExploreItem(
     val description: String? = null,
     val rating: Double? = null,
     val genres: List<String> = emptyList(),
+    val sourceAddonName: String = "",
+    val sourceManifestUrl: String = "",
 )
 
 data class ManifestCatalogDescriptor(
@@ -23,6 +26,7 @@ data class ManifestCatalogDescriptor(
     val name: String,
     val genres: List<String> = emptyList(),
     val supportsSearch: Boolean = false,
+    val extras: List<StremioCatalogExtra> = emptyList(),
     /**
      * The normalized manifest URL, including any configuration query parameters.
      * Configured Stremio addons require those parameters on catalog requests too.

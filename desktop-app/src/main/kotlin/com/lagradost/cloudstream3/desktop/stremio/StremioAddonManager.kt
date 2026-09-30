@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.desktop.utils.appScope
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Universal Manager for External Stremio Addons in CloudStream Desktop.
@@ -100,11 +102,14 @@ object StremioAddonManager {
                 providesMetadata = manifest.providesMetadata,
                 providesStreams = manifest.providesStreams,
                 providesCatalogs = manifest.providesCatalogs,
+                resources = manifest.resources,
+                catalogs = manifest.catalogs,
                 types = manifest.types,
                 idPrefixes = manifest.idPrefixes,
                 catalogsSummary = manifest.catalogs.map { it.name.ifBlank { it.id } },
                 isP2P = manifest.behaviorHints.p2p,
                 isConfigurable = manifest.behaviorHints.configurable,
+                configurationRequired = manifest.behaviorHints.configurationRequired,
             )
 
             val updated = _addons.value + newAddon
@@ -165,11 +170,14 @@ object StremioAddonManager {
                             providesMetadata = manifest.providesMetadata,
                             providesStreams = manifest.providesStreams,
                             providesCatalogs = manifest.providesCatalogs,
+                            resources = manifest.resources,
+                            catalogs = manifest.catalogs,
                             types = manifest.types,
                             idPrefixes = manifest.idPrefixes,
                             catalogsSummary = manifest.catalogs.map { it.name.ifBlank { it.id } },
                             isP2P = manifest.behaviorHints.p2p,
                             isConfigurable = manifest.behaviorHints.configurable,
+                            configurationRequired = manifest.behaviorHints.configurationRequired,
                             errorMessage = null,
                         )
                     } else {
@@ -196,6 +204,24 @@ object StremioAddonManager {
         return _addons.value.filter { it.enabled && it.providesStreams }
     }
 
+    internal fun supportsRequest(
+        addon: ManagedStremioAddon,
+        resourceName: String,
+        type: String,
+        id: String,
+    ): Boolean {
+        val resources = addon.resources.filter { it.name.equals(resourceName, ignoreCase = true) }
+        if (addon.resources.isNotEmpty() && resources.isEmpty()) return false
+
+        val declarations: List<StremioResource?> = resources.ifEmpty { listOf(null) }
+        return declarations.any { resource ->
+            val supportedTypes = resource?.types?.takeIf { it.isNotEmpty() } ?: addon.types
+            val supportedPrefixes = resource?.idPrefixes?.takeIf { it.isNotEmpty() } ?: addon.idPrefixes
+            (supportedTypes.isEmpty() || supportedTypes.any { it.equals(type, ignoreCase = true) }) &&
+                (supportedPrefixes.isEmpty() || supportedPrefixes.any { id.startsWith(it, ignoreCase = true) })
+        }
+    }
+
     suspend fun searchStreams(
         imdbId: String?,
         season: Int? = null,
@@ -212,9 +238,6 @@ object StremioAddonManager {
             return@withContext
         }
 
-        val activeAddons = getEnabledStreamAddons()
-        if (activeAddons.isEmpty()) return@withContext
-
         val isSeries = (season != null && season > 0) || (episode != null && episode > 0)
         val requestType = if (isSeries) "series" else "movie"
         val requestVideoId = if (isSeries) {
@@ -222,6 +245,32 @@ object StremioAddonManager {
         } else {
             cleanImdb
         }
+        queryStreamsById(requestType, requestVideoId, onLink)
+    }
+
+    /**
+     * Queries installed Stremio stream addons for the exact protocol video ID.
+     * Unlike [searchStreams], this does not assume IMDb IDs or synthesize season/episode IDs.
+     */
+    suspend fun searchStreamsById(type: String, videoId: String): List<ExtractorLink> = withContext(Dispatchers.IO) {
+        val requestType = type.trim()
+        val requestVideoId = videoId.trim()
+        if (requestType.isBlank() || requestVideoId.isBlank()) return@withContext emptyList()
+
+        val links = CopyOnWriteArrayList<ExtractorLink>()
+        queryStreamsById(requestType, requestVideoId, links::add)
+        links.toList()
+    }
+
+    private suspend fun queryStreamsById(
+        requestType: String,
+        requestVideoId: String,
+        onLink: (ExtractorLink) -> Unit,
+    ): Unit = kotlinx.coroutines.coroutineScope {
+        val activeAddons = getEnabledStreamAddons().filter { addon ->
+            supportsRequest(addon, "stream", requestType, requestVideoId)
+        }
+        if (activeAddons.isEmpty()) return@coroutineScope
 
         AppLogger.i(TAG, "Querying ${activeAddons.size} Stremio stream addons for $requestType:$requestVideoId")
 
@@ -240,22 +289,11 @@ object StremioAddonManager {
                         val streams = parsed.streams ?: return@withTimeoutOrNull
 
                         for (item in streams) {
-                            val streamUrlStr = item.url?.trim() ?: continue
-                            if (streamUrlStr.isBlank() || !streamUrlStr.startsWith("http", ignoreCase = true)) continue
+                            val playable = StremioStreamMapper.map(item) ?: continue
 
                             val titleText = item.title ?: item.description ?: ""
                             val addonName = addon.name.ifBlank { "Stremio" }
                             val parsedQuality = parseQualityFromText(titleText, item.name)
-
-                            val headers = item.behaviorHints?.headers ?: emptyMap()
-                            val isM3u8 = streamUrlStr.contains(".m3u8", ignoreCase = true) || streamUrlStr.contains("m3u8", ignoreCase = true)
-                            val isDash = streamUrlStr.contains(".mpd", ignoreCase = true)
-
-                            val linkType = when {
-                                isM3u8 -> ExtractorLinkType.M3U8
-                                isDash -> ExtractorLinkType.DASH
-                                else -> ExtractorLinkType.VIDEO
-                            }
 
                             val cleanLabel = buildString {
                                 append("⚡ [Stremio] $addonName")
@@ -272,17 +310,67 @@ object StremioAddonManager {
                                 }
                             }
 
+                            if (playable is StremioPlayableStream.External) {
+                                runCatching {
+                                    val resolved = loadExtractor(
+                                        url = playable.url,
+                                        subtitleCallback = {},
+                                        callback = onLink,
+                                    )
+                                    if (!resolved) {
+                                        AppLogger.d(TAG, "No CloudStream extractor matched external URL from '${addon.name}'")
+                                    }
+                                }.onFailure { e ->
+                                    AppLogger.d(TAG, "No CloudStream extractor resolved external stream URL: ${e.message}")
+                                }
+                                continue
+                            }
+
+                            val streamUrlStr: String
+                            val linkType: ExtractorLinkType
+                            val headers: Map<String, String>
+                            when (playable) {
+                                is StremioPlayableStream.Direct -> {
+                                    streamUrlStr = playable.url
+                                    headers = playable.requestHeaders
+                                    val path = runCatching { java.net.URI(streamUrlStr).path.orEmpty() }.getOrDefault("")
+                                    linkType = when {
+                                        path.endsWith(".m3u8", ignoreCase = true) -> ExtractorLinkType.M3U8
+                                        path.endsWith(".mpd", ignoreCase = true) -> ExtractorLinkType.DASH
+                                        else -> ExtractorLinkType.VIDEO
+                                    }
+                                }
+                                is StremioPlayableStream.Torrent -> {
+                                    streamUrlStr = playable.magnetUrl
+                                    headers = emptyMap()
+                                    linkType = ExtractorLinkType.MAGNET
+                                }
+                                is StremioPlayableStream.YouTube -> {
+                                    streamUrlStr = playable.url
+                                    headers = emptyMap()
+                                    linkType = ExtractorLinkType.VIDEO
+                                }
+                                is StremioPlayableStream.External -> continue
+                            }
+
                             val extractorLink = newExtractorLink(
                                 source = addonName,
                                 name = cleanLabel,
                                 url = streamUrlStr,
                                 type = linkType,
                             ) {
-                                this.referer = headers["Referer"] ?: ""
+                                this.referer = headers.entries.firstOrNull { it.key.equals("referer", ignoreCase = true) }?.value ?: ""
                                 this.quality = parsedQuality
                                 this.headers = headers
+                                if (playable is StremioPlayableStream.YouTube) {
+                                    this.extractorData = "yt-dlp"
+                                }
                             }
 
+                            if (playable is StremioPlayableStream.Torrent) {
+                                com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine
+                                    .applyStremioFileIndex(extractorLink, playable.fileIdx)
+                            }
                             onLink(extractorLink)
                         }
                     } catch (e: Exception) {
@@ -336,10 +424,14 @@ object StremioAddonManager {
         } else {
             resolvedImdb
         }
+        val requestAddons = activeAddons.filter { addon ->
+            supportsRequest(addon, "subtitles", requestType, requestVideoId)
+        }
+        if (requestAddons.isEmpty()) return@withContext emptyList()
 
         val allResults = mutableListOf<Map<String, Any?>>()
 
-        val deferredList = activeAddons.map { addon ->
+        val deferredList = requestAddons.map { addon ->
             async {
                 try {
                     val subUrl = StremioTransport.buildSubtitleUrl(
@@ -398,32 +490,16 @@ object StremioAddonManager {
 
         val results = deferredList.awaitAll().flatten()
         allResults.addAll(results)
-        AppLogger.i(TAG, "Aggregated ${allResults.size} subtitles across ${activeAddons.size} Stremio addons")
+        AppLogger.i(TAG, "Aggregated ${allResults.size} subtitles across ${requestAddons.size} Stremio addons")
         return@withContext allResults
     }
 
     private suspend fun resolveImdbId(query: String, isSeries: Boolean): String? {
-        val metaAddons = getEnabledMetadataAddons()
-        for (addon in metaAddons) {
-            try {
-                val clean = query.trim()
-                val type = if (isSeries) "series" else "movie"
-                val encoded = java.net.URLEncoder.encode(clean, "UTF-8")
-                val baseUrl = StremioTransport.getBaseUrl(addon.manifestUrl)
-                val searchUrl = "$baseUrl/catalog/$type/top/search=$encoded.json"
-
-                val jsonText = app.get(searchUrl, timeout = 5000L).text
-                val root = mapper.readTree(jsonText)
-                val metas = root["metas"]
-                val id = metas?.firstOrNull { it["id"]?.asText()?.startsWith("tt") == true }?.get("id")?.asText()
-                if (id != null) {
-                    AppLogger.d(TAG, "Resolved '$query' -> $id via ${addon.name}")
-                    return id
-                }
-            } catch (e: Exception) {
-                // Try next metadata addon
-            }
-        }
-        return null
+        val type = if (isSeries) "series" else "movie"
+        val id = com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
+            .search(query.trim(), type)
+            ?.firstNotNullOfOrNull { meta -> meta.id?.takeIf { it.startsWith("tt", ignoreCase = true) } }
+        if (id != null) AppLogger.d(TAG, "Resolved '$query' -> $id via Stremio catalog search")
+        return id
     }
 }

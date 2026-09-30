@@ -9,10 +9,12 @@ object StremioTransport {
         if (url.startsWith("stremio://", ignoreCase = true)) {
             url = "https://" + url.substring(10)
         }
+        url = url.substringBefore("#")
         if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
             url = "https://$url"
         }
-        if (!url.contains("/manifest.json", ignoreCase = true)) {
+        val path = url.substringBefore("?")
+        if (!path.endsWith("/manifest.json", ignoreCase = true)) {
             val queryIndex = url.indexOf('?')
             url = if (queryIndex >= 0) {
                 val base = url.substring(0, queryIndex).trimEnd('/')
@@ -35,52 +37,66 @@ object StremioTransport {
         return if (query.isNotBlank()) "?$query" else ""
     }
 
-    fun buildSubtitleUrl(manifestUrl: String, type: String, id: String): String {
-        val baseUrl = getBaseUrl(manifestUrl)
-        val query = getQueryParams(manifestUrl)
-        val encodedId = URLEncoder.encode(id, "UTF-8").replace("+", "%20")
-        return "$baseUrl/subtitles/$type/$encodedId.json$query"
-    }
-
     fun buildMetadataUrl(manifestUrl: String, type: String, id: String): String {
         val baseUrl = getBaseUrl(manifestUrl)
         val query = getQueryParams(manifestUrl)
-        val encodedId = URLEncoder.encode(id, "UTF-8").replace("+", "%20")
-        return "$baseUrl/meta/$type/$encodedId.json$query"
+        val encodedId = encodePathSegment(id)
+        return "$baseUrl/meta/${encodePathSegment(type)}/$encodedId.json$query"
     }
 
     fun buildStreamUrl(manifestUrl: String, type: String, id: String): String {
         val baseUrl = getBaseUrl(manifestUrl)
         val query = getQueryParams(manifestUrl)
-        val encodedId = URLEncoder.encode(id, "UTF-8").replace("+", "%20")
-        return "$baseUrl/stream/$type/$encodedId.json$query"
+        val encodedId = encodePathSegment(id)
+        return "$baseUrl/stream/${encodePathSegment(type)}/$encodedId.json$query"
     }
 
-    /**
-     * Build a Stremio catalog route with optional extras and manifest configuration.
-     * Catalog extras are path segments, not URL query parameters.
-     */
+    /** Build a Stremio route with the protocol's single stringified extraArgs segment. */
     fun buildCatalogUrl(
         manifestOrBaseUrl: String,
         type: String,
         catalogId: String,
+        search: String? = null,
         genre: String? = null,
         skip: Int = 0,
+        extraArgs: Map<String, String> = emptyMap(),
     ): String {
         val baseUrl = getBaseUrl(manifestOrBaseUrl)
         val query = getQueryParams(manifestOrBaseUrl)
         val encodedType = encodePathSegment(type)
         val encodedCatalogId = encodePathSegment(catalogId)
-        val extras = buildList {
-            if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) {
-                add("genre=${encodePathSegment(genre.trim())}")
-            }
-            if (skip > 0) add("skip=$skip")
+        val extras = linkedMapOf<String, String>()
+        if (!search.isNullOrBlank()) extras["search"] = search.trim()
+        if (!genre.isNullOrBlank() && !genre.equals("All", ignoreCase = true)) extras["genre"] = genre.trim()
+        extraArgs.forEach { (key, value) ->
+            if (key.isNotBlank() && value.isNotBlank()) extras[key] = value
         }
-        val extraPath = extras.joinToString(separator = "/", prefix = "/")
-            .takeIf { extras.isNotEmpty() }
-            ?: ""
+        if (skip > 0) extras["skip"] = skip.toString()
+        val extraPath = extras.entries.joinToString(separator = "&", prefix = "/") { (key, value) ->
+            "${encodePathSegment(key)}=${encodePathSegment(value)}"
+        }.takeIf { extras.isNotEmpty() }.orEmpty()
         return "$baseUrl/catalog/$encodedType/$encodedCatalogId$extraPath.json$query"
+    }
+
+    fun buildSubtitleUrl(
+        manifestUrl: String,
+        type: String,
+        id: String,
+        videoHash: String? = null,
+        videoSize: Long? = null,
+        filename: String? = null,
+    ): String {
+        val baseUrl = getBaseUrl(manifestUrl)
+        val query = getQueryParams(manifestUrl)
+        val encodedId = encodePathSegment(id)
+        val extras = linkedMapOf<String, String>()
+        if (!videoHash.isNullOrBlank()) extras["videoHash"] = videoHash
+        if (videoSize != null && videoSize >= 0) extras["videoSize"] = videoSize.toString()
+        if (!filename.isNullOrBlank()) extras["filename"] = filename
+        val extraPath = extras.entries.joinToString(separator = "&", prefix = "/") { (key, value) ->
+            "${encodePathSegment(key)}=${encodePathSegment(value)}"
+        }.takeIf { extras.isNotEmpty() }.orEmpty()
+        return "$baseUrl/subtitles/${encodePathSegment(type)}/$encodedId$extraPath.json$query"
     }
 
     private fun encodePathSegment(value: String): String =

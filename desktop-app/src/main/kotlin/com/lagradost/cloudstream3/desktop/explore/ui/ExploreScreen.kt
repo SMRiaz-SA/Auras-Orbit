@@ -16,9 +16,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -41,6 +43,8 @@ import com.lagradost.cloudstream3.desktop.explore.viewmodel.EXPLORE_YEAR_OPTIONS
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreUiEffect
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreUiEvent
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel
+import com.lagradost.cloudstream3.desktop.ui.LocalVideoPlayer
+import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.badges.CardMetadataConfig
 import com.lagradost.cloudstream3.desktop.ui.badges.CardTitleSanitizer
 import com.lagradost.cloudstream3.desktop.ui.badges.DesktopBadgeComponents
@@ -48,7 +52,10 @@ import com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme
 import com.lagradost.cloudstream3.desktop.ui.components.posterHoverEffect
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
+import com.lagradost.common.storage.DesktopDataStore
+import com.lagradost.common.storage.WatchHistory
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 
 @Composable
 fun ExploreScreen(
@@ -63,6 +70,8 @@ fun ExploreScreen(
     val gridState = rememberLazyGridState()
     val coroutineScope = rememberCoroutineScope()
     val catalogListState = rememberLazyListState()
+    val playVideo = LocalVideoPlayer.current
+    var showCatalogExtrasDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.effectFlow.collect { effect ->
@@ -265,9 +274,9 @@ fun ExploreScreen(
                                 contentPadding = PaddingValues(horizontal = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                items(uiState.filteredCatalogs, key = { "${it.addonBaseUrl}_${it.type}_${it.id}" }) { catalog ->
+                                items(uiState.filteredCatalogs, key = { "${it.addonManifestUrl}_${it.type}_${it.id}" }) { catalog ->
                                     val isSelected = uiState.selectedCatalog?.id == catalog.id &&
-                                        uiState.selectedCatalog?.addonBaseUrl == catalog.addonBaseUrl
+                                        uiState.selectedCatalog?.addonManifestUrl == catalog.addonManifestUrl
                                     CompactCatalogChip(
                                         catalog = catalog,
                                         isSelected = isSelected,
@@ -345,6 +354,17 @@ fun ExploreScreen(
                                 onSelectGenre = { viewModel.onEvent(ExploreUiEvent.SelectGenre(it)) },
                             )
                         }
+                        val customExtras = selectedCat?.extras.orEmpty().filterNot {
+                            it.name.equals("genre", ignoreCase = true) ||
+                                it.name.equals("search", ignoreCase = true) ||
+                                it.name.equals("skip", ignoreCase = true)
+                        }
+                        if (customExtras.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            TextButton(onClick = { showCatalogExtrasDialog = true }) {
+                                Text("Filters${uiState.selectedExtraArgs.size.takeIf { it > 0 }?.let { " ($it)" }.orEmpty()}", fontSize = 11.sp)
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -369,8 +389,19 @@ fun ExploreScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
+                        val missingRequiredExtra = uiState.selectedCatalog?.extras.orEmpty().firstOrNull { extra ->
+                            if (!extra.isRequired) return@firstOrNull false
+                            when (extra.name.lowercase()) {
+                                "genre" -> uiState.selectedGenre.equals("All", ignoreCase = true)
+                                "search" -> uiState.searchQuery.isBlank()
+                                "skip" -> false
+                                else -> uiState.selectedExtraArgs[extra.name].isNullOrBlank()
+                            }
+                        }
                         val emptyText = if (uiState.allCatalogs.isEmpty()) {
                             "No catalogs active. Add an addon from Extensions or use Search to browse providers."
+                        } else if (missingRequiredExtra != null) {
+                            "Choose the required '${missingRequiredExtra.name}' catalog filter to load this catalog."
                         } else {
                             "No titles match the selected filters or search query."
                         }
@@ -431,6 +462,11 @@ fun ExploreScreen(
             onSelectMatch = { match ->
                 viewModel.onEvent(ExploreUiEvent.SelectProviderMatch(match))
             },
+            onSearchStremio = {
+                uiState.selectedItemForMatch?.let { item ->
+                    viewModel.onEvent(ExploreUiEvent.OpenStremioStreams(item))
+                }
+            },
             onOpenDetails = { providerName, url, title ->
                 viewModel.onEvent(ExploreUiEvent.CloseProviderPicker)
                 onNavigate(
@@ -442,7 +478,162 @@ fun ExploreScreen(
                 )
             },
         )
+
+        ExploreStremioStreamsDialog(
+            item = uiState.stremioItem,
+            videos = uiState.stremioVideos,
+            selectedVideo = uiState.selectedStremioVideo,
+            streams = uiState.stremioStreams,
+            isLoading = uiState.isLoadingStremioStreams,
+            message = uiState.stremioStreamMessage,
+            onSelectVideo = { viewModel.onEvent(ExploreUiEvent.SelectStremioVideo(it)) },
+            onBackToVideos = { viewModel.onEvent(ExploreUiEvent.BackToStremioVideos) },
+            onDismiss = { viewModel.onEvent(ExploreUiEvent.CloseStremioStreams) },
+            onPlay = { item, video, link ->
+                val encodedType = URLEncoder.encode(item.type, "UTF-8").replace("+", "%20")
+                val encodedId = URLEncoder.encode(item.id, "UTF-8").replace("+", "%20")
+                val showUrl = "stremio://media/$encodedType/$encodedId"
+                val episodeId = video?.id ?: item.id
+                val parentId = DesktopDataStore.watchHistoryId(
+                    apiName = "Stremio",
+                    showUrl = showUrl,
+                    season = video?.season,
+                    episode = video?.episode,
+                    episodeData = episodeId,
+                )
+                val title = video?.title?.takeIf { it.isNotBlank() }?.let { "${item.name} · $it" } ?: item.name
+                playVideo(
+                    VideoLaunchData(
+                        links = listOf(link),
+                        initialIndex = 0,
+                        title = title,
+                        subtitles = emptyList(),
+                        startPositionMs = 0L,
+                        history = WatchHistory(
+                            parentId = parentId,
+                            showName = item.name,
+                            showUrl = showUrl,
+                            apiName = "Stremio",
+                            posterUrl = item.posterUrl,
+                            episodeThumbnailUrl = video?.thumbnail,
+                            screenshotUrl = null,
+                            episode = video?.episode,
+                            season = video?.season,
+                            episodeId = episodeId,
+                            position = 0L,
+                            duration = 0L,
+                            episodeName = video?.title,
+                            episodeDescription = video?.description,
+                        ),
+                    ),
+                )
+                viewModel.onEvent(ExploreUiEvent.CloseStremioStreams)
+            },
+        )
+
+        val extrasDialogCatalog = uiState.selectedCatalog
+        if (showCatalogExtrasDialog && extrasDialogCatalog != null) {
+            ExploreCatalogExtrasDialog(
+                catalog = extrasDialogCatalog,
+                values = uiState.selectedExtraArgs,
+                onDismiss = { showCatalogExtrasDialog = false },
+                onApply = { values ->
+                    viewModel.onEvent(ExploreUiEvent.ApplyCatalogExtras(values))
+                    showCatalogExtrasDialog = false
+                },
+            )
+        }
     }
+}
+
+@Composable
+private fun ExploreCatalogExtrasDialog(
+    catalog: ManifestCatalogDescriptor,
+    values: Map<String, String>,
+    onDismiss: () -> Unit,
+    onApply: (Map<String, String>) -> Unit,
+) {
+    val extras = catalog.extras.filterNot {
+        it.name.equals("genre", ignoreCase = true) ||
+            it.name.equals("search", ignoreCase = true) ||
+            it.name.equals("skip", ignoreCase = true)
+    }
+    if (extras.isEmpty()) return
+
+    var draft by remember(catalog.addonManifestUrl, catalog.id, values) { mutableStateOf(values.toMap()) }
+    val missingRequired = extras.firstOrNull { it.isRequired && draft[it.name].isNullOrBlank() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${catalog.name} filters") },
+        text = {
+            Column(
+                modifier = Modifier.width(400.dp).heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                extras.forEach { extra ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = extra.name + if (extra.isRequired) " *" else "",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                        )
+                        if (extra.options.isNotEmpty()) {
+                            var expanded by remember(catalog.id, extra.name) { mutableStateOf(false) }
+                            val selected = draft[extra.name].orEmpty()
+                            Box {
+                                OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(selected.ifBlank { if (extra.isRequired) "Choose ${extra.name}" else "Any" })
+                                }
+                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                    if (!extra.isRequired) {
+                                        DropdownMenuItem(
+                                            text = { Text("Any") },
+                                            onClick = {
+                                                draft = draft - extra.name
+                                                expanded = false
+                                            },
+                                        )
+                                    }
+                                    extra.options.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option) },
+                                            onClick = {
+                                                draft = draft + (extra.name to option)
+                                                expanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = draft[extra.name].orEmpty(),
+                                onValueChange = { draft = draft + (extra.name to it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = { Text("Enter ${extra.name}") },
+                            )
+                        }
+                    }
+                }
+                if (missingRequired != null) {
+                    Text(
+                        text = "${missingRequired.name} is required by this catalog.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onApply(draft) },
+                enabled = missingRequired == null,
+            ) { Text("Apply") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

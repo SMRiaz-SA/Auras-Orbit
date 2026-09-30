@@ -13,6 +13,14 @@ data class StremioCatalogDescriptor(
     @JsonProperty("id") val id: String = "",
     @JsonProperty("name") val name: String = "",
     @JsonProperty("type") val type: String = "",
+    @JsonProperty("extra") val extra: List<StremioCatalogExtra> = emptyList(),
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class StremioCatalogExtra(
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("options") val options: List<String> = emptyList(),
+    @JsonProperty("isRequired") val isRequired: Boolean = false,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -45,9 +53,9 @@ data class StremioManifest(
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class StremioResource(
-    val name: String,
-    val types: List<String> = emptyList(),
-    val idPrefixes: List<String> = emptyList(),
+    @JsonProperty("name") val name: String = "",
+    @JsonProperty("types") val types: List<String> = emptyList(),
+    @JsonProperty("idPrefixes") val idPrefixes: List<String> = emptyList(),
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -71,11 +79,14 @@ data class ManagedStremioAddon(
     @JsonProperty("providesMetadata") val providesMetadata: Boolean = false,
     @JsonProperty("providesStreams") val providesStreams: Boolean = false,
     @JsonProperty("providesCatalogs") val providesCatalogs: Boolean = false,
+    @JsonProperty("resources") val resources: List<StremioResource> = emptyList(),
+    @JsonProperty("catalogs") val catalogs: List<StremioCatalogDescriptor> = emptyList(),
     @JsonProperty("types") val types: List<String> = emptyList(),
     @JsonProperty("idPrefixes") val idPrefixes: List<String> = emptyList(),
     @JsonProperty("catalogsSummary") val catalogsSummary: List<String> = emptyList(),
     @JsonProperty("isP2P") val isP2P: Boolean = false,
     @JsonProperty("isConfigurable") val isConfigurable: Boolean = false,
+    @JsonProperty("configurationRequired") val configurationRequired: Boolean = false,
     @JsonProperty("errorMessage") val errorMessage: String? = null,
 )
 
@@ -108,6 +119,8 @@ data class StremioStreamItem(
     @JsonProperty("ytId") val ytId: String? = null,
     @JsonProperty("infoHash") val infoHash: String? = null,
     @JsonProperty("fileIdx") val fileIdx: Int? = null,
+    @JsonProperty("sources") val sources: List<String>? = null,
+    @JsonProperty("externalUrl") val externalUrl: String? = null,
     @JsonProperty("behaviorHints") val behaviorHints: StremioStreamBehaviorHints? = null,
 )
 
@@ -116,5 +129,16 @@ data class StremioStreamBehaviorHints(
     @JsonProperty("notWebReady") val notWebReady: Boolean = false,
     @JsonProperty("bingeGroup") val bingeGroup: String? = null,
     @JsonProperty("countryWhitelist") val countryWhitelist: List<String>? = null,
+    @JsonProperty("proxyHeaders") val proxyHeaders: StremioProxyHeaders? = null,
+    /** Legacy compatibility with addons that used the non-standard `headers` field. */
     @JsonProperty("headers") val headers: Map<String, String>? = null,
+    @JsonProperty("videoHash") val videoHash: String? = null,
+    @JsonProperty("videoSize") val videoSize: Long? = null,
+    @JsonProperty("filename") val filename: String? = null,
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class StremioProxyHeaders(
+    @JsonProperty("request") val request: Map<String, String>? = null,
+    @JsonProperty("response") val response: Map<String, String>? = null,
 )

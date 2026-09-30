@@ -13,7 +13,7 @@ Orbit does not host media or curate provider catalogs. You choose which extensio
 
 ## Navigate this guide
 
-[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Torrent playback](#torrent-playback) · [Privacy](#privacy) · [Build from source](#build-from-source)
+[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Explore and Stremio add-ons](#explore-and-stremio-add-ons) · [Torrent playback](#torrent-playback) · [Privacy](#privacy) · [Build from source](#build-from-source)
 
 ## Why Orbit
 
@@ -51,6 +51,12 @@ Orbit includes its MPV native library in the portable package. Windows must prov
 
 If Orbit reports that WebView2 is missing, install the [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/#download-section) while online, or the x64 Evergreen Standalone Installer on an offline PC. Return to Orbit and choose **Check again after installing**; restart Orbit if the player still cannot start.
 
+## Explore and Stremio add-ons
+
+Explore can show catalogs supplied by installed Stremio add-ons. Orbit reads each catalog's declared search and filter fields and sends those requests to that add-on. Catalog results can be checked against enabled Stremio stream add-ons using the media ID provided by the catalog. For series, Orbit first looks for episode IDs from metadata add-ons and asks you to select an episode; it does not guess an episode ID when none is supplied.
+
+Returned direct streams, torrent info hashes, YouTube links, and supported external links are passed to Orbit's existing player or extractor paths. Available results depend on the add-ons' declared resource, type, and ID-prefix support. Some add-ons require a configured manifest URL; Orbit does not host their setup pages.
+
 ## Torrent playback
 
 Magnet links and torrent links supplied by compatible providers can be streamed through Orbit's TorrServer engine. Enable **Settings → Network → Enable P2P Torrent Streaming** to use this feature; it is off by default. If TorrServer is not installed, Orbit downloads it the first time you play a torrent.
@@ -64,6 +70,8 @@ Auras Orbit manages watch history, playback progress, and bookmarks locally for 
 ## Privacy
 
 Orbit keeps profiles, local history, bookmarks, settings, extension data, and subtitle-service credentials in local application data. Do not copy those folders into a bug report or source archive. The project's portable packaging checks intentionally exclude profile databases, account identities, watchlist titles, credentials, tokens, and other private app data.
+
+Catalog browsing and stream lookup send search text or media IDs to the extensions and Stremio add-ons selected for those requests.
 
 ## Build from source
 

@@ -32,6 +32,7 @@ data class P2pLiveTelemetry(
 )
 
 object DesktopTorrentEngine {
+    private const val STREMIO_FILE_INDEX_PREFIX = "stremio-file-index:"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val binary = DesktopTorrServerBinary()
     val api = DesktopTorrServerApi(binary)
@@ -64,6 +65,13 @@ object DesktopTorrentEngine {
             (url.length == 40 && url.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' })
     }
 
+    /** Carries Stremio's optional torrent file selection through the existing playback link model. */
+    fun applyStremioFileIndex(link: ExtractorLink, fileIdx: Int?) {
+        if (fileIdx != null && fileIdx >= 0) {
+            link.extractorData = "$STREMIO_FILE_INDEX_PREFIX$fileIdx"
+        }
+    }
+
     suspend fun transformLink(link: ExtractorLink): ExtractorLink = withContext(Dispatchers.IO) {
         if (!isP2pEnabled) {
             AppLogger.w("DesktopTorrentEngine: P2P Torrent Streaming is disabled in settings. Blocking playback.")
@@ -71,6 +79,11 @@ object DesktopTorrentEngine {
         }
 
         val rawUrl = link.url.trim()
+        val stremioFileIdx = link.extractorData
+            ?.takeIf { it.startsWith(STREMIO_FILE_INDEX_PREFIX) }
+            ?.removePrefix(STREMIO_FILE_INDEX_PREFIX)
+            ?.toIntOrNull()
+            ?.takeIf { it >= 0 }
         val magnetLink = when {
             rawUrl.contains("magnet:?xt=", ignoreCase = true) -> {
                 "magnet:?xt=" + rawUrl.substringAfter("magnet:?xt=")
@@ -104,6 +117,18 @@ object DesktopTorrentEngine {
                 peers = stats.activePeers
                 totalSize = stats.torrentSize
                 if (stats.fileStats.isNotEmpty()) {
+                    val requestedFile = stremioFileIdx?.let { requestedIndex ->
+                        // Stremio indexes torrent files from zero; TorrServer exposes its selected
+                        // files in order and uses its own file id in the stream URL.
+                        stats.fileStats.getOrNull(requestedIndex)
+                            ?: stats.fileStats.firstOrNull { it.id == requestedIndex }
+                    }
+                    if (requestedFile != null) {
+                        fileIdx = if (requestedFile.id > 0) requestedFile.id else 1
+                        AppLogger.i("DesktopTorrentEngine selected Stremio file index $stremioFileIdx: ${requestedFile.path} (TorrServer id=$fileIdx)")
+                        break
+                    }
+
                     val videoFiles = stats.fileStats.filter { file ->
                         val ext = file.path.substringAfterLast('.', "").lowercase()
                         ext in listOf("mkv", "mp4", "avi", "mov", "webm", "ts", "m4v")
@@ -119,19 +144,10 @@ object DesktopTorrentEngine {
             delay(500)
         }
 
-        // Start preloading the file in TorrServer ring buffer
-        api.preloadTorrent(hash, fileIdx)
-
-        // Wait up to 6 seconds for initial buffer or peer connection so MPV doesn't hit EOF
-        for (i in 0..12) {
-            val stats = api.getTorrentStats(hash)
-            if (stats != null && (stats.preloadedBytes > 0 || stats.loadedSize > 0 || stats.downloadSpeed > 0 || stats.connectedSeeders > 0)) {
-                AppLogger.i("DesktopTorrentEngine swarm active: seeds=${stats.connectedSeeders}, preloaded=${stats.preloadedBytes}")
-                break
-            }
-            delay(500)
-        }
-
+        // TorrServer has no `preload` action on POST /torrents. Its preload query is
+        // handled synchronously by GET /stream and may block until its configured
+        // preload completes. Let MPV's existing /stream?...&play request drive
+        // buffering instead of issuing an unsupported action or delaying that GET.
         val encodedMagnet = URLEncoder.encode(magnetLink, "UTF-8")
         val streamUrl = "${binary.baseUrl}/stream?link=$encodedMagnet&index=$fileIdx&play"
         AppLogger.i("DesktopTorrentEngine resolved stream URL: $streamUrl (File #$fileIdx, Seeds: $seeds, Peers: $peers)")
@@ -203,22 +219,6 @@ object DesktopTorrentEngine {
     }
 
     private fun buildMagnetUri(infoHash: String): String {
-        val trackers = listOf(
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.stealth.si:80/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://tracker.moeking.me:6969/announce",
-            "udp://explodie.org:6969/announce",
-            "udp://open.demonii.com:1337/announce",
-            "http://tracker.openbittorrent.com:80/announce",
-            "udp://tracker.openbittorrent.com:6969/announce",
-            "udp://exodus.desync.com:6969/announce",
-            "udp://tracker.bittor.pw:1337/announce",
-        )
-        val sb = StringBuilder("magnet:?xt=urn:btih:").append(infoHash.lowercase())
-        trackers.forEach { tr ->
-            sb.append("&tr=").append(URLEncoder.encode(tr, "UTF-8"))
-        }
-        return sb.toString()
+        return TorrentMagnetUri.fromInfoHash(infoHash.lowercase())
     }
 }
