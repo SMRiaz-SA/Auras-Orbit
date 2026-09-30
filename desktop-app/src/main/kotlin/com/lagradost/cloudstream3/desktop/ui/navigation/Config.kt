@@ -5,6 +5,8 @@ import com.lagradost.cloudstream3.ActorData
 sealed class Config {
     data object Home : Config()
     data object Explore : Config()
+    data object ExploreCatalogs : Config()
+    data object TorrentSearch : Config()
     data object GenreBrowse : Config()
     data object ProviderBrowse : Config()
     data object History : Config()

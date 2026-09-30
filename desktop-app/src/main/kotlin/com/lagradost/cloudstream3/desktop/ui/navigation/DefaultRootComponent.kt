@@ -38,6 +38,12 @@ class DefaultRootComponent(
             is Config.Explore -> RootComponent.Child.Explore(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.ExploreComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
             )
+            is Config.ExploreCatalogs -> RootComponent.Child.ExploreCatalogs(
+                com.lagradost.cloudstream3.desktop.ui.navigation.components.ExploreCatalogsComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
+            )
+            is Config.TorrentSearch -> RootComponent.Child.TorrentSearch(
+                com.lagradost.cloudstream3.desktop.ui.navigation.components.TorrentSearchComponent(componentContext, rootInstanceKeeper = this.instanceKeeper),
+            )
             is Config.GenreBrowse -> RootComponent.Child.GenreBrowse(
                 com.lagradost.cloudstream3.desktop.ui.navigation.components.GenreBrowseComponent(
                     componentContext,

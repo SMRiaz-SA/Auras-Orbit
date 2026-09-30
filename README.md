@@ -6,14 +6,15 @@ Browse with the CloudStream-compatible extensions you choose, watch with MPV, an
 
 Orbit does not host media or curate provider catalogs. You choose which extensions to install, and what you can browse depends on those providers.
 
-**Current source version:** Beta `0.2.0.16`<br>
+**Current source version:** Beta `0.2.0.17`<br>
+**Source build date:** 2026-09-30<br>
 **Development status:** Beta<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
 ## Navigate this guide
 
-[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Explore and Stremio add-ons](#explore-and-stremio-add-ons) · [Torrent playback](#torrent-playback) · [Privacy](#privacy) · [Build from source](#build-from-source)
+[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Playback requirements](#playback-requirements) · [Explore dashboard and add-ons](#explore-dashboard-and-add-ons) · [Torrent playback](#torrent-playback) · [Privacy](#privacy) · [Build from source](#build-from-source)
 
 ## Why Orbit
 
@@ -26,11 +27,13 @@ Orbit is a client, not a streaming service: you decide which providers to use, a
 
 ## Visual tour
 
-Take a look around the running app. Home shows the first-run extension setup; the profile selector shows the active local profile and its management options.
+Take a look around the running app. Explore brings its discovery tools together on one dashboard, with a dedicated screen for each destination.
 
 ![Auras Orbit Home with the extension onboarding card](assets/auras-orbit-home.jpg)
 
 ![Auras Orbit profile selector with the active profile and management options](assets/auras-orbit-profile-picker.jpg)
+
+![Auras Orbit Explore dashboard with Catalogs, Torrent Search, Genres, and Providers](assets/auras-orbit-explore.jpg)
 
 ## Quick start
 
@@ -41,7 +44,7 @@ Download the portable ZIP or Windows installer from the [GitHub Releases page](h
 3. Start `Auras-Orbit.exe`.
 4. Choose or create a local profile.
 5. Open **Extensions**, add a repository you trust, and install only the providers you want to use.
-6. Return to **Home** or **Explore** to browse. Use **Library** for bookmarks and local history.
+6. Open **Explore** for catalogs, torrent search, genres, and providers. Use **Library** for bookmarks and local history.
 
 The portable folder stores the application runtime and legal notices only. Your profiles, settings, extension files, credentials, watch history, and bookmarks are created in the app's data location at runtime; they are not part of the public source or portable deliverables. Standard Windows installs use `%APPDATA%\AurasOrbit`; portable copies store data in `AurasOrbitData` beside the app.
 
@@ -51,15 +54,17 @@ Orbit includes its MPV native library in the portable package. Windows must prov
 
 If Orbit reports that WebView2 is missing, install the [Evergreen Bootstrapper](https://developer.microsoft.com/microsoft-edge/webview2/#download-section) while online, or the x64 Evergreen Standalone Installer on an offline PC. Return to Orbit and choose **Check again after installing**; restart Orbit if the player still cannot start.
 
-## Explore and Stremio add-ons
+## Explore dashboard and add-ons
 
-Explore can show catalogs supplied by installed Stremio add-ons. Orbit reads each catalog's declared search and filter fields and sends those requests to that add-on. Catalog results can be checked against enabled Stremio stream add-ons using the media ID provided by the catalog. For series, Orbit first looks for episode IDs from metadata add-ons and asks you to select an episode; it does not guess an episode ID when none is supplied.
+Explore is a dashboard for **Catalogs**, **Torrent Search**, **Genres**, and **Providers**. Each destination opens its own screen with a way back to Explore. Catalog shelves come from enabled Stremio add-ons. Orbit reads each catalog's declared search and filter fields and sends those requests to that add-on. Catalog results can be checked against enabled Stremio stream add-ons using the media ID provided by the catalog. For series, Orbit first looks for episode IDs from metadata add-ons and asks you to select an episode; it does not guess an episode ID when none is supplied.
 
-Returned direct streams, torrent info hashes, YouTube links, and supported external links are passed to Orbit's existing player or extractor paths. Available results depend on the add-ons' declared resource, type, and ID-prefix support. Some add-ons require a configured manifest URL; Orbit does not host their setup pages.
+Torrent Search sends the title to the Magnetz search API and shows playable magnet results. Choosing **Play** hands the magnet to Orbit's existing torrent playback path. Results and service availability depend on that search service.
+
+Returned catalog streams, torrent info hashes, YouTube links, and supported external links are passed to Orbit's existing player or extractor paths. Available results depend on the add-ons' declared resource, type, and ID-prefix support. Some add-ons require a configured manifest URL; Orbit does not host their setup pages.
 
 ## Torrent playback
 
-Magnet links and torrent links supplied by compatible providers can be streamed through Orbit's TorrServer engine. Enable **Settings → Network → Enable P2P Torrent Streaming** to use this feature; it is off by default. If TorrServer is not installed, Orbit downloads it the first time you play a torrent.
+Magnet links from compatible providers and Explore's Torrent Search can be streamed through Orbit's TorrServer engine. Enable **Settings → Network → Enable P2P Torrent Streaming** to use this feature; it is off by default. If TorrServer is not installed, Orbit downloads it the first time you play a torrent.
 
 Torrent playback connects to other peers in a swarm, so your public IP address is visible to those peers. Only play content you are authorized to access.
 
@@ -71,7 +76,7 @@ Auras Orbit manages watch history, playback progress, and bookmarks locally for 
 
 Orbit keeps profiles, local history, bookmarks, settings, extension data, and subtitle-service credentials in local application data. Do not copy those folders into a bug report or source archive. The project's portable packaging checks intentionally exclude profile databases, account identities, watchlist titles, credentials, tokens, and other private app data.
 
-Catalog browsing and stream lookup send search text or media IDs to the extensions and Stremio add-ons selected for those requests.
+Catalog browsing and stream lookup send search text or media IDs to the extensions and Stremio add-ons selected for those requests. Torrent Search sends the title query to the Magnetz search API.
 
 ## Build from source
 

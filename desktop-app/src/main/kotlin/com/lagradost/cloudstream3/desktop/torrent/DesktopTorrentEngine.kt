@@ -57,11 +57,12 @@ object DesktopTorrentEngine {
 
     fun isTorrentLink(link: ExtractorLink): Boolean {
         val url = link.url.trim()
+        val urlPath = url.substringBefore('#').substringBefore('?')
         return link.type == ExtractorLinkType.TORRENT ||
             link.type == ExtractorLinkType.MAGNET ||
             url.startsWith("magnet:", ignoreCase = true) ||
             url.contains("magnet:?xt=", ignoreCase = true) ||
-            url.endsWith(".torrent", ignoreCase = true) ||
+            urlPath.endsWith(".torrent", ignoreCase = true) ||
             (url.length == 40 && url.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' })
     }
 

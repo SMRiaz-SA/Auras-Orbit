@@ -131,8 +131,9 @@ internal fun WatchHistoryContextMenuActions(
     state: GlobalContextMenuState,
     progress: Float,
 ) {
-    if (state.watchHistory == null) return
-    val isUpNext = state.watchHistory?.duration == 0L && state.watchHistory?.position == 0L
+    val history = state.watchHistory ?: return
+    val isNetworkStream = com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.isNetworkStreamHistory(history)
+    val isUpNext = history.duration == 0L && history.position == 0L
 
     ActionMenuItem(
         text = if (isUpNext) {
@@ -149,14 +150,33 @@ internal fun WatchHistoryContextMenuActions(
         },
     )
 
-    ActionMenuItem(
-        text = "Details",
-        icon = Icons.Default.Info,
-        onClick = {
-            state.dismiss()
-            state.onDetailsClick?.invoke()
-        },
-    )
+    if (isNetworkStream) {
+        ActionMenuItem(
+            text = "Find / update metadata",
+            icon = Icons.Default.Search,
+            onClick = {
+                state.dismiss()
+                com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.showNetworkStreamMetadata(history)
+            },
+        )
+        ActionMenuItem(
+            text = "Add to Library",
+            icon = Icons.Default.Add,
+            onClick = {
+                state.dismiss()
+                com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.addNetworkStreamToLibrary(history)
+            },
+        )
+    } else {
+        ActionMenuItem(
+            text = "Details",
+            icon = Icons.Default.Info,
+            onClick = {
+                state.dismiss()
+                state.onDetailsClick?.invoke()
+            },
+        )
+    }
 
     ActionMenuItem(
         text = "Remove from Continue Watching",
@@ -172,9 +192,10 @@ internal fun WatchHistoryContextMenuActions(
 @Composable
 internal fun BookmarkContextMenuActions(state: GlobalContextMenuState) {
     val bm = state.bookmark ?: return
+    val isNetworkStream = bm.apiName == com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME
     var isCategoryExpanded by remember { mutableStateOf(false) }
 
-    if (state.provider != null) {
+    if (state.provider != null || isNetworkStream) {
         ActionMenuItem(
             text = "Play",
             icon = Icons.Default.PlayArrow,
@@ -184,14 +205,16 @@ internal fun BookmarkContextMenuActions(state: GlobalContextMenuState) {
             },
         )
 
-        ActionMenuItem(
-            text = "Details",
-            icon = Icons.Default.Info,
-            onClick = {
-                state.dismiss()
-                state.onDetailsClick?.invoke()
-            },
-        )
+        if (!isNetworkStream) {
+            ActionMenuItem(
+                text = "Details",
+                icon = Icons.Default.Info,
+                onClick = {
+                    state.dismiss()
+                    state.onDetailsClick?.invoke()
+                },
+            )
+        }
     }
 
     ActionMenuItem(
@@ -243,23 +266,25 @@ internal fun BookmarkContextMenuActions(state: GlobalContextMenuState) {
         }
     }
 
-    ActionMenuItem(
-        text = "Re-link to Provider...",
-        icon = Icons.Default.Sync,
-        onClick = {
-            state.dismiss()
-            state.onReLink?.invoke()
-        },
-    )
+    if (!isNetworkStream) {
+        ActionMenuItem(
+            text = "Re-link to Provider...",
+            icon = Icons.Default.Sync,
+            onClick = {
+                state.dismiss()
+                state.onReLink?.invoke()
+            },
+        )
 
-    ActionMenuItem(
-        text = "Search on Other Providers...",
-        icon = Icons.Default.Search,
-        onClick = {
-            state.dismiss()
-            state.onSearchOtherProviders?.invoke()
-        },
-    )
+        ActionMenuItem(
+            text = "Search on Other Providers...",
+            icon = Icons.Default.Search,
+            onClick = {
+                state.dismiss()
+                state.onSearchOtherProviders?.invoke()
+            },
+        )
+    }
 
     ActionMenuItem(
         text = "Remove from Library",

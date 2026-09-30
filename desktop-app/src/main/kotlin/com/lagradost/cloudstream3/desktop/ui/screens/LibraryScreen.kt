@@ -121,7 +121,8 @@ fun ComposeLibraryScreen(
 
                             BookmarkCard(
                                 bookmark = bookmark,
-                                isProviderMissing = bookmark.apiName !in uiState.installedProviderNames,
+                                isProviderMissing = bookmark.apiName != com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME &&
+                                    bookmark.apiName !in uiState.installedProviderNames,
                                 onClick = {
                                     viewModel.onEvent(LibraryUiEvent.OnBookmarkClick(bookmark))
                                 },

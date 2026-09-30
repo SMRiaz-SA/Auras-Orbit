@@ -13,14 +13,20 @@ import kotlinx.coroutines.launch
 
 class HistoryViewModel(
     watchHistoryRepo: WatchHistoryRepository = WatchHistoryRepositoryImpl(),
-    private val getContinueWatching: GetContinueWatching = GetContinueWatching(watchHistoryRepo),
     private val removeWatchHistory: RemoveWatchHistory = RemoveWatchHistory(watchHistoryRepo),
 ) : BaseMviViewModel<HistoryUiState, HistoryUiEvent, HistoryUiEffect>(
     initialState = HistoryUiState(),
 ) {
     init {
         viewModelScope.launch {
-            getContinueWatching.subscribe().collect { list ->
+            watchHistoryRepo.subscribeAll().collect { allHistory ->
+                val continueWatching = GetContinueWatching.filterContinueWatching(allHistory)
+                val networkStreams = allHistory.filter {
+                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.isNetworkStreamHistory(it)
+                }
+                val list = (continueWatching + networkStreams)
+                    .distinctBy { it.parentId to it.episodeId }
+                    .sortedByDescending { it.updateTime }
                 updateState { copy(historyList = list, isLoading = false) }
             }
         }

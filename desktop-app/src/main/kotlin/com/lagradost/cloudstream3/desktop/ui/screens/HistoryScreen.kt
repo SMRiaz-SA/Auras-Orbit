@@ -93,9 +93,13 @@ fun ComposeHistoryScreen(
             val providerMap = remember(historyList) {
                 val providers = APIHolder.allProviders
                 historyList.associate { item ->
-                    val resolved = providers.firstOrNull {
-                        it.name == item.apiName && it.mainUrl.isNotBlank() && item.showUrl.startsWith(it.mainUrl)
-                    } ?: APIHolder.getApiFromNameNull(item.apiName)
+                    val resolved = if (com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.isNetworkStreamHistory(item)) {
+                        null
+                    } else {
+                        providers.firstOrNull {
+                            it.name == item.apiName && it.mainUrl.isNotBlank() && item.showUrl.startsWith(it.mainUrl)
+                        } ?: APIHolder.getApiFromNameNull(item.apiName)
+                    }
                     item.parentId to resolved
                 }
             }
@@ -160,6 +164,8 @@ fun ComposeHistoryScreen(
                                             targetEpisodeId = history.episodeId,
                                         ),
                                     )
+                                } else {
+                                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                 }
                             },
                             onPlayClick = {
@@ -176,6 +182,8 @@ fun ComposeHistoryScreen(
                                             targetEpisodeId = history.episodeId,
                                         ),
                                     )
+                                } else {
+                                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                 }
                             },
                         )

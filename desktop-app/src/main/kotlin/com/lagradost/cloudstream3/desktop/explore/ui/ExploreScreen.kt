@@ -58,9 +58,10 @@ import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
 @Composable
-fun ExploreScreen(
+fun ExploreCatalogsScreen(
     viewModel: ExploreViewModel,
     onNavigate: (Config) -> Unit,
+    onBack: () -> Unit,
 ) {
     val theme = LocalDesktopTheme.current
     val uiState by viewModel.uiState.collectAsState()
@@ -149,8 +150,7 @@ fun ExploreScreen(
                 // Empty state if no catalog addon is enabled
                 EmptyCatalogState(
                     onNavigateToSettings = { onNavigate(Config.Settings) },
-                    onOpenGenreBrowse = { onNavigate(Config.GenreBrowse) },
-                    onOpenProviderBrowse = { onNavigate(Config.ProviderBrowse) },
+                    onBackToExplore = onBack,
                 )
             } else {
                 // Row 1: Primary Scope & Search Controls (~34dp)
@@ -166,6 +166,9 @@ fun ExploreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
+                        IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back to Explore", tint = theme.TextPrimary)
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -177,7 +180,7 @@ fun ExploreScreen(
                                 modifier = Modifier.size(20.dp),
                             )
                             Text(
-                                text = "Explore",
+                                text = "Catalogs",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = theme.TextPrimary,
@@ -229,13 +232,6 @@ fun ExploreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        TextButton(onClick = { onNavigate(Config.GenreBrowse) }) {
-                            Text("Genres", fontSize = 11.sp)
-                        }
-                        TextButton(onClick = { onNavigate(Config.ProviderBrowse) }) {
-                            Text("Providers", fontSize = 11.sp)
-                        }
-
                         ExploreSearchField(
                             query = uiState.searchQuery,
                             onQueryChange = { viewModel.onEvent(ExploreUiEvent.UpdateSearchQuery(it)) },
@@ -975,8 +971,7 @@ private fun ExploreSearchField(
 @Composable
 private fun EmptyCatalogState(
     onNavigateToSettings: () -> Unit,
-    onOpenGenreBrowse: () -> Unit,
-    onOpenProviderBrowse: () -> Unit,
+    onBackToExplore: () -> Unit,
 ) {
     val theme = LocalDesktopTheme.current
 
@@ -1003,14 +998,14 @@ private fun EmptyCatalogState(
             )
 
             Text(
-                text = "No Catalog Addons Configured",
+                text = "No Add-on Catalogs Available",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.TextPrimary,
             )
 
             Text(
-                text = "Configure catalog metadata addons in Settings to explore real-time movie, series, and anime catalogs.",
+                text = "Add-on catalogs are optional. Other Explore destinations are available from the dashboard.",
                 fontSize = 12.5.sp,
                 color = theme.TextMuted,
             )
@@ -1020,21 +1015,14 @@ private fun EmptyCatalogState(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(8.dp),
             ) {
-                Text("Open Addons Settings", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("Manage Add-ons", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
 
             OutlinedButton(
-                onClick = onOpenGenreBrowse,
+                onClick = onBackToExplore,
                 shape = RoundedCornerShape(8.dp),
             ) {
-                Text("Browse Genres", fontSize = 12.sp)
-            }
-
-            OutlinedButton(
-                onClick = onOpenProviderBrowse,
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text("Browse Providers", fontSize = 12.sp)
+                Text("Back to Explore", fontSize = 12.sp)
             }
         }
     }

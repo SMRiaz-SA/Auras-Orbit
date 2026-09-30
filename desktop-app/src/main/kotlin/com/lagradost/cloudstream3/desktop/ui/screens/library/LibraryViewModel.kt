@@ -105,6 +105,10 @@ class LibraryViewModel(
     }
 
     private fun handleBookmarkClick(bookmark: DesktopBookmark) {
+        if (bookmark.apiName == com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME) {
+            com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamBookmark(bookmark)
+            return
+        }
         val provider = APIHolder.allProviders.firstOrNull {
             it.name == bookmark.apiName && it.mainUrl.isNotBlank() && bookmark.url.startsWith(it.mainUrl)
         } ?: APIHolder.getApiFromNameNull(bookmark.apiName)

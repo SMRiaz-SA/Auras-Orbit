@@ -4,9 +4,11 @@ import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.explore.client.ExploreCatalogClient
 import com.lagradost.cloudstream3.desktop.explore.client.ExploreCatalogDiscoverer
+import com.lagradost.cloudstream3.desktop.explore.client.TorrentSearchClient
 import com.lagradost.cloudstream3.desktop.explore.models.ExploreItem
 import com.lagradost.cloudstream3.desktop.explore.models.ManifestCatalogDescriptor
 import com.lagradost.cloudstream3.desktop.explore.models.ProviderMatch
+import com.lagradost.cloudstream3.desktop.explore.models.TorrentSearchResult
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient.StremioVideo
 import com.lagradost.cloudstream3.desktop.stremio.ManagedStremioAddon
@@ -71,6 +73,10 @@ data class ExploreUiState(
     val stremioStreams: List<ExtractorLink> = emptyList(),
     val isLoadingStremioStreams: Boolean = false,
     val stremioStreamMessage: String? = null,
+    val torrentSearchQuery: String = "",
+    val torrentSearchResults: List<TorrentSearchResult> = emptyList(),
+    val isSearchingTorrents: Boolean = false,
+    val torrentSearchMessage: String? = null,
 ) : UiState
 
 sealed interface ExploreUiEvent : UiEvent {
@@ -86,6 +92,8 @@ sealed interface ExploreUiEvent : UiEvent {
     data class SelectStremioVideo(val video: StremioVideo) : ExploreUiEvent
     data object BackToStremioVideos : ExploreUiEvent
     data object CloseStremioStreams : ExploreUiEvent
+    data class UpdateTorrentSearchQuery(val query: String) : ExploreUiEvent
+    data class SearchTorrents(val query: String) : ExploreUiEvent
     data object CloseProviderPicker : ExploreUiEvent
     data class SelectProviderMatch(val match: ProviderMatch) : ExploreUiEvent
     data object LoadMore : ExploreUiEvent
@@ -104,6 +112,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private var loadMoreJob: Job? = null
     private var providerSearchJob: Job? = null
     private var stremioStreamJob: Job? = null
+    private var torrentSearchJob: Job? = null
     private var remoteSearchJob: Job? = null
     private val searchSemaphore = Semaphore(8)
 
@@ -143,6 +152,8 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             is ExploreUiEvent.SelectStremioVideo -> selectStremioVideo(event.video)
             is ExploreUiEvent.BackToStremioVideos -> backToStremioVideos()
             is ExploreUiEvent.CloseStremioStreams -> closeStremioStreams()
+            is ExploreUiEvent.UpdateTorrentSearchQuery -> updateState { copy(torrentSearchQuery = event.query) }
+            is ExploreUiEvent.SearchTorrents -> searchTorrents(event.query)
             is ExploreUiEvent.CloseProviderPicker -> closeProviderPicker()
             is ExploreUiEvent.SelectProviderMatch -> selectProviderMatch(event.match)
             is ExploreUiEvent.LoadMore -> loadMore()
@@ -696,6 +707,53 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     copy(
                         isLoadingStremioStreams = false,
                         stremioStreamMessage = "The enabled Stremio add-ons could not be queried. Check the add-on connection and try again.",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun searchTorrents(rawQuery: String) {
+        val query = rawQuery.trim()
+        if (query.isEmpty()) {
+            updateState {
+                copy(
+                    torrentSearchQuery = rawQuery,
+                    torrentSearchResults = emptyList(),
+                    torrentSearchMessage = "Enter a title to search.",
+                )
+            }
+            return
+        }
+
+        torrentSearchJob?.cancel()
+        torrentSearchJob = viewModelScope.launch(Dispatchers.IO) {
+            updateState {
+                copy(
+                    torrentSearchQuery = query,
+                    torrentSearchResults = emptyList(),
+                    isSearchingTorrents = true,
+                    torrentSearchMessage = null,
+                )
+            }
+            try {
+                val results = TorrentSearchClient.search(query)
+                updateState {
+                    copy(
+                        torrentSearchResults = results,
+                        isSearchingTorrents = false,
+                        torrentSearchMessage = if (results.isEmpty()) "No playable magnet results found." else null,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Torrent search failed for '$query': ${e.message}")
+                updateState {
+                    copy(
+                        torrentSearchResults = emptyList(),
+                        isSearchingTorrents = false,
+                        torrentSearchMessage = "Search failed: ${e.message ?: "service unavailable"}",
                     )
                 }
             }

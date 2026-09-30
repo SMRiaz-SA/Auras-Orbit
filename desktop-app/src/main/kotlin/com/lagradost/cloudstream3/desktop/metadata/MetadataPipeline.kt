@@ -57,6 +57,44 @@ object MetadataPipeline {
     }
 
     /**
+     * Searches enabled metadata identity resolvers for a user-confirmed network-stream match.
+     * This accepts only a title and media type; the stream URL (which may contain a signed token)
+     * is deliberately not sent to metadata providers.
+     */
+    suspend fun findNetworkStreamMatches(title: String, type: com.lagradost.cloudstream3.TvType): List<MetadataMatch> =
+        withContext(Dispatchers.IO) {
+            val normalizedTitle = title.trim()
+            if (normalizedTitle.isBlank()) return@withContext emptyList()
+
+            val isAnime = type == com.lagradost.cloudstream3.TvType.Anime || type == com.lagradost.cloudstream3.TvType.AnimeMovie
+            val resolvers = synchronized(providers) { providers.toList() }.filter { provider ->
+                MetadataConfig.isProviderEnabled(provider.id) &&
+                    (provider.supportedTypes.contains(type) || (isAnime && (provider.id == "anilist" || provider.id == "kitsu")))
+            }
+
+            coroutineScope {
+                resolvers.map { resolver ->
+                    resolver to async(Dispatchers.IO) {
+                        try {
+                            if (resolver.id == TmdbMetadataProvider.id) {
+                                TmdbMetadataProvider.searchNetworkStream(normalizedTitle, type)
+                            } else {
+                                listOfNotNull(resolver.resolve(normalizedTitle, null, type, rawUrl = null))
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            AppLogger.w(TAG, "Network stream metadata search failed in ${resolver.id} for '$normalizedTitle'", e)
+                            emptyList()
+                        }
+                    }
+                }.flatMap { (_, matches) -> matches.await() }
+            }.distinctBy { match ->
+                "${match.providerId}:${match.tmdbId ?: match.imdbId ?: match.anilistId ?: "${match.matchedTitle.lowercase()}:${match.matchedYear}"}"
+            }
+        }
+
+    /**
      * Clears cached identity matches. If [title] is provided, only matches for that title are evicted.
      */
     fun clearCache(title: String? = null) {

@@ -162,6 +162,7 @@ fun CloudstreamApp(rootComponent: RootComponent) {
         com.lagradost.cloudstream3.desktop.ui.components.LocalDesktopTheme provides desktopColors,
     ) {
         com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.GlobalNetworkStreamDialog()
+        com.lagradost.cloudstream3.desktop.ui.screens.history.GlobalNetworkStreamMetadataDialog()
 
         val appColorScheme = com.lagradost.cloudstream3.desktop.ui.theme.buildColorScheme(primaryColor, desktopColors, isLightMode)
 
@@ -254,7 +255,9 @@ fun CloudstreamApp(rootComponent: RootComponent) {
 
                                 val title = when (activeInstance) {
                                     is RootComponent.Child.Home -> "Home"
-                                    is RootComponent.Child.Explore -> "Explore & Catalogs"
+                                    is RootComponent.Child.Explore -> "Explore"
+                                    is RootComponent.Child.ExploreCatalogs -> "Catalogs"
+                                    is RootComponent.Child.TorrentSearch -> "Torrent Search"
                                     is RootComponent.Child.GenreBrowse -> "Genre Browser"
                                     is RootComponent.Child.ProviderBrowse -> "Browse Providers"
                                     is RootComponent.Child.History -> "Watch History"
@@ -398,14 +401,29 @@ fun CloudstreamApp(rootComponent: RootComponent) {
                                                         )
                                                     }
                                                     is RootComponent.Child.Explore -> {
-                                                        com.lagradost.cloudstream3.desktop.explore.ui.ExploreScreen(
+                                                        com.lagradost.cloudstream3.desktop.explore.ui.ExploreDashboardScreen(
                                                             onNavigate = { config ->
-                                                                if (config == Config.GenreBrowse || config == Config.ProviderBrowse) {
-                                                                    rootComponent.push(config)
-                                                                } else {
+                                                                if (config == Config.Settings) {
                                                                     rootComponent.bringToFront(config)
+                                                                } else {
+                                                                    rootComponent.push(config)
                                                                 }
                                                             },
+                                                            viewModel = child.component.viewModel,
+                                                        )
+                                                    }
+                                                    is RootComponent.Child.ExploreCatalogs -> {
+                                                        com.lagradost.cloudstream3.desktop.explore.ui.ExploreCatalogsScreen(
+                                                            onNavigate = { config ->
+                                                                if (config == Config.Settings) rootComponent.bringToFront(config) else rootComponent.push(config)
+                                                            },
+                                                            onBack = { rootComponent.pop() },
+                                                            viewModel = child.component.viewModel,
+                                                        )
+                                                    }
+                                                    is RootComponent.Child.TorrentSearch -> {
+                                                        com.lagradost.cloudstream3.desktop.explore.ui.ExploreTorrentSearchScreen(
+                                                            onBack = { rootComponent.pop() },
                                                             viewModel = child.component.viewModel,
                                                         )
                                                     }

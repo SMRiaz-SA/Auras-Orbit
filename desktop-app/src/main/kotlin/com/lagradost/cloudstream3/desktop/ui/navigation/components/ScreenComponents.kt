@@ -35,6 +35,20 @@ class ExploreComponent(
     val viewModel = rootInstanceKeeper.getOrCreate(key = "ExploreViewModel") { com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel() }
 }
 
+class ExploreCatalogsComponent(
+    componentContext: ComponentContext,
+    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
+) : ComponentContext by componentContext {
+    val viewModel = rootInstanceKeeper.getOrCreate(key = "ExploreViewModel") { com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel() }
+}
+
+class TorrentSearchComponent(
+    componentContext: ComponentContext,
+    rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,
+) : ComponentContext by componentContext {
+    val viewModel = rootInstanceKeeper.getOrCreate(key = "ExploreViewModel") { com.lagradost.cloudstream3.desktop.explore.viewmodel.ExploreViewModel() }
+}
+
 class GenreBrowseComponent(
     componentContext: ComponentContext,
     rootInstanceKeeper: InstanceKeeper = componentContext.instanceKeeper,

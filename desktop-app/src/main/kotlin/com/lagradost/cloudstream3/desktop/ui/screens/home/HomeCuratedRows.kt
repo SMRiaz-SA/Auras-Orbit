@@ -211,16 +211,20 @@ fun HomeDashboardRows(
             onViewAll = { onNavigate(Config.Library) },
             onBrowse = { onNavigate(Config.Explore) },
             onOpenBookmark = { bookmark, autoPlay ->
-                onNavigate(
-                    Config.Details(
-                        bookmark.apiName,
-                        bookmark.url,
-                        bookmark.name,
-                        bookmark.posterUrl,
-                        null,
-                        autoPlay,
-                    ),
-                )
+                if (bookmark.apiName == com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME) {
+                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamBookmark(bookmark)
+                } else {
+                    onNavigate(
+                        Config.Details(
+                            bookmark.apiName,
+                            bookmark.url,
+                            bookmark.name,
+                            bookmark.posterUrl,
+                            null,
+                            autoPlay,
+                        ),
+                    )
+                }
             },
         )
 

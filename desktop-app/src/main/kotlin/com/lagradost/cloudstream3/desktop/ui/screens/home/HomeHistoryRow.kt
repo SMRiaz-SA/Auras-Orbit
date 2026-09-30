@@ -93,7 +93,13 @@ fun HomeHistoryRow(
 
             val providerMap = remember(currentList, providers) {
                 val map = providers.associateBy { it.name }
-                currentList.associate { it.parentId to map[it.apiName] }
+                currentList.associate { history ->
+                    history.parentId to if (com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.isNetworkStreamHistory(history)) {
+                        null
+                    } else {
+                        map[history.apiName]
+                    }
+                }
             }
 
             CategoryRowWithHeader(
@@ -141,6 +147,8 @@ fun HomeHistoryRow(
                                 onClick = {
                                     if (provider != null) {
                                         onItemClick(provider, history)
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                                 onPlayClick = {
@@ -150,6 +158,8 @@ fun HomeHistoryRow(
                                         } else {
                                             onItemClick(provider, history)
                                         }
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                             )
@@ -167,6 +177,8 @@ fun HomeHistoryRow(
                                 onClick = {
                                     if (provider != null) {
                                         onItemClick(provider, history)
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                                 onPlayClick = {
@@ -176,6 +188,8 @@ fun HomeHistoryRow(
                                         } else {
                                             onItemClick(provider, history)
                                         }
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                             )
@@ -194,6 +208,8 @@ fun HomeHistoryRow(
                                 onClick = {
                                     if (provider != null) {
                                         onItemClick(provider, history)
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                                 onPlayClick = {
@@ -203,6 +219,8 @@ fun HomeHistoryRow(
                                         } else {
                                             onItemClick(provider, history)
                                         }
+                                    } else {
+                                        com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
                             )
