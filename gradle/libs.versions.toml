@@ -15,7 +15,7 @@ bouncycastle = "1.86"
 colorpicker = "6b46b49"
 conscryptAndroid = { strictly = "2.5.2" } # 2.5.3 crashes everything
 constraintlayout = "2.2.1"
-coreKtx = "1.18.0"
+coreKtx = "1.19.1"
 desugar_jdk_libs_nio = "2.1.5"
 dokkaGradlePlugin = "2.2.0"
 espressoCore = "3.7.0"
