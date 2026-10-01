@@ -1,9 +1,0 @@
-Auras Orbit MPV runtime provenance
-Vendor asset: mpv-dev-x86_64-20260610-git-304426c.7z
-Asset URL: https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260610/mpv-dev-x86_64-20260610-git-304426c.7z
-Asset SHA-256: 8CBB25EA784F01AFBB3F904217CAB1317430A8BCFD5680FD827A866367F71CC9
-Extracted libmpv-2.dll SHA-256: 5C876D79E070529128331591B48F87846FB30557F19C11280DF9C6EE9B6DBAFA
-mpv source commit: 304426c39
-mpv source URL: https://github.com/mpv-player/mpv/tree/304426c39
-License: GNU GPL v2; license text: https://raw.githubusercontent.com/mpv-player/mpv/304426c39/LICENSE.GPL
-Build recipe/provenance: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260610
