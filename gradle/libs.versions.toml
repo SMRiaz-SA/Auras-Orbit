@@ -68,7 +68,7 @@ jdkToolchain = "17"
 minSdk = "23"
 compileSdk = "36"
 targetSdk = "36"
-decompose = "3.2.2"
+decompose = "3.5.0"
 jna = "5.19.1"
 
 [libraries]
