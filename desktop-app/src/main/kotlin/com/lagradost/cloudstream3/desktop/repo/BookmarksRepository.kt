@@ -1,0 +1,40 @@
+package com.lagradost.cloudstream3.desktop.repo
+
+import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
+import com.lagradost.cloudstream3.desktop.utils.appScope
+import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.storage.DesktopBookmark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import com.lagradost.cloudstream3.desktop.domain.bookmarks.repository.BookmarksRepository as DomainBookmarksRepository
+
+object BookmarksRepository {
+    val instance: DomainBookmarksRepository
+        get() = AppContainerHolder.container.bookmarksRepository
+
+    val bookmarksFlow: StateFlow<Map<String, DesktopBookmark>>
+        get() = instance.subscribeAll()
+
+    fun addBookmark(bookmark: DesktopBookmark) {
+        val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
+        appScope.launch(Dispatchers.IO) {
+            try {
+                instance.addBookmark(bookmark, profileId)
+            } catch (e: Exception) {
+                AppLogger.e("BookmarksRepository: Failed to add bookmark '${bookmark.name}': ${e.message}")
+            }
+        }
+    }
+
+    fun removeBookmark(id: String) {
+        val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
+        appScope.launch(Dispatchers.IO) {
+            try {
+                instance.removeBookmark(id, profileId)
+            } catch (e: Exception) {
+                AppLogger.e("BookmarksRepository: Failed to remove bookmark '$id': ${e.message}")
+            }
+        }
+    }
+}
