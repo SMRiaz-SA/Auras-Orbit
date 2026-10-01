@@ -20,6 +20,10 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: Apply pinned CloudStream episode date fixes
+      shell: pwsh
+      run: .\.github\scripts\apply-cloudstream-episode-dates.ps1
+
     - name: Verify Tag is on main
       shell: bash
       run: |
@@ -57,7 +61,7 @@ jobs:
     - name: Run JVM tests
       timeout-minutes: 20
       shell: pwsh
-      run: .\gradlew.bat test --no-daemon --console=plain --stacktrace --info --max-workers=2
+      run: .\gradlew.bat test :library:jvmTest --no-daemon --console=plain --stacktrace --info --max-workers=2
 
     - name: Run native tests
       timeout-minutes: 10

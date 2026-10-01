@@ -109,42 +109,38 @@ fun main(args: Array<String>) {
         try {
             // Load Plugin Safely (using ExtensionLoader to trigger StaticVerifier)
             println("Loading and Verifying Plugin via ExtensionLoader...")
-            val pluginClassName = com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(jarFile)
+            val loadedPlugin = com.lagradost.runtime.loader.ExtensionLoader.loadAndInit(jarFile)
 
-            if (pluginClassName != null) {
-                finalReport.append("Found and Verified plugin class: $pluginClassName\n")
+            finalReport.append("Loaded and verified plugin: ${loadedPlugin.javaClass.name}\n")
 
-                finalReport.append("\n--- Deep Runtime Test ---\n")
-                val providers = com.lagradost.cloudstream3.APIHolder.allProviders
-                finalReport.append("Plugin registered ${providers.size} providers.\n")
+            finalReport.append("\n--- Deep Runtime Test ---\n")
+            val providers = com.lagradost.cloudstream3.APIHolder.allProviders
+            finalReport.append("Plugin registered ${providers.size} providers.\n")
 
-                var passed = 0
-                var failed = 0
+            var passed = 0
+            var failed = 0
 
-                providers.forEach { provider ->
-                    finalReport.append("\nTesting Provider: ${provider.name}\n")
-                    try {
-                        kotlinx.coroutines.runBlocking {
-                            finalReport.append(" -> Calling getMainPage()\n")
-                            provider.getMainPage(1, com.lagradost.cloudstream3.MainPageRequest("", "", false))
-                            finalReport.append(" -> Calling search(\"test\")\n")
-                            provider.search("test")
-                        }
-                        finalReport.append(" ✅ ${provider.name} ran successfully without missing Android APIs.\n")
-                        passed++
-                    } catch (e: Throwable) {
-                        finalReport.append(" ❌ ${provider.name} crashed!\n")
-                        finalReport.append("    Reason: ${e.javaClass.name}: ${e.message}\n")
-                        failed++
+            providers.forEach { provider ->
+                finalReport.append("\nTesting Provider: ${provider.name}\n")
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        finalReport.append(" -> Calling getMainPage()\n")
+                        provider.getMainPage(1, com.lagradost.cloudstream3.MainPageRequest("", "", false))
+                        finalReport.append(" -> Calling search(\"test\")\n")
+                        provider.search("test")
                     }
+                    finalReport.append(" ✅ ${provider.name} ran successfully without missing Android APIs.\n")
+                    passed++
+                } catch (e: Throwable) {
+                    finalReport.append(" ❌ ${provider.name} crashed!\n")
+                    finalReport.append("    Reason: ${e.javaClass.name}: ${e.message}\n")
+                    failed++
                 }
-
-                finalReport.append("\n--- Final Score ---\n")
-                finalReport.append("Passed: $passed / ${providers.size}\n")
-                if (failed > 0) finalReport.append("Failed: $failed. Check the crash reasons for missing Android stubs!\n")
-            } else {
-                finalReport.append("Could not load plugin! StaticVerifier may have rejected it, or manifest.json is invalid.\n")
             }
+
+            finalReport.append("\n--- Final Score ---\n")
+            finalReport.append("Passed: $passed / ${providers.size}\n")
+            if (failed > 0) finalReport.append("Failed: $failed. Check the crash reasons for missing Android stubs!\n")
         } catch (e: Exception) {
             finalReport.append("Execution failed: ${e.javaClass.name}: ${e.message}\n")
             e.printStackTrace()

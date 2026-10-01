@@ -12,6 +12,9 @@ $ErrorActionPreference = 'Stop'
 # 5. Print exact paths, sizes, and SHA-256 hashes. Never publish or build an installer here.
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+& (Join-Path $repoRoot '.github/scripts/apply-cloudstream-episode-dates.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Pinned CloudStream episode date fixes could not be applied.' }
+
 $versionLine = Get-Content -LiteralPath (Join-Path $repoRoot 'gradle.properties') |
     Where-Object { $_ -match '^APP_VERSION=' } |
     Select-Object -First 1
@@ -83,6 +86,8 @@ foreach ($requiredSource in @(
     "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/x64/WebView2Loader.dll",
     "Auras-Orbit-Source-$version/desktop-app/src/main/kotlin/com/lagradost/cloudstream3/desktop/ui/screens/home/HomeDiscovery.kt",
     "Auras-Orbit-Source-$version/.github/scripts/build-local-deliverables.ps1",
+    "Auras-Orbit-Source-$version/.github/scripts/apply-cloudstream-episode-dates.ps1",
+    "Auras-Orbit-Source-$version/.github/patches/cloudstream-episode-dates.patch",
     "Auras-Orbit-Source-$version/android-reference/library/build.gradle.kts"
 )) {
     if (-not ($sourceItems.ArchivePath -contains $requiredSource)) {
@@ -116,7 +121,7 @@ allprojects {
 "@ | Set-Content -LiteralPath $testDataInitScript -Encoding utf8
 
     # Keep persistence and plugin-worker tests away from the developer's real app data.
-    & (Join-Path $repoRoot 'gradlew.bat') '--init-script' $testDataInitScript 'spotlessCheck' ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':desktop-app:nativeTest' ':desktop-app:createDistributable' '-PorbitDistribution=release' '--no-daemon'
+    & (Join-Path $repoRoot 'gradlew.bat') '--init-script' $testDataInitScript 'spotlessCheck' ':desktop-app:compileKotlin' ':desktop-app:compileTestKotlin' 'test' ':library:jvmTest' ':desktop-app:nativeTest' ':desktop-app:createDistributable' '-PorbitDistribution=release' '--no-daemon'
     if ($LASTEXITCODE -ne 0) { throw "Gradle build/test failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location
@@ -183,6 +188,8 @@ try {
         "Auras-Orbit-Source-$version/desktop-app/src/main/cpp/webview2/build/native/x64/WebView2Loader.dll",
         "Auras-Orbit-Source-$version/desktop-app/src/main/kotlin/com/lagradost/cloudstream3/desktop/ui/screens/home/HomeDiscovery.kt",
         "Auras-Orbit-Source-$version/.github/scripts/build-local-deliverables.ps1",
+        "Auras-Orbit-Source-$version/.github/scripts/apply-cloudstream-episode-dates.ps1",
+        "Auras-Orbit-Source-$version/.github/patches/cloudstream-episode-dates.patch",
         "Auras-Orbit-Source-$version/android-reference/library/build.gradle.kts"
     )) {
         if ($sourceEntries -notcontains $requiredSource) { throw "Source ZIP is missing $requiredSource" }

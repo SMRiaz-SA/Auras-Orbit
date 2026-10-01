@@ -18,8 +18,8 @@ OutputBaseFilename=Auras-Orbit-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 TimeStampsInUTC=yes
 
 [Languages]

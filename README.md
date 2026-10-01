@@ -6,8 +6,8 @@ Browse with the CloudStream-compatible extensions you choose, watch with MPV, an
 
 Orbit does not host media or curate provider catalogs. You choose which extensions to install, and what you can browse depends on those providers.
 
-**Current source version:** Beta `0.2.0.17`<br>
-**Source build date:** 2026-09-30<br>
+**Current source version:** Beta `0.2.0.18`<br>
+**Source build date:** 2026-10-01<br>
 **Development status:** Beta<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
@@ -85,6 +85,7 @@ Source builds require Git with submodules, JDK 21, PowerShell 7, and an internet
 For a local portable build to test, run:
 
 ```powershell
+pwsh -File .\.github\scripts\apply-cloudstream-episode-dates.ps1
 .\gradlew.bat :desktop-app:createDistributable
 ```
 
@@ -97,6 +98,8 @@ git clone --recursive https://github.com/SMRiaz-SA/Auras-Orbit.git
 cd Auras-Orbit
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ```
+
+The app pins two episode date fixes for its CloudStream submodule in `.github/patches/cloudstream-episode-dates.patch`. The helper script applies them idempotently; run it after cloning with submodules before building directly. The local packaging helper and GitHub workflows apply the patch automatically.
 
 GitHub Actions CI runs on pushes to `main`, pull requests, and manual dispatches using the project's self-hosted Windows x64 runner. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with `v`.
 
