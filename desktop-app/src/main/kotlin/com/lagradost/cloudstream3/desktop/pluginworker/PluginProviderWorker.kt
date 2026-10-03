@@ -72,6 +72,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.PrintStream
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
@@ -80,12 +81,16 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.jar.Attributes
 import java.util.jar.JarOutputStream
 import java.util.jar.Manifest
 import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
 
 private const val MAX_PROVIDER_RPC_FRAME_BYTES = 4 * 1024 * 1024
 private const val MAX_PLUGIN_SETTING_SCHEMA_FRAME_BYTES = 64 * 1024
@@ -217,6 +222,26 @@ object PluginProviderWorkerRegistry {
 
     fun closeAll() {
         workers.keys.map(WorkerKey::pluginPath).distinct().forEach(::closeForPlugin)
+    }
+
+    /** Read StreamPlay's scraper list inside its plugin worker, where its classes are loaded. */
+    internal fun describeStreamPlaySources(pluginFile: File): List<WorkerPluginSourceDescriptor> {
+        val canonicalPath = pluginFile.canonicalPath
+        val worker = workers[WorkerKey(canonicalPath)] ?: workerFor(pluginFile, PlatformPaths.appDataDir)
+        val response = runBlocking {
+            readSuccess(
+                worker.request(
+                    controlRequest("describeStreamPlaySources"),
+                    PROVIDER_WORKER_STARTUP_TIMEOUT_MS,
+                    onIntermediateFrame = { frame -> handlePluginWorkerEvent(canonicalPath, frame) },
+                ),
+            )
+        }
+        return response.mapNotNull { source ->
+            val id = source.path("id").asText().trim()
+            val name = source.path("name").asText().trim()
+            if (id.isBlank() || name.isBlank()) null else WorkerPluginSourceDescriptor(id, name)
+        }.distinctBy(WorkerPluginSourceDescriptor::id)
     }
 
     /** Reapply host override data after repository metadata has finished loading. */
@@ -1597,6 +1622,7 @@ object PluginProviderWorkerMain {
             "describeProviders" -> return ProviderRpcJson.encodePluginDescriptors(providers, extractors).apply {
                 set<JsonNode>("plugin", describePlugin(pluginFile))
             }
+            "describeStreamPlaySources" -> return describeStreamPlaySources(providers, pluginFile)
             "openPluginSettings" -> {
                 val plugin = ExtensionLoader.getPlugin(pluginFile.absolutePath) as? Plugin
                     ?: throw PluginProviderRpcException("Loaded plugin does not expose custom settings")
@@ -1701,6 +1727,8 @@ object PluginProviderWorkerMain {
                     args.path("id").asText(),
                 )?.let(ProviderRpcJson.mapper::valueToTree)
                 "loadLinks" -> {
+                    val regularLinkUrls = ConcurrentHashMap.newKeySet<String>()
+                    val hindMoviezLinkFound = AtomicBoolean(false)
                     val success = provider.loadLinks(
                         args.path("data").asText(),
                         args.path("isCasting").asBoolean(false),
@@ -1712,6 +1740,12 @@ object PluginProviderWorkerMain {
                             )
                         },
                         { link ->
+                            regularLinkUrls += link.url
+                            if (link.source.contains("hindmoviez", ignoreCase = true) ||
+                                link.name.contains("hindmoviez", ignoreCase = true)
+                            ) {
+                                hindMoviezLinkFound.set(true)
+                            }
                             emitEvent(
                                 ProviderRpcJson.mapper.createObjectNode()
                                     .put("event", "link")
@@ -1719,12 +1753,186 @@ object PluginProviderWorkerMain {
                             )
                         },
                     )
-                    ProviderRpcJson.mapper.createObjectNode().put("success", success)
+                    // StreamPlay's current HindMoviez search uses the IMDb ID as a WordPress search
+                    // term. Retry through StreamPlay's own resolver with LinkData's title only when
+                    // that source is enabled and the normal pass did not produce a HindMoviez link.
+                    val hindMoviezEnabled = runCatching {
+                        isStreamPlayHindMoviezEnabled(provider, providers, pluginFile)
+                    }.onFailure { failure ->
+                        AppLogger.w("Could not check StreamPlay HindMoviez source setting", failure)
+                    }.getOrDefault(false)
+                    var titleFallbackFoundLinks = false
+                    if (!hindMoviezLinkFound.get() && hindMoviezEnabled) {
+                        try {
+                            titleFallbackFoundLinks = invokeStreamPlayHindMoviezByTitle(
+                                provider = provider,
+                                data = args.path("data").asText(),
+                                existingUrls = regularLinkUrls,
+                                emitEvent = emitEvent,
+                            )
+                        } catch (failure: kotlinx.coroutines.CancellationException) {
+                            throw failure
+                        } catch (failure: Throwable) {
+                            AppLogger.w("StreamPlay HindMoviez title fallback failed", failure)
+                        }
+                    }
+                    ProviderRpcJson.mapper.createObjectNode().put("success", success || titleFallbackFoundLinks)
                 }
                 else -> error("Unsupported provider operation")
             }
         }
     }
+
+    private fun isStreamPlayHindMoviezEnabled(
+        provider: MainAPI,
+        providers: List<MainAPI>,
+        pluginFile: File,
+    ): Boolean {
+        if (provider.javaClass.name != "com.phisher98.StreamPlay") return false
+        val source = streamPlaySources(providers, pluginFile)
+            .firstOrNull { it.id.equals("HindMoviez", ignoreCase = true) || it.name.equals("HindMoviez", ignoreCase = true) }
+            ?: return false
+        val preferences = runCatching {
+            provider.javaClass.getMethod("getSharedPref").invoke(provider) as? android.content.SharedPreferences
+        }.getOrNull() ?: return false
+        val pluginName = ExtensionLoader.getPluginInternalName(pluginFile.absolutePath) ?: return false
+        val disabledProviders = runCatching {
+            PluginSettingsSchemaRegistry.withPlugin(pluginName) {
+                preferences.getStringSet("disabled_providers", emptySet()).orEmpty().toSet()
+            }
+        }.getOrDefault(emptySet())
+        return disabledProviders.none { it.equals(source.id, ignoreCase = true) }
+    }
+
+    private suspend fun invokeStreamPlayHindMoviezByTitle(
+        provider: MainAPI,
+        data: String,
+        existingUrls: MutableSet<String>,
+        emitEvent: (JsonNode) -> Unit,
+    ): Boolean {
+        val payload = runCatching { ProviderRpcJson.mapper.readTree(data) }.getOrNull() ?: return false
+        val imdbId = payload.path("imdbId").asText().trim()
+        val titles = listOf("orgTitle", "title", "nametitle", "alttitle")
+            .mapNotNull { key -> payload.get(key)?.takeUnless(JsonNode::isNull)?.asText()?.trim()?.takeIf(String::isNotEmpty) }
+            .filterNot { it.equals(imdbId, ignoreCase = true) }
+            .distinctBy(String::lowercase)
+            .take(4)
+        if (titles.isEmpty()) return false
+
+        val classLoader = provider.javaClass.classLoader ?: return false
+        val season = payload.get("season")?.takeUnless(JsonNode::isNull)?.asText()?.toIntOrNull()
+        val episode = payload.get("episode")?.takeUnless(JsonNode::isNull)?.asText()?.toIntOrNull()
+        val extractorClass = Class.forName("com.phisher98.StreamPlayExtractor", true, classLoader)
+        val extractor = extractorClass.getField("INSTANCE").get(null)
+        val invoke = extractorClass.getMethod(
+            "invokeHindmoviez",
+            String::class.java,
+            Int::class.javaObjectType,
+            Int::class.javaObjectType,
+            kotlin.jvm.functions.Function1::class.java,
+            kotlin.jvm.functions.Function1::class.java,
+            Continuation::class.java,
+        )
+
+        for (title in titles) {
+            val links = ConcurrentLinkedQueue<ExtractorLink>()
+            val subtitles = ConcurrentLinkedQueue<SubtitleFile>()
+            invokeStreamPlaySuspendMethod(invoke, extractor, title, season, episode, subtitles, links)
+            if (links.isEmpty()) continue
+
+            subtitles.forEach { subtitle ->
+                emitEvent(
+                    ProviderRpcJson.mapper.createObjectNode()
+                        .put("event", "subtitle")
+                        .set<JsonNode>("value", ProviderRpcJson.encodeSubtitle(subtitle)),
+                )
+            }
+            links.forEach { link ->
+                if (existingUrls.add(link.url)) {
+                    emitEvent(
+                        ProviderRpcJson.mapper.createObjectNode()
+                            .put("event", "link")
+                            .set<JsonNode>("value", ProviderRpcJson.encodeExtractorLink(link)),
+                    )
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    private suspend fun invokeStreamPlaySuspendMethod(
+        method: java.lang.reflect.Method,
+        receiver: Any,
+        title: String,
+        season: Int?,
+        episode: Int?,
+        subtitles: MutableCollection<SubtitleFile>,
+        links: MutableCollection<ExtractorLink>,
+    ) {
+        suspendCoroutineUninterceptedOrReturn<Unit> { continuation ->
+            try {
+                method.invoke(
+                    receiver,
+                    title,
+                    season,
+                    episode,
+                    object : kotlin.jvm.functions.Function1<SubtitleFile, Unit> {
+                        override fun invoke(subtitle: SubtitleFile) {
+                            subtitles.add(subtitle)
+                        }
+                    },
+                    object : kotlin.jvm.functions.Function1<ExtractorLink, Unit> {
+                        override fun invoke(link: ExtractorLink) {
+                            links.add(link)
+                        }
+                    },
+                    continuation,
+                )
+            } catch (failure: Throwable) {
+                throw (failure as? InvocationTargetException)?.targetException ?: failure
+            }
+        }
+    }
+
+    private fun streamPlaySources(providers: List<MainAPI>, pluginFile: File): List<WorkerPluginSourceDescriptor> {
+        val pluginClassLoader = providers.firstOrNull()?.javaClass?.classLoader
+            ?: (ExtensionLoader.getPlugin(pluginFile.absolutePath) as? Plugin)?.javaClass?.classLoader
+            ?: throw PluginProviderRpcException("StreamPlay's plugin class loader is unavailable")
+        val providersListClass = Class.forName("com.phisher98.ProvidersListKt", false, pluginClassLoader)
+        // StreamPlay exposes this list as buildProviders() in its JVM build. Its underlying
+        // Kotlin property getter is private, so getMethod("getProviders") is absent there.
+        val sourceListMethod = runCatching { providersListClass.getMethod("buildProviders") }
+            .recoverCatching { providersListClass.getMethod("getProviders") }
+            .getOrElse { providersListClass.getDeclaredMethod("getProviders").apply { isAccessible = true } }
+        val entries = sourceListMethod.invoke(null) as? Iterable<*>
+            ?: throw PluginProviderRpcException("StreamPlay did not expose its internal source list")
+        val sources = entries.mapNotNull { source ->
+            source ?: return@mapNotNull null
+            val sourceClass = source.javaClass
+            val id = sourceClass.getMethod("getId").invoke(source) as? String
+            val name = sourceClass.getMethod("getName").invoke(source) as? String
+            if (id.isNullOrBlank() || name.isNullOrBlank()) {
+                null
+            } else {
+                WorkerPluginSourceDescriptor(id.trim(), name.trim())
+            }
+        }
+            .distinctBy(WorkerPluginSourceDescriptor::id)
+            .sortedWith(compareBy(WorkerPluginSourceDescriptor::name, WorkerPluginSourceDescriptor::id))
+        require(sources.size <= 256) { "StreamPlay exposed too many internal sources" }
+        require(sources.all { it.id.length <= 1024 && it.name.length <= 1024 }) {
+            "StreamPlay source metadata exceeds its size limit"
+        }
+        return sources
+    }
+
+    private fun describeStreamPlaySources(providers: List<MainAPI>, pluginFile: File): ArrayNode =
+        ProviderRpcJson.mapper.createArrayNode().also { result ->
+            streamPlaySources(providers, pluginFile).forEach { source ->
+                result.add(ProviderRpcJson.mapper.createObjectNode().put("id", source.id).put("name", source.name))
+            }
+        }
 
     private fun describePlugin(pluginFile: File): ObjectNode {
         val plugin = ExtensionLoader.getPlugin(pluginFile.absolutePath) as? Plugin

@@ -1,3 +1,5 @@
+> **Auras Orbit source note:** This is an upstream CloudStream architecture document retained with the reference source. It describes CloudStream's shared application design, not Orbit's current desktop architecture. See the [repository README](../../README.md) and [desktop app notes](../../desktop-app/README.md) for Orbit-specific guidance.
+
 ## Motivation
 
 This readme is documentation for humans to understand ***why***, and ***not how*** the core architecture

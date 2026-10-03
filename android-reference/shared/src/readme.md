@@ -1,3 +1,5 @@
+> **Auras Orbit source note:** This describes source sets in the upstream CloudStream reference tree. The Auras Orbit product currently builds as a Windows desktop application; see the [repository README](../../../README.md) for its supported platform and build instructions.
+
 https://kotlinlang.org/docs/multiplatform/compose-multiplatform-create-first-app.html#examine-the-project-structure
 
 `jvmMain` contains source files for the desktop target, which uses Kotlin/JVM.

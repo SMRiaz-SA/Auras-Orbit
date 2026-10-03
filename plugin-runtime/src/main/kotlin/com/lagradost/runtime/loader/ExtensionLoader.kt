@@ -321,84 +321,6 @@ object ExtensionLoader {
                 }
             }
 
-            if (finalInternalName == "StreamPlay") {
-                try {
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "use_trakt_source",
-                        type = "Boolean",
-                        defaultValue = false,
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "provider_concurrency",
-                        type = "Int",
-                        defaultValue = -1,
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "enabled_plugins_saved",
-                        type = "StringSet",
-                        defaultValue = setOf("StreamPlay", "StreamPlay-Anime"),
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "streamplay_stremio_saved_links",
-                        type = "String",
-                        defaultValue = "",
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "streamplay_stremio_addon_saved_links",
-                        type = "String",
-                        defaultValue = "",
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "wyzie_key",
-                        type = "String",
-                        defaultValue = "",
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "tmdb_language_code",
-                        type = "String",
-                        defaultValue = "en-US",
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "token",
-                        type = "String",
-                        defaultValue = "",
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "disabled_providers",
-                        type = "StringSet",
-                        defaultValue = emptySet<String>(),
-                        isGlobal = false,
-                    )
-                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
-                        pluginPrefName = "StreamPlay_",
-                        key = "provider_profiles",
-                        type = "String",
-                        defaultValue = "",
-                        isGlobal = false,
-                    )
-                    AppLogger.i("StreamPlay: Proactively registered settings keys.")
-                } catch (e: Exception) {
-                    AppLogger.e("StreamPlay: Failed to proactively register settings keys", e)
-                }
-            }
-
             instance
         }
 
@@ -769,7 +691,36 @@ object ExtensionLoader {
                                 val element = node as org.w3c.dom.Element
                                 val key = element.getAttribute("android:key")
                                 if (key.isNotEmpty()) {
+                                    // A plain Preference is a display/action row, not a persisted
+                                    // value control. Do not invent a text field for unknown XML tags.
+                                    if (element.tagName !in setOf(
+                                            "CheckBoxPreference",
+                                            "SwitchPreference",
+                                            "SwitchPreferenceCompat",
+                                            "ListPreference",
+                                            "DropDownPreference",
+                                            "MultiSelectListPreference",
+                                            "EditTextPreference",
+                                            "SeekBarPreference",
+                                        )
+                                    ) {
+                                        continue
+                                    }
+
                                     val defValueStr = element.getAttribute("android:defaultValue")
+                                    val title = element.getAttribute("android:title").takeIf { it.isNotBlank() && !it.startsWith("@") }
+                                    val summary = element.getAttribute("android:summary").takeIf { it.isNotBlank() && !it.startsWith("@") }
+                                    val order = element.getAttribute("android:order").toIntOrNull() ?: 0
+                                    var category: String? = null
+                                    var parent = element.parentNode
+                                    while (parent is org.w3c.dom.Element) {
+                                        if (parent.tagName == "PreferenceCategory") {
+                                            category = parent.getAttribute("android:title")
+                                                .takeIf { it.isNotBlank() && !it.startsWith("@") }
+                                            break
+                                        }
+                                        parent = parent.parentNode
+                                    }
                                     var type = "String"
                                     var defValue: Any = defValueStr
                                     var optionsMap: Map<String, String>? = null
@@ -779,7 +730,7 @@ object ExtensionLoader {
                                             type = "Boolean"
                                             defValue = defValueStr.equals("true", ignoreCase = true)
                                         }
-                                        "ListPreference" -> {
+                                        "ListPreference", "DropDownPreference" -> {
                                             type = "String"
                                             val entriesStr = element.getAttribute("android:entries")
                                             val valuesStr = element.getAttribute("android:entryValues")
@@ -791,17 +742,29 @@ object ExtensionLoader {
                                                 }
                                             }
                                         }
+                                        "MultiSelectListPreference" -> {
+                                            type = "StringSet"
+                                            val entriesStr = element.getAttribute("android:entries")
+                                            val valuesStr = element.getAttribute("android:entryValues")
+                                            if (entriesStr.isNotBlank() && valuesStr.isNotBlank() && !entriesStr.startsWith("@") && !valuesStr.startsWith("@")) {
+                                                val entries = entriesStr.split("|", ",").map { it.trim() }
+                                                val values = valuesStr.split("|", ",").map { it.trim() }
+                                                if (entries.size == values.size && entries.isNotEmpty()) {
+                                                    optionsMap = entries.zip(values).toMap()
+                                                }
+                                            }
+                                            defValue = if (defValueStr.isBlank() || defValueStr.startsWith("@")) {
+                                                emptySet<String>()
+                                            } else {
+                                                defValueStr.split("|", ",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                                            }
+                                        }
                                         "EditTextPreference" -> {
                                             type = "String"
                                         }
-                                        else -> {
-                                            if (defValueStr.equals("true", ignoreCase = true) || defValueStr.equals("false", ignoreCase = true)) {
-                                                type = "Boolean"
-                                                defValue = defValueStr.equals("true", ignoreCase = true)
-                                            } else if (defValueStr.toIntOrNull() != null) {
-                                                type = "Int"
-                                                defValue = defValueStr.toInt()
-                                            }
+                                        "SeekBarPreference" -> {
+                                            type = "Int"
+                                            defValue = defValueStr.toIntOrNull() ?: 0
                                         }
                                     }
                                     com.lagradost.common.storage.PluginSettingsSchemaRegistry.register(
@@ -811,6 +774,11 @@ object ExtensionLoader {
                                         defValue,
                                         false,
                                         optionsMap,
+                                        title,
+                                        summary,
+                                        category,
+                                        order,
+                                        element.tagName,
                                     )
                                     AppLogger.i("Registered XML plugin setting: $finalPrefName -> $key ($type = $defValue)")
                                 }

@@ -2,6 +2,7 @@ package androidx.preference;
 import android.os.Bundle;
 import androidx.fragment.app.Fragment;
 import android.content.Context;
+import com.lagradost.common.storage.PluginSettingsSchemaRegistry;
 @android.annotation.Implemented
 public abstract class PreferenceFragmentCompat extends Fragment {
     private PreferenceManager preferenceManager;
@@ -25,9 +26,10 @@ public abstract class PreferenceFragmentCompat extends Fragment {
     public PreferenceScreen getPreferenceScreen() { return preferenceScreen; }
     public void setPreferenceScreen(PreferenceScreen preferenceScreen) {
         this.preferenceScreen = preferenceScreen;
-        // The plugin usually sets its prefName as something from its package, 
-        // but we can try to guess it based on its class name.
-        String prefName = this.getClass().getSimpleName().replace("SettingsFragment", "").replace("Settings", "") + "_";
+        String prefName = PluginSettingsSchemaRegistry.INSTANCE.activePluginPrefName();
+        if (prefName == null || prefName.isEmpty()) {
+            prefName = this.getClass().getSimpleName().replace("SettingsFragment", "").replace("Settings", "") + "_";
+        }
         preferenceScreen.setDesktopPrefName(prefName);
     }
     public void addPreferencesFromResource(int preferencesResId) {

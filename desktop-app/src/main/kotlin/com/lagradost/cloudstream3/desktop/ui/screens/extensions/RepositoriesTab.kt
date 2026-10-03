@@ -17,6 +17,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -242,6 +247,12 @@ fun RepositoriesTab(viewModel: ExtensionsViewModel) {
     } else {
         val posterWidthDp by AppearanceConfig.posterWidthDp.collectAsState()
         val repoMinSize = (posterWidthDp * 1.8f).dp
+        val submitRepository = {
+            if (repoUrl.isNotBlank()) {
+                viewModel.onEvent(ExtensionsUiEvent.OnAddRepositoryFromInput(repoUrl))
+                repoUrl = ""
+            }
+        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             // Compact inline add-repo bar
@@ -253,18 +264,22 @@ fun RepositoriesTab(viewModel: ExtensionsViewModel) {
                 OutlinedTextField(
                     value = repoUrl,
                     onValueChange = { repoUrl = it },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onPreviewKeyEvent { event ->
+                            if (event.key == Key.Enter && event.type == KeyEventType.KeyDown) {
+                                submitRepository()
+                                true
+                            } else {
+                                false
+                            }
+                        },
                     placeholder = { Text("Repository URL or short code...") },
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
                 )
                 Button(
-                    onClick = {
-                        if (repoUrl.isNotBlank()) {
-                            viewModel.onEvent(ExtensionsUiEvent.OnAddRepositoryFromInput(repoUrl))
-                            repoUrl = ""
-                        }
-                    },
+                    onClick = submitRepository,
                     modifier = Modifier.height(56.dp),
                     shape = RoundedCornerShape(8.dp),
                 ) {

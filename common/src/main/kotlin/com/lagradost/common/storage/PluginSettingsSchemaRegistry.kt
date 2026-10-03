@@ -3,6 +3,10 @@ package com.lagradost.common.storage
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.ConcurrentHashMap
 
+fun interface PluginSettingAction {
+    fun invoke(): Boolean
+}
+
 data class PluginSettingSchema(
     val pluginPrefName: String,
     val key: String,
@@ -10,6 +14,14 @@ data class PluginSettingSchema(
     val defaultValue: Any?,
     val isGlobal: Boolean = false,
     val options: Map<String, String>? = null,
+    val title: String? = null,
+    val summary: String? = null,
+    val category: String? = null,
+    val order: Int = 0,
+    val controlType: String? = null,
+    val action: PluginSettingAction? = null,
+    val minimumNumber: Double? = null,
+    val maximumNumber: Double? = null,
 )
 
 object PluginSettingsSchemaRegistry {
@@ -18,6 +30,21 @@ object PluginSettingsSchemaRegistry {
 
     // Observable flow to trigger UI updates when new settings are detected
     val schemaUpdates = MutableStateFlow(0)
+
+    /** The plugin whose settings callback is currently being evaluated on this thread. */
+    private val activePluginName = ThreadLocal<String?>()
+
+    fun activePluginPrefName(): String? = activePluginName.get()?.let { "${it.removeSuffix("_")}_" }
+
+    fun <T> withPlugin(pluginName: String, block: () -> T): T {
+        val previous = activePluginName.get()
+        activePluginName.set(pluginName.removeSuffix("_"))
+        return try {
+            block()
+        } finally {
+            if (previous == null) activePluginName.remove() else activePluginName.set(previous)
+        }
+    }
 
     fun registerPrefName(pluginPrefName: String) {
         schemas.getOrPut(pluginPrefName) { ConcurrentHashMap() }
@@ -31,12 +58,40 @@ object PluginSettingsSchemaRegistry {
         defaultValue: Any?,
         isGlobal: Boolean = false,
         options: Map<String, String>? = null,
+        title: String? = null,
+        summary: String? = null,
+        category: String? = null,
+        order: Int = 0,
+        controlType: String? = null,
+        action: PluginSettingAction? = null,
+        minimumNumber: Double? = null,
+        maximumNumber: Double? = null,
     ) {
         val pluginMap = schemas.getOrPut(pluginPrefName) { ConcurrentHashMap() }
 
         val existing = pluginMap[key]
-        if (existing == null || existing.type != type || (existing.options == null && options != null)) {
-            pluginMap[key] = PluginSettingSchema(pluginPrefName, key, type, defaultValue, isGlobal, options ?: existing?.options)
+        val registeredAction = action?.let { callback ->
+            val owner = activePluginName.get() ?: pluginPrefName.removeSuffix("_")
+            PluginSettingAction { withPlugin(owner) { callback.invoke() } }
+        }
+        val updated = PluginSettingSchema(
+            pluginPrefName = pluginPrefName,
+            key = key,
+            type = type,
+            defaultValue = defaultValue ?: existing?.defaultValue,
+            isGlobal = isGlobal,
+            options = options ?: existing?.options,
+            title = title?.takeIf(String::isNotBlank) ?: existing?.title,
+            summary = summary?.takeIf(String::isNotBlank) ?: existing?.summary,
+            category = category?.takeIf(String::isNotBlank) ?: existing?.category,
+            order = if (order != 0 || existing == null) order else existing.order,
+            controlType = controlType ?: existing?.controlType,
+            action = registeredAction ?: existing?.action,
+            minimumNumber = minimumNumber ?: existing?.minimumNumber,
+            maximumNumber = maximumNumber ?: existing?.maximumNumber,
+        )
+        if (existing != updated) {
+            pluginMap[key] = updated
             schemaUpdates.value++
         }
     }
@@ -61,25 +116,15 @@ object PluginSettingsSchemaRegistry {
     }
 
     fun resolvePrefName(prefName: String, pluginName: String? = null): String {
-        if (schemas.containsKey(prefName) && schemas[prefName]!!.isNotEmpty()) {
-            return prefName
-        }
-        val withUnderscore = if (prefName.endsWith("_")) prefName else "${prefName}_"
-        if (schemas.containsKey(withUnderscore) && schemas[withUnderscore]!!.isNotEmpty()) {
-            return withUnderscore
-        }
+        val candidates = buildList {
+            add(prefName)
+            add(if (prefName.endsWith("_")) prefName else "${prefName}_")
+            pluginName?.removeSuffix("_")?.takeIf(String::isNotBlank)?.let { add("${it}_") }
+        }.distinct()
 
-        val cleanPref = prefName.removeSuffix("_")
-        val cleanName = pluginName?.removeSuffix("_") ?: ""
-
-        val allKeys = schemas.keys
-        val match = allKeys.firstOrNull { cleanName.isNotEmpty() && schemas[it]?.isNotEmpty() == true && cleanName.contains(it.removeSuffix("_"), ignoreCase = true) }
-            ?: allKeys.firstOrNull { schemas[it]?.isNotEmpty() == true && cleanPref.contains(it.removeSuffix("_"), ignoreCase = true) }
-            ?: allKeys.firstOrNull { schemas[it]?.isNotEmpty() == true && it.removeSuffix("_").contains(cleanPref, ignoreCase = true) }
-            ?: allKeys.firstOrNull { cleanName.isNotEmpty() && cleanName.contains(it.removeSuffix("_"), ignoreCase = true) }
-            ?: allKeys.firstOrNull { cleanPref.contains(it.removeSuffix("_"), ignoreCase = true) }
-            ?: prefName
-        return match
+        // Preference namespaces are identity boundaries. Fuzzy substring matching could show
+        // one extension's settings on another extension's page when names overlap.
+        return candidates.firstOrNull { !schemas[it].isNullOrEmpty() } ?: candidates.first()
     }
 
     fun getSettingsForPlugin(pluginPrefName: String, pluginName: String? = null): List<PluginSettingSchema> {

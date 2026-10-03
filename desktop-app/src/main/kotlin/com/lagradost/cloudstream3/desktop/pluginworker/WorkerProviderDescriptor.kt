@@ -34,3 +34,9 @@ internal data class WorkerProviderDescriptor(
     val providerType: ProviderType,
     val mainPage: List<MainPageData>,
 )
+
+/** Stable source identity returned to desktop settings without exposing plugin classes. */
+internal data class WorkerPluginSourceDescriptor(
+    val id: String,
+    val name: String,
+)

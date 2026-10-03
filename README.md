@@ -6,14 +6,14 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current source version:** Beta **0.2.0.19**<br>
-**Source build date:** 2026-10-01<br>
+**Current source version:** Beta **0.2.0.20**<br>
+**Source build date:** 2026-10-04<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds appear on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
 ## Navigate this guide
 
-[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Make it yours](#make-it-yours) · [Browse and discover](#browse-and-discover) · [Playback and torrents](#playback-and-torrents) · [Profiles and privacy](#profiles-and-privacy) · [Build from source](#build-from-source)
+[Why Orbit](#why-orbit) · [Visual tour](#visual-tour) · [Quick start](#quick-start) · [Make it yours](#make-it-yours) · [Extension settings](#extension-settings) · [Browse and discover](#browse-and-discover) · [Playback and torrents](#playback-and-torrents) · [Profiles and privacy](#profiles-and-privacy) · [Build from source](#build-from-source)
 
 ## Why Orbit
 
@@ -61,6 +61,12 @@ Orbit includes controls for shaping both the look of the app and the way its mai
 
 Appearance options are under **Settings → Appearance**. Create and manage profiles from the profile selector. The built-in **Help & Manual** explains the app's screens and setup.
 
+### Extension settings
+
+Orbit renders declared AndroidX preferences as desktop controls for supported setting types, including switches, text, lists, multi-select lists, and seek bars. Changes are staged until you choose **Apply**. The extension reloads after its settings are saved.
+
+Some extensions provide custom Android screens instead of standard preferences. Orbit supports those only when a desktop adapter is available. If a screen has no adapter, Orbit reports that it is unsupported instead of guessing settings from internal plugin data.
+
 ## Browse and discover
 
 The **Explore** dashboard brings together four destinations:
@@ -73,7 +79,7 @@ Catalog results can be checked against enabled Stremio stream add-ons using the 
 
 ## Playback and torrents
 
-Orbit includes its MPV native library in the portable package. You can use MPV inside Orbit or select VLC as an external player when VLC is installed. The player settings include audio adjustments such as equalization, volume normalization, and audio delay.
+Orbit includes its MPV native library in the portable package. You can use MPV inside Orbit or select VLC as an external player when VLC is installed. VLC is optional and must be installed separately; Orbit detects a standard VLC installation or a VLC executable on PATH and launches it in its own window. Some links that need additional request headers are routed to MPV for compatibility. When using VLC, control playback in VLC itself; Orbit's pause and seek controls are not currently connected to the external player. MPV settings include audio adjustments such as equalization, volume normalization, and audio delay.
 
 Windows must provide the Microsoft Edge **WebView2 Evergreen Runtime** for Orbit's embedded player interface. WebView2 is an app component, not the Edge browser, and it does not change your default browser.
 
@@ -111,7 +117,7 @@ cd Auras-Orbit
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ~~~
 
-The local packaging helper builds and verifies the portable app, Windows installer, and a source ZIP containing the complete source tree. The CloudStream-compatible library and Orbit's episode-date fixes are included directly in **android-reference/**; no submodule setup or patch step is needed.
+The local packaging helper builds and verifies the portable app, Windows installer, and a source ZIP containing the complete source tree. It checks formatting, compilation, JVM and native tests, and packaged deliverables. The CloudStream-compatible library and Orbit's episode-date fixes are included directly in **android-reference/**; no submodule setup or patch step is needed.
 
 GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using the project's self-hosted Windows x64 runner. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v**.
 

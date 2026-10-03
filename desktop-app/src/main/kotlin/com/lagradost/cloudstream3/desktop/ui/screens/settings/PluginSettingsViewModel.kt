@@ -17,7 +17,11 @@ data class PluginSettingsUiState(
     val activePrefName: String = "",
     val settings: List<PluginSettingSchema> = emptyList(),
     val currentValues: Map<String, Any?> = emptyMap(),
+    val originalValues: Map<String, Any?> = emptyMap(),
     val hasChanged: Boolean = false,
+    val isSaving: Boolean = false,
+    val closeWhenSaved: Boolean = false,
+    val saveError: String? = null,
     val isLoading: Boolean = true,
 ) : UiState
 
@@ -25,6 +29,7 @@ sealed interface PluginSettingsUiEvent : UiEvent {
     data class OnInit(val pluginName: String, val prefName: String) : PluginSettingsUiEvent
     data class OnSettingChanged(val schema: PluginSettingSchema, val newValue: Any?) : PluginSettingsUiEvent
     data class OnSchemaUpdated(val updateTick: Int) : PluginSettingsUiEvent
+    data object OnApply : PluginSettingsUiEvent
 }
 
 sealed interface PluginSettingsUiEffect : UiEffect
@@ -41,6 +46,7 @@ class PluginSettingsViewModel : BaseMviViewModel<PluginSettingsUiState, PluginSe
             }
             is PluginSettingsUiEvent.OnSchemaUpdated -> reloadSettings()
             is PluginSettingsUiEvent.OnSettingChanged -> updateSetting(event.schema, event.newValue)
+            PluginSettingsUiEvent.OnApply -> applySettings()
         }
     }
 
@@ -50,8 +56,8 @@ class PluginSettingsViewModel : BaseMviViewModel<PluginSettingsUiState, PluginSe
 
         val activePrefName = PluginSettingsSchemaRegistry.resolvePrefName(state.prefName, state.pluginName)
         val settings = PluginSettingsSchemaRegistry.getSettingsForPlugin(activePrefName, state.pluginName).sortedWith(
-            compareBy<PluginSettingSchema> { getCategoryPriority(it.key) }
-                .thenBy { getFriendlyName(it.key) },
+            compareBy<PluginSettingSchema> { it.order }
+                .thenBy { it.title ?: it.key },
         )
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -71,6 +77,11 @@ class PluginSettingsViewModel : BaseMviViewModel<PluginSettingsUiState, PluginSe
                     activePrefName = activePrefName,
                     settings = settings,
                     currentValues = map,
+                    originalValues = map,
+                    hasChanged = false,
+                    isSaving = false,
+                    closeWhenSaved = false,
+                    saveError = null,
                     isLoading = false,
                 )
             }
@@ -80,47 +91,63 @@ class PluginSettingsViewModel : BaseMviViewModel<PluginSettingsUiState, PluginSe
     private fun updateSetting(schema: PluginSettingSchema, newValue: Any?) {
         val fullKey = if (schema.isGlobal) schema.key else schema.pluginPrefName + schema.key
 
-        // Optimistic UI update
         updateState {
             val updatedValues = currentValues.toMutableMap()
             updatedValues[fullKey] = newValue
-            copy(currentValues = updatedValues, hasChanged = true)
+            copy(
+                currentValues = updatedValues,
+                hasChanged = updatedValues != originalValues,
+                closeWhenSaved = false,
+            )
+        }
+    }
+
+    private fun applySettings() {
+        val snapshot = uiState.value
+        if (!snapshot.hasChanged) {
+            updateState { copy(closeWhenSaved = true) }
+            return
         }
 
-        // DB update
+        updateState { copy(isSaving = true, closeWhenSaved = false, saveError = null) }
         viewModelScope.launch(Dispatchers.IO) {
-            if (newValue == null) {
-                if (schema.isGlobal) {
-                    DataStore.removeKey(fullKey)
+            val changed = snapshot.settings.mapNotNull { schema ->
+                val fullKey = if (schema.isGlobal) schema.key else schema.pluginPrefName + schema.key
+                if (snapshot.currentValues[fullKey] == snapshot.originalValues[fullKey]) {
+                    null
                 } else {
-                    DesktopDataStore.removeKey(fullKey)
-                }
-            } else {
-                if (schema.isGlobal) {
-                    DataStore.setKey(fullKey, newValue)
-                } else {
-                    DesktopDataStore.setKey(fullKey, newValue)
+                    Triple(schema, fullKey, snapshot.currentValues[fullKey])
                 }
             }
-            // Force a refresh of the Home screen provider dropdown
-            com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager.incrementSyncGeneration()
-        }
-    }
 
-    private fun getCategoryPriority(key: String): Int {
-        val lKey = key.lowercase()
-        return when {
-            lKey.contains("domain") || lKey.contains("url") -> 0
-            lKey.contains("account") || lKey.contains("login") || lKey.contains("email") -> 1
-            lKey.contains("password") || lKey.contains("token") -> 2
-            lKey.contains("channel") || lKey.contains("source") -> 3
-            else -> 4
-        }
-    }
+            try {
+                val pluginValues = changed.filter { !it.first.isGlobal && it.third != null }
+                    .associate { it.second to it.third }
+                val pluginRemovals = changed.filter { !it.first.isGlobal && it.third == null }
+                    .map { it.second }
+                    .toSet()
+                if (pluginValues.isNotEmpty() || pluginRemovals.isNotEmpty()) {
+                    DesktopDataStore.setKeys(pluginValues, pluginRemovals)
+                }
 
-    private fun getFriendlyName(key: String): String {
-        return key.replace("_", " ").replace("-", " ")
-            .split(" ")
-            .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+                changed.filter { it.first.isGlobal }.forEach { (_, fullKey, value) ->
+                    if (value == null) DataStore.removeKey(fullKey) else DataStore.setKey(fullKey, value)
+                }
+
+                com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager.incrementSyncGeneration()
+                updateState {
+                    copy(
+                        originalValues = snapshot.currentValues,
+                        hasChanged = currentValues != snapshot.currentValues,
+                        isSaving = false,
+                        closeWhenSaved = currentValues == snapshot.currentValues,
+                        saveError = null,
+                    )
+                }
+            } catch (error: Throwable) {
+                com.lagradost.common.logging.AppLogger.e("Could not save plugin settings", error)
+                updateState { copy(isSaving = false, saveError = error.message ?: "Could not save plugin settings") }
+            }
+        }
     }
 }

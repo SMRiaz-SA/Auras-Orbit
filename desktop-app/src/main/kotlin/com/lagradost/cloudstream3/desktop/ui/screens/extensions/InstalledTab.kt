@@ -17,6 +17,8 @@ import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamAlertDialog
 import com.lagradost.cloudstream3.desktop.ui.components.ExtensionCard
 import com.lagradost.cloudstream3.desktop.ui.screens.PluginSettingsDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.extensions.contract.ExtensionsUiEvent
+import com.lagradost.cloudstream3.desktop.ui.screens.settings.DesktopPluginSettingsAdapters
+import com.lagradost.cloudstream3.desktop.ui.screens.settings.DesktopPluginSettingsContext
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.runtime.loader.ExtensionLoader
 import kotlinx.coroutines.launch
@@ -43,8 +45,8 @@ fun InstalledTab(
         CloudstreamAlertDialog(
             show = true,
             onDismissRequest = { showUnsupportedWarning = false },
-            title = { Text("Unsupported Feature") },
-            text = { Text("Custom Android settings UI (Layer 3) is not supported on Desktop.\n\nPlease go to Settings -> Extensions from the sidebar to configure this plugin.") },
+            title = { Text("Settings Not Available") },
+            text = { Text("This extension defines a custom Android settings screen, and Auras Orbit does not have a desktop adapter for it yet. Its settings cannot be changed here.") },
             confirmButton = {
                 TextButton(onClick = { showUnsupportedWarning = false }) {
                     Text("OK")
@@ -194,8 +196,18 @@ fun InstalledTab(
                     val instance = remember(plugin) {
                         ExtensionLoader.getPlugin(plugin.file.absolutePath) as? com.lagradost.cloudstream3.plugins.Plugin
                     }
+                    val settingsAdapterContext = remember(plugin) {
+                        DesktopPluginSettingsContext(
+                            internalName = plugin.internalName,
+                            displayName = plugin.name,
+                            prefName = prefName,
+                            jarFile = plugin.file,
+                        )
+                    }
+                    val hasDesktopAdapter = DesktopPluginSettingsAdapters.hasAdapter(settingsAdapterContext)
                     val hasSchemaSettings = com.lagradost.common.storage.PluginSettingsSchemaRegistry.hasSettings(prefName, plugin.name)
-                    val showSettings = hasSchemaSettings || instance?.openSettings != null
+                    val showSettings = hasSchemaSettings || instance?.openSettings != null || hasDesktopAdapter
+                    var adapterNotice by remember(plugin.file.absolutePath) { mutableStateOf<String?>(null) }
 
                     ExtensionCard(
                         name = plugin.name,
@@ -224,15 +236,22 @@ fun InstalledTab(
                         },
                         showSettings = showSettings,
                         onSettingsClick = {
-                            showDynamicSettings = true
-                            if (instance?.openSettings != null) {
+                            adapterNotice = DesktopPluginSettingsAdapters.prepare(settingsAdapterContext)
+                            if (!hasDesktopAdapter && instance?.openSettings != null) {
                                 try {
-                                    instance.openSettings?.invoke(android.content.DesktopContextProvider.context)
+                                    com.lagradost.common.storage.PluginSettingsSchemaRegistry.withPlugin(plugin.internalName) {
+                                        instance.openSettings?.invoke(android.content.DesktopContextProvider.context)
+                                    }
                                 } catch (e: Throwable) {
-                                    com.lagradost.common.logging.AppLogger.i("Executed openSettings fallback: ${e.message}")
+                                    com.lagradost.common.logging.AppLogger.i("Could not inspect plugin settings: ${e.message}")
                                 }
                             }
-                            if (!com.lagradost.common.storage.PluginSettingsSchemaRegistry.hasSettings(prefName, plugin.name) && instance?.openSettings == null) {
+                            val settingsAvailable = hasDesktopAdapter ||
+                                com.lagradost.common.storage.PluginSettingsSchemaRegistry.hasSettings(prefName, plugin.name)
+                            if (settingsAvailable) {
+                                showDynamicSettings = true
+                            } else {
+                                showDynamicSettings = false
                                 showUnsupportedWarning = true
                             }
                         },
@@ -243,6 +262,7 @@ fun InstalledTab(
                             pluginName = plugin.name,
                             prefName = prefName,
                             jarFile = plugin.file,
+                            adapterNotice = adapterNotice,
                             onDismiss = {
                                 showDynamicSettings = false
                                 viewModel.onEvent(ExtensionsUiEvent.OnReloadPluginAfterSettings(plugin.file, plugin.name))

@@ -1,3 +1,5 @@
+> **Auras Orbit source note:** This directory contains the upstream CloudStream reference source used by Orbit's desktop compatibility layer. The installation and contribution instructions below describe upstream CloudStream, not Auras Orbit. For Orbit setup and desktop build instructions, see the [repository README](../README.md).
+
 # CloudStream
 
 **⚠️ Warning: By default, this app doesn't provide any video sources; you have to install extensions to add functionality to the app.**

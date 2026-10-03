@@ -58,10 +58,46 @@ class DesktopSharedPreferences implements SharedPreferences {
         } catch (Exception e) {
             // Ignored
         }
-        if (callingPlugin != null && (prefName.equals("com.lagradost.cloudstream3_") || prefName.equals("rebuild_preference_"))) {
-            return callingPlugin + "_";
+        if (callingPlugin == null) {
+            String scopedPrefName = com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.activePluginPrefName();
+            if (scopedPrefName != null && !scopedPrefName.isEmpty()) {
+                callingPlugin = scopedPrefName.substring(0, scopedPrefName.length() - 1);
+            }
+        }
+        if (callingPlugin != null) {
+            String cleanPreferenceName = prefName.endsWith("_")
+                ? prefName.substring(0, prefName.length() - 1)
+                : prefName;
+            if (cleanPreferenceName.equals("com.lagradost.cloudstream3") ||
+                cleanPreferenceName.equals("rebuild_preference") ||
+                cleanPreferenceName.equals(callingPlugin)) {
+                return callingPlugin + "_";
+            }
+            if (cleanPreferenceName.startsWith(callingPlugin + "_")) {
+                return cleanPreferenceName + "_";
+            }
+            String scopedPreferenceName = callingPlugin + "_" + cleanPreferenceName + "_";
+            migrateLegacyPreferenceNamespace(prefName, scopedPreferenceName, callingPlugin, cleanPreferenceName);
+            return scopedPreferenceName;
         }
         return prefName;
+    }
+
+    private void migrateLegacyPreferenceNamespace(String legacyPrefix, String scopedPrefix, String pluginName, String preferenceName) {
+        if (legacyPrefix.equals(scopedPrefix)) return;
+        String markerInput = pluginName.length() + ":" + pluginName + preferenceName;
+        String marker = "__plugin_pref_namespace_v1_" + java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(markerInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Boolean migrated = DesktopDataStore.INSTANCE.getKey(marker, Boolean.class);
+        if (Boolean.TRUE.equals(migrated)) return;
+
+        for (String legacyKey : DesktopDataStore.INSTANCE.getAllKeysWithPrefix(legacyPrefix)) {
+            String scopedKey = scopedPrefix + legacyKey.substring(legacyPrefix.length());
+            if (DesktopDataStore.INSTANCE.containsKey(scopedKey)) continue;
+            Object value = DesktopDataStore.INSTANCE.getKey(legacyKey, Object.class);
+            if (value != null) DesktopDataStore.INSTANCE.setKey(scopedKey, value);
+        }
+        DesktopDataStore.INSTANCE.setKey(marker, true);
     }
 
     private String getFullKey(String key) {
@@ -70,40 +106,58 @@ class DesktopSharedPreferences implements SharedPreferences {
 
     @Override
     public Map<String, ?> getAll() {
-        return new HashMap<>();
+        String actualPref = getActualPref();
+        Map<String, Object> decodedValues = new HashMap<>();
+        for (String fullKey : DesktopDataStore.INSTANCE.getAllKeysWithPrefix(actualPref)) {
+            String key = fullKey.substring(actualPref.length());
+            java.util.concurrent.ConcurrentHashMap<String, com.lagradost.common.storage.PluginSettingSchema> schemas =
+                com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.getSchemas().get(actualPref);
+            com.lagradost.common.storage.PluginSettingSchema schema = schemas == null ? null : schemas.get(key);
+            Object value = null;
+            if (schema != null) {
+                switch (schema.getType()) {
+                    case "String": value = getString(key, null); break;
+                    case "Boolean": value = getBoolean(key, false); break;
+                    case "Int": value = getInt(key, 0); break;
+                    case "Long": value = getLong(key, 0L); break;
+                    case "Float": value = getFloat(key, 0F); break;
+                    case "StringSet": value = getStringSet(key, Collections.emptySet()); break;
+                    default: value = DesktopDataStore.INSTANCE.getKey(fullKey, Object.class);
+                }
+            } else {
+                value = DesktopDataStore.INSTANCE.getKey(fullKey, Object.class);
+            }
+            if (value != null) decodedValues.put(key, value);
+        }
+        return decodedValues;
     }
 
     @Override
     public String getString(String key, String defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "String", defValue, false);
         String val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), String.class);
         return val != null ? val : defValue;
     }
 
     @Override
     public int getInt(String key, int defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "Int", defValue, false);
         Integer val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), Integer.class);
         return val != null ? val : defValue;
     }
 
     @Override
     public long getLong(String key, long defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "Long", defValue, false);
         Long val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), Long.class);
         return val != null ? val : defValue;
     }
 
     @Override
     public float getFloat(String key, float defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "Float", defValue, false);
         Float val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), Float.class);
         return val != null ? val : defValue;
     }
 
     @Override
     public boolean getBoolean(String key, boolean defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "Boolean", defValue, false);
         Boolean val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), Boolean.class);
         return val != null ? val : defValue;
     }
@@ -111,14 +165,12 @@ class DesktopSharedPreferences implements SharedPreferences {
     @SuppressWarnings("unchecked")
     @Override
     public Set<String> getStringSet(String key, Set<String> defValue) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "StringSet", defValue, false);
         Set val = DesktopDataStore.INSTANCE.getKey(getFullKey(key), Set.class);
         return val != null ? (Set<String>) val : defValue;
     }
 
     @Override
     public boolean contains(String key) {
-        com.lagradost.common.storage.PluginSettingsSchemaRegistry.INSTANCE.register(getActualPref(), key, "Boolean", true, false);
         return com.lagradost.common.storage.DesktopDataStore.INSTANCE.containsKey(getFullKey(key));
     }
 

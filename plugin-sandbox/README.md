@@ -1,6 +1,6 @@
 # CloudStream Plugin Sandbox
 
-This module is a compatibility analyzer for Cloudstream plugins (`.cs3` files). It scans and exercises plugins with the app's class-loading rules; it is not an operating-system security sandbox. Only analyze plugins you trust.
+This module is a compatibility analyzer for CloudStream plugins (`.cs3` files). It scans and exercises plugins with the app's class-loading rules; it is not an operating-system security sandbox or a guarantee that a plugin is safe. Only analyze plugins you trust.
 
 Because Cloudstream plugins are built for Android, they often try to call Android-specific APIs (like `android.widget.Toast` or `android.util.Base64`). The Sandbox analyzes these plugins and runs them to tell you exactly which Android APIs are missing, which ones are safely faked (stubbed), and which ones are properly implemented for the Desktop port.
 
@@ -8,9 +8,9 @@ Because Cloudstream plugins are built for Android, they often try to call Androi
 
 If you want to test an entire repository of plugins without downloading them by hand, we have built an automated fetcher!
 
-Run this command, replacing the URL with any valid Cloudstream repository JSON URL (like the mega-repo):
-```bash
-./gradlew :sandbox:runFetcher --args="https://raw.githubusercontent.com/recloudstream/cloudstream-extensions/master/plugins.json"
+From the repository root, run this PowerShell command with a CloudStream repository JSON URL:
+```powershell
+.\gradlew.bat :sandbox:runFetcher --args="https://raw.githubusercontent.com/recloudstream/cloudstream-extensions/master/plugins.json"
 ```
 
 The script will:
@@ -27,8 +27,8 @@ Once you have a `.cs3` file downloaded, run the following command and point it t
 
 **Example Usage:**
 If you want to test `SoraStream.cs3` inside the `test_plugins` folder, run:
-```bash
-./gradlew :sandbox:run --args="plugin-sandbox/test_plugins/SoraStream.cs3"
+```powershell
+.\gradlew.bat :sandbox:run --args="plugin-sandbox/test_plugins/SoraStream.cs3"
 ```
 
 ## 📊 What It Does
@@ -37,19 +37,19 @@ If you want to test `SoraStream.cs3` inside the `test_plugins` folder, run:
    - ✅ **Implemented Core APIs**: Safe to use, fully implemented data logic.
    - ⚠️ **Stubbed UI APIs**: Safe to use, faked out so the app doesn't crash on UI calls.
    - ❌ **Missing APIs**: Danger! These need to be added to the `:android-stubs` module.
-3. **Deep Execution Testing**
+3. **Compatibility execution**
 
-Once the static scans finish, the sandbox will isolate the plugin in a custom `SafePluginClassLoader`, invoke its `load()` method, and attempt to run a basic `getMainPage()` and `search()` request against it to see if it crashes. It then saves a full `.txt` report to the `reports/` folder.
+Once the static scans finish, the analyzer loads the plugin through a custom `SafePluginClassLoader`, invokes its `load()` method, and attempts basic `getMainPage()` and `search()` requests. This class loader does not isolate operating-system access. The analyzer saves a `.txt` report under its reports directory.
 
 ---
 
 ## 🏗️ Core vs Stub APIs (How it Works)
 
-The Sandbox Analyzer dynamically scans the plugin's bytecode to detect exactly which Android APIs it relies on, and then checks your `:android-stubs` module to categorize them.
+The analyzer scans plugin bytecode for Android API references and checks the `:android-stubs` module to categorize them.
 
 **How do we decide what gets stubbed vs implemented?**
 
-All Android fake APIs are written in `android-stubs/src/main/java/android/...`
+Desktop compatibility APIs are implemented in `android-stubs/src/main/java/android/...`.
 
 ### 1. Dummy Stubs (`@Stub`)
 If the API is purely related to the Android User Interface or OS visual elements (e.g., `Toast`, `ScrollView`, `ProgressBar`, `Activity`, `WindowInsets`), we write an empty dummy file and annotate it with `@Stub`.

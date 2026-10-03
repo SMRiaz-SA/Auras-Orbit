@@ -1,3 +1,5 @@
+> **Auras Orbit source note:** This is the upstream CloudStream extension API documentation. Orbit includes this library and adds a desktop compatibility layer; the root README and [desktop app notes](../../desktop-app/README.md) describe Orbit-specific behavior.
+
 ## CloudStream extension library
 
 This is the official API surface for all CloudStream plugins.

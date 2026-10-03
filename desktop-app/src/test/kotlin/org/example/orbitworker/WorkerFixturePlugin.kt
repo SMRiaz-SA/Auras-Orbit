@@ -15,6 +15,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.PlayListItem
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newDrmExtractorLink
+import com.lagradost.common.storage.PluginSettingsSchemaRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.File
@@ -31,8 +32,9 @@ class WorkerFixturePlugin : Plugin() {
 
     override fun load(context: Context) {
         Settings.context = context
-        // Mirror providers that register plugin settings during load. The worker replays these
+        // Mirror providers that declare plugin settings during load. The worker replays these
         // schemas after every process restart, before it sends the ready response.
+        PluginSettingsSchemaRegistry.register("WorkerFixture_", "relay_mode", "String", "worker-default")
         context.getSharedPreferences("WorkerFixture", Context.MODE_PRIVATE)
             .getString("relay_mode", "worker-default")
         registerMainAPI(Provider())

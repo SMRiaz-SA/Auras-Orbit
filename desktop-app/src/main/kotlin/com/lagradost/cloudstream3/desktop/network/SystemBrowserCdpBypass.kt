@@ -10,6 +10,7 @@ import java.io.File
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
@@ -427,6 +428,138 @@ object SystemBrowserCdpBypass {
             return null
         }
     }
+
+    /**
+     * Opens Febbox's own Google sign-in page in a temporary isolated Chromium profile and
+     * returns only the `ui` cookie expected by StreamPlay. The browser profile is destroyed
+     * after completion so unrelated browser cookies never enter the app's cookie store.
+     */
+    suspend fun launchFebboxLogin(): String? {
+        val browserFile = resolveBrowserExecutable()
+            ?: throw IllegalStateException("Install or configure Microsoft Edge or Google Chrome to sign in to Febbox.")
+
+        val sessionDirName = "Auras_Febbox_Login_${System.currentTimeMillis()}"
+        val userDataDir = File(System.getProperty("java.io.tmpdir"), sessionDirName).apply { mkdirs() }
+        val port = (10_000..19_999).random()
+        val loginUrl = "https://www.febbox.com/login/google?jump=%2F"
+        val process = try {
+            ProcessBuilder(
+                browserFile.absolutePath,
+                "--new-window",
+                "--user-data-dir=${userDataDir.absolutePath}",
+                "--remote-debugging-port=$port",
+                "--remote-allow-origins=*",
+                "--disable-extensions",
+                "--disable-sync",
+                "--no-default-browser-check",
+                "--no-first-run",
+                loginUrl,
+            ).start()
+        } catch (error: Throwable) {
+            userDataDir.deleteRecursively()
+            throw error
+        }
+
+        try {
+            val webSocketUrl = awaitPageWebSocket(port, process)
+                ?: return null
+            return withTimeoutOrNull(5 * 60 * 1000L) {
+                awaitFebboxToken(webSocketUrl, process)
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                destroyBrowserSession(process, sessionDirName, userDataDir)
+            }
+        }
+    }
+
+    private suspend fun awaitPageWebSocket(port: Int, process: Process): String? {
+        repeat(60) {
+            if (!process.isAlive) return null
+            delay(500)
+            try {
+                val req = Request.Builder().url("http://127.0.0.1:$port/json").build()
+                client.newCall(req).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val targets = mapper.readValue<List<CdpTarget>>(response.body.string())
+                        targets.firstOrNull { it.type == "page" }?.webSocketDebuggerUrl?.let { return it }
+                    }
+                }
+            } catch (_: Exception) {
+                // Chromium's debugging endpoint may take several seconds to start.
+            }
+        }
+        return null
+    }
+
+    private suspend fun awaitFebboxToken(webSocketUrl: String, process: Process): String? =
+        suspendCancellableCoroutine { continuation ->
+            val completed = AtomicBoolean(false)
+            var pollingJob: Job? = null
+            var loginSocket: WebSocket? = null
+
+            fun finish(result: String?) {
+                if (!completed.compareAndSet(false, true)) return
+                pollingJob?.cancel()
+                if (continuation.isActive) continuation.resume(result)
+                loginSocket?.close(1000, "Febbox login finished")
+            }
+
+            loginSocket = client.newWebSocket(
+                Request.Builder().url(webSocketUrl).build(),
+                object : WebSocketListener() {
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        pollingJob = cdpScope.launch {
+                            var requestId = 30_000
+                            webSocket.send("""{"id": 1, "method": "Network.enable"}""")
+                            while (isActive && !completed.get()) {
+                                if (!process.isAlive) {
+                                    finish(null)
+                                    break
+                                }
+                                webSocket.send("""{"id": ${++requestId}, "method": "Network.getAllCookies"}""")
+                                delay(750)
+                            }
+                        }
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        try {
+                            val tree = mapper.readTree(text)
+                            if (tree.get("id")?.asInt() == 1) return
+                            val cookies = tree.get("result")?.get("cookies") ?: return
+                            if (!cookies.isArray) return
+
+                            for (cookie in cookies) {
+                                if (cookie.get("name")?.asText() != "ui") continue
+                                val domain = cookie.get("domain")?.asText().orEmpty().trimStart('.').lowercase()
+                                if (domain != "febbox.com" && !domain.endsWith(".febbox.com")) continue
+                                val value = cookie.get("value")?.asText().orEmpty()
+                                if (value.isNotBlank() && !value.contains(';')) {
+                                    finish("ui=$value")
+                                    return
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // Ignore unrelated CDP events; the polling loop requests cookies again.
+                        }
+                    }
+
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        finish(null)
+                    }
+
+                    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        finish(null)
+                    }
+                },
+            )
+
+            continuation.invokeOnCancellation {
+                pollingJob?.cancel()
+                loginSocket.close(1000, "Febbox login cancelled")
+            }
+        }
 
     private suspend fun waitForClearance(session: ProxySession, targetUrl: String, host: String): ClearanceResult? {
         val port = session.port

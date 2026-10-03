@@ -27,6 +27,7 @@ fun PluginSettingsDialog(
     pluginName: String,
     prefName: String,
     jarFile: java.io.File? = null,
+    adapterNotice: String? = null,
     onDismiss: () -> Unit,
 ) {
     val schemaUpdates by PluginSettingsSchemaRegistry.schemaUpdates.collectAsState()
@@ -51,7 +52,12 @@ fun PluginSettingsDialog(
     val settings = uiState.settings
     val currentValues = uiState.currentValues
     val hasChanged = uiState.hasChanged
+    val isSaving = uiState.isSaving
     val isLoading = uiState.isLoading
+
+    LaunchedEffect(uiState.closeWhenSaved) {
+        if (uiState.closeWhenSaved) onDismiss()
+    }
 
     CloudstreamCustomDialog(
         show = true,
@@ -84,7 +90,7 @@ fun PluginSettingsDialog(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Configure sub-providers, accounts, and scraper channels",
+                        text = "Desktop settings exposed by this extension",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -134,27 +140,39 @@ fun PluginSettingsDialog(
                         contentPadding = PaddingValues(vertical = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                        if (!adapterNotice.isNullOrBlank()) {
+                            item {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(
-                                        text = "⚠️",
-                                        fontSize = 15.sp,
-                                        modifier = Modifier.padding(end = 10.dp),
-                                    )
-                                    Text(
-                                        text = "Experimental: Settings are bridged from Android packages and may not take effect.",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        text = adapterNotice,
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(14.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        uiState.saveError?.let { message ->
+                            item {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = message,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(14.dp),
                                     )
                                 }
                             }
@@ -170,7 +188,7 @@ fun PluginSettingsDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(
-                                        text = "ℹ️ Changes saved. Reload the plugin or close this settings box to apply new provider configurations in real-time.",
+                                        text = "Changes are staged. Apply & Close saves them to this plugin’s preferences, then reloads the plugin.",
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         style = MaterialTheme.typography.bodySmall,
                                         modifier = Modifier.padding(14.dp),
@@ -187,25 +205,18 @@ fun PluginSettingsDialog(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "No configurable options or sub-providers found.",
+                                        text = "This extension has no AndroidX preference screen or desktop adapter that Auras Orbit can display.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
                         } else {
-                            val grouped = settings.groupBy { getCategory(it.key) }
-
-                            // Sort categories so General settings show first, then Stremio, then APIs, then Providers
-                            val sortedCategories = grouped.keys.sortedBy { category ->
-                                when (category) {
-                                    "General Configurations" -> 0
-                                    "Accounts & API Integrations" -> 1
-                                    "Stremio Catalogs & Addons" -> 2
-                                    "Sub-Providers & Channels" -> 3
-                                    else -> 4
-                                }
-                            }
+                            val grouped = settings.groupBy { it.category?.takeIf(String::isNotBlank) ?: "Settings" }
+                            val sortedCategories = grouped.keys.sortedWith(
+                                compareBy<String> { category -> grouped[category].orEmpty().minOfOrNull { it.order } ?: 0 }
+                                    .thenBy { it },
+                            )
 
                             sortedCategories.forEach { category ->
                                 item {
@@ -222,7 +233,7 @@ fun PluginSettingsDialog(
                                     }
                                 }
 
-                                items(grouped[category].orEmpty(), key = { it.key }) { schema ->
+                                items(grouped[category].orEmpty().sortedWith(compareBy({ it.order }, { it.title ?: it.key })), key = { it.key }) { schema ->
                                     val fullKey = if (schema.isGlobal) schema.key else schema.pluginPrefName + schema.key
                                     val currentValue = currentValues[fullKey]
                                     com.lagradost.cloudstream3.desktop.ui.screens.PluginSettingItem(
@@ -252,11 +263,22 @@ fun PluginSettingsDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 Button(
-                    onClick = onDismiss,
+                    onClick = {
+                        if (hasChanged) {
+                            viewModel.onEvent(PluginSettingsUiEvent.OnApply)
+                        } else {
+                            onDismiss()
+                        }
+                    },
+                    enabled = !isSaving,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 ) {
-                    Text("Apply & Close", fontWeight = FontWeight.Bold)
+                    if (isSaving) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (isSaving || hasChanged) "Apply & Close" else "Close", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -328,3 +350,9 @@ internal fun getDescription(key: String): String {
         else -> "Adjust configuration setting for $friendly."
     }
 }
+
+internal fun getSettingTitle(schema: com.lagradost.common.storage.PluginSettingSchema): String =
+    schema.title?.takeIf(String::isNotBlank) ?: getFriendlyName(schema.key)
+
+internal fun getSettingSummary(schema: com.lagradost.common.storage.PluginSettingSchema): String? =
+    schema.summary?.takeIf(String::isNotBlank)
