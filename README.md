@@ -119,7 +119,7 @@ pwsh -File .\.github\scripts\build-local-deliverables.ps1
 
 The local packaging helper builds and verifies the portable app, Windows installer, and a source ZIP containing the complete source tree. It checks formatting, compilation, JVM and native tests, and packaged deliverables. The CloudStream-compatible library and Orbit's episode-date fixes are included directly in **android-reference/**; no submodule setup or patch step is needed.
 
-GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using the project's self-hosted Windows x64 runner. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v**.
+GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using GitHub-hosted Windows x64 runners. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v**.
 
 The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in **gradle.properties** to change the app version; installer version metadata is generated under **desktop-app/build/generated/installer/**.
 

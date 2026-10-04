@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: [ self-hosted, Windows, X64, auras-orbit ]
+    runs-on: windows-latest
     timeout-minutes: 60
 
     steps:
