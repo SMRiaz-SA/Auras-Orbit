@@ -123,6 +123,12 @@ GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatch
 
 The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in **gradle.properties** to change the app version; installer version metadata is generated under **desktop-app/build/generated/installer/**.
 
+## Acknowledgements
+
+Auras Orbit builds on source code and extension APIs from the [CloudStream project](https://github.com/recloudstream/cloudstream), adapted for Windows desktop compatibility. Thank you to the CloudStream maintainers and contributors, and to the teams behind [Kotlin](https://kotlinlang.org/), [Compose Multiplatform](https://www.jetbrains.com/compose-multiplatform/), [MPV](https://mpv.io/), and the many libraries Orbit depends on.
+
+For full attribution and license details, see [NOTICE.md](NOTICE.md) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## License and support
 
 Auras Orbit is distributed under the [GNU GPL v3](LICENSE). See [NOTICE.md](NOTICE.md) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for attribution and dependency notices. The project is independent and is not affiliated with the Android CloudStream project.
