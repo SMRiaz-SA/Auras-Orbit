@@ -6,10 +6,11 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current source version:** Beta **0.2.0.21**<br>
+**Current source version:** Beta **0.2.0.22**<br>
 **Source build date:** 2026-10-06<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
-**Downloads:** Published builds appear on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
+**Downloads:** Published builds appear on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
+**Changelog:** [Release history](CHANGELOG.md)
 
 ## Navigate this guide
 

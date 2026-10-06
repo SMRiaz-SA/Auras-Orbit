@@ -424,7 +424,7 @@ class DesktopHomeViewModel(
     }
 
     private fun loadCategory(provider: MainAPI, pageData: MainPageData) {
-        val cacheKey = "${provider.name}_${provider.mainUrl}_${pageData.name}_${pageData.data}"
+        val cacheKey = homeCategoryStateKey(provider, pageData)
         val cachedResponse = categoryCache[cacheKey]
         val currentState = uiState.value.categories[cacheKey]
 

@@ -140,7 +140,7 @@ fun ComposeHomeScreen(
                             HomeCategorySection(
                                 pageData = pageData,
                                 provider = currentProvider,
-                                categoryState = uiState.categories["${currentProvider.name}_${pageData.name}"],
+                                categoryState = uiState.categories[homeCategoryStateKey(currentProvider, pageData)],
                                 onLoadCategory = {
                                     viewModel.onEvent(HomeUiEvent.OnLoadCategory(currentProvider, pageData))
                                 },
