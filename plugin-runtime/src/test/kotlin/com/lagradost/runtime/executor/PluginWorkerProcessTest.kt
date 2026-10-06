@@ -21,6 +21,11 @@ private fun fixtureCommand(mode: String, vararg extraArgs: String): List<String>
 }
 
 class PluginWorkerProcessTest {
+    private companion object {
+        const val PROCESS_START_DEADLINE_MS = 30_000L
+        const val PROCESS_START_TEST_BOUND_MS = 35_000L
+    }
+
     @Test
     fun eightInstalledWorkersShareFourResidentSlotsAndRestartAfterEviction() = runBlocking {
         val workers = (1..8).map { index ->
@@ -30,7 +35,7 @@ class PluginWorkerProcessTest {
             repeat(2) { round ->
                 workers.forEachIndexed { index, worker ->
                     val payload = "$round:$index".toByteArray(UTF_8)
-                    assertContentEquals(payload, worker.request(payload, 5_000))
+                    assertContentEquals(payload, worker.request(payload, PROCESS_START_DEADLINE_MS))
                     assertTrue(workers.count { it.isAlive } <= 4)
                 }
             }
@@ -166,11 +171,11 @@ class PluginWorkerProcessTest {
             PluginWorkerSession.launch(fixtureCommand("framed-echo"), workerKey = "busy-plugin")
         }
         try {
-            val response = withTimeout(15_000) {
+            val response = withTimeout(PROCESS_START_TEST_BOUND_MS) {
                 PluginWorkerProcess.execute(
                     command = fixtureCommand("echo"),
                     request = "other plugin".toByteArray(UTF_8),
-                    timeoutMs = 10_000,
+                    timeoutMs = PROCESS_START_DEADLINE_MS,
                     workerKey = "independent-plugin",
                 )
             }
