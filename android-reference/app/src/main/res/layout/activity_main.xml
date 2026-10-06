@@ -16,7 +16,7 @@
             android:id="@+id/nav_rail_view"
             android:layout_width="@dimen/nav_rail_view_width"
             android:layout_height="match_parent"
-            android:background="?attr/primaryGrayBackground"
+            android:background="?attr/primaryBlackBackground"
             android:descendantFocusability="afterDescendants"
             app:itemIconTint="@color/item_select_color"
             app:itemTextColor="@color/item_select_color"
@@ -39,7 +39,7 @@
             android:layout_height="@dimen/nav_view_height"
             android:layout_width="0dp"
             app:labelVisibilityMode="unlabeled"
-            android:background="?attr/primaryGrayBackground"
+            android:background="?attr/primaryBlackBackground"
 
             app:itemIconTint="@color/item_select_color"
             app:itemTextColor="@color/item_select_color"

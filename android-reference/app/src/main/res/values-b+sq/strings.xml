@@ -24,8 +24,8 @@
     <string name="new_update_format" formatted="true">U gjet update i ri!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">Luaj me CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">Kryefaqja</string>
     <string name="title_search">Kërko</string>
     <string name="title_downloads">Shkarkimet</string>
@@ -496,7 +496,7 @@
     <string name="no_repository_found_error">Repository nuk u gjet, verifiko URL-në ose provoje me VPN</string>
     <string name="safe_mode_description">Të gjitha shtesat u ndaluan për shkak të një gabimi për të ndihmuar në gjetjen e shkaktarit.</string>
     <string name="view_public_repositories_button_short">Lista publike</string>
-    <string name="blank_repo_message">CloudStream nuk vjen me faqe të instaluara. Duhet ti shtosh faqet nga repository-t.\n\nNa u bashko në Discord ose kërko në internet.</string>
+    <string name="blank_repo_message">Auras Orbit nuk vjen me faqe të instaluara. Duhet ti shtosh faqet nga repository-t.\n\nNa u bashko në Discord ose kërko në internet.</string>
     <string name="extension_authors">Autorët</string>
     <string name="plugin_singular">shtesë</string>
     <string name="uppercase_all_subtitles">Titrat vetëm me shkronja të mëdha</string>
@@ -524,7 +524,7 @@
     <string name="hls_playlist">Lista e HLS</string>
     <string name="plugin">shtesa</string>
     <string name="extension_rating" formatted="true">Vlerësimi: %s</string>
-    <string name="download_all_plugins_from_repo">Paralajmërim: CloudStream nuk mban asnjë përgjegjësi për përdorimin e shtesave të palëve të treta dhe nuk ofron asnjë mbështetje për to!</string>
+    <string name="download_all_plugins_from_repo">Paralajmërim: Auras Orbit nuk mban asnjë përgjegjësi për përdorimin e shtesave të palëve të treta dhe nuk ofron asnjë mbështetje për to!</string>
     <string name="extension_status">Statusi</string>
     <string name="delete_repository">Fshi repository-n</string>
     <string name="extension_version">Versioni</string>
@@ -561,9 +561,9 @@
     <string name="dismiss">Largo</string>
     <string name="open_downloaded_repo">Hap repository-n</string>
     <string name="battery_dialog_title">Çaktivizo kursimin e baterisë</string>
-    <string name="battery_dialog_message">Për të siguruar shkarkime të pandërprera dhe njoftime për serialet e abonuar, CloudStream ka nevojë për leje për të funksionuar në sfond. Duke shtypur OK, do t’ju shfaqet një dialog kërkese. Ju lutem shtypni “Lejo”.\n\nJu lutemi vini re: kjo leje nuk do të thotë që CS3 do të harxhojë baterinë tuaj. Do të funksionojë në sfond vetëm kur është e nevojshme, si p.sh. kur merr njoftime ose shkarkon video nga shtesat zyrtare.</string>
+    <string name="battery_dialog_message">Për të siguruar shkarkime të pandërprera dhe njoftime për serialet e abonuar, Auras Orbit ka nevojë për leje për të funksionuar në sfond. Duke shtypur OK, do t’ju shfaqet një dialog kërkese. Ju lutem shtypni “Lejo”.\n\nJu lutemi vini re: kjo leje nuk do të thotë që Auras Orbit do të harxhojë baterinë tuaj. Do të funksionojë në sfond vetëm kur është e nevojshme, si p.sh. kur merr njoftime ose shkarkon video nga shtesat zyrtare.</string>
     <string name="app_unrestricted_toast">Përdorimi i baterisë është i vendosur si i pakufizuar</string>
-    <string name="app_info_intent_error">Informacioni i aplikacionit CloudStream nuk mund të hapet.</string>
+    <string name="app_info_intent_error">Informacioni i aplikacionit Auras Orbit nuk mund të hapet.</string>
     <string name="update_notification_downloading">Po shkarkohet përditësimi i aplikacionit…</string>
     <string name="update_notification_installing">Po instalohet përditësimi i aplikacionit…</string>
     <string name="update_notification_failed">Instalimi i versionit të ri dështoi</string>
@@ -644,15 +644,15 @@
     <string name="auto_rotate_video">Rrotullim automatik</string>
     <string name="favorite">I preferuar</string>
     <string name="unfavorite">Hiq nga të preferuarat</string>
-    <string name="biometric_authentication_title">Hap CloudStream-in</string>
+    <string name="biometric_authentication_title">Hap Auras Orbit-in</string>
     <string name="biometric_setting">Kyç me biometrikë</string>
     <string name="password_pin_authentication_title">Verifikim me fjalëkalim/PIN</string>
     <string name="biometric_unsupported">Biometrikat nuk janë të disponueshme në këtë pajisje</string>
     <string name="biometric_setting_summary">Hap aplikacionin me gjurmë gishti, Face ID, PIN, Pattern ose fjalëkalim.</string>
     <string name="biometric_prompt_description">Pas disa përpjekjesh të dështuara, rifillo aplikacionin për ta provuar përsëri.</string>
-    <string name="biometric_warning">Të dhënat tuaja të CloudStream janë kopjuar tani. Edhe pse mundësia është shumë e ulët, disa pajisje mund të sillen ndryshe. Në raste të rralla, nëse bllokoheni nga hyrja në aplikacion, fshini plotësisht të dhënat e aplikacionit dhe rikthejini ato nga kopja rezervë. Na vjen shumë keq për çdo shqetësim që mund të shkaktohet nga kjo.</string>
+    <string name="biometric_warning">Të dhënat tuaja të Auras Orbit janë kopjuar tani. Edhe pse mundësia është shumë e ulët, disa pajisje mund të sillen ndryshe. Në raste të rralla, nëse bllokoheni nga hyrja në aplikacion, fshini plotësisht të dhënat e aplikacionit dhe rikthejini ato nga kopja rezervë. Na vjen shumë keq për çdo shqetësim që mund të shkaktohet nga kjo.</string>
     <string name="reset_btn">Rivendos</string>
-    <string name="cs3wiki">CloudStream Wiki</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="device_pin_url_message">Vizitoni <b>%s</b> në telefonin ose kompjuterin tuaj dhe futni kodin e mësipërm</string>
     <string name="device_pin_error_message">Nuk u mor kodi PIN i pajisjes, provo verifikim lokal</string>
     <string name="device_pin_expired_message">PIN-i ka skaduar!</string>

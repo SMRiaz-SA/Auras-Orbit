@@ -38,11 +38,30 @@ import java.io.IOException
 import java.io.InputStreamReader
 
 object InAppUpdater {
-    private const val GITHUB_USER_NAME = "recloudstream"
-    private const val GITHUB_REPO = "cloudstream"
+    private const val GITHUB_USER_NAME = "SMRiaz-SA"
+    private const val GITHUB_REPO = "Auras-Orbit"
+    private const val ANDROID_PRERELEASE_TAG = "android-pre-release"
 
-    private const val PRERELEASE_PACKAGE_NAME = "com.lagradost.cloudstream3.prerelease"
+    private const val PRERELEASE_PACKAGE_NAME = "com.auras.orbit.prerelease"
     private const val LOG_TAG = "InAppUpdater"
+
+    private val apkVersionRegex = Regex("""(\d+\.\d+\.\d+(?:\.\d+)?)\.apk$""", RegexOption.IGNORE_CASE)
+    private val versionNameRegex = Regex("""(\d+\.\d+\.\d+(?:\.\d+)?)""")
+    private val numericVersionRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$""")
+
+    private fun androidVersionCode(versionName: String?): Long? {
+        val match = versionName?.let(numericVersionRegex::matchEntire) ?: return null
+        val major = match.groupValues[1].toLongOrNull() ?: return null
+        val minor = match.groupValues[2].toLongOrNull() ?: return null
+        val patch = match.groupValues[3].toLongOrNull() ?: return null
+        val build = match.groupValues[4].toLongOrNull() ?: 0L
+        if (major !in 0..21 || minor !in 0..99 || patch !in 0..99 || build !in 0..9999) return null
+
+        return major * 100_000_000L + minor * 1_000_000L + patch * 10_000L + build
+    }
+
+    private fun apkVersionName(fileName: String): String? =
+        apkVersionRegex.find(fileName)?.groupValues?.getOrNull(1)
 
     @Serializable
     private data class GithubAsset(
@@ -104,47 +123,38 @@ object InAppUpdater {
             app.get(url, headers = headers).text
         ).toList()
 
-        val versionRegex = Regex("""(.*?((\d+)\.(\d+)\.(\d+))\.apk)""")
-        val versionRegexLocal = Regex("""(.*?((\d+)\.(\d+)\.(\d+)).*)""")
-        val foundList = response.filter { rel ->
-            !rel.prerelease
-        }.sortedWith(compareBy { release ->
-            release.assets.firstOrNull { it.contentType == "application/vnd.android.package-archive" }?.name?.let { it1 ->
-                versionRegex.find(it1)?.groupValues?.let {
-                    it[3].toInt() * 100_000_000 + it[4].toInt() * 10_000 + it[5].toInt()
-                }
+        val latestAndroidRelease = response
+            .filterNot { it.prerelease }
+            .mapNotNull { release ->
+                val asset = release.assets.firstOrNull { candidate ->
+                    candidate.contentType == "application/vnd.android.package-archive" &&
+                        apkVersionName(candidate.name) != null
+                } ?: return@mapNotNull null
+                val versionName = apkVersionName(asset.name) ?: return@mapNotNull null
+                val versionCode = androidVersionCode(versionName) ?: return@mapNotNull null
+                Triple(release, asset, versionCode)
             }
-        }).toList()
+            .maxByOrNull { it.third }
+            ?: return Update(false, null, null, null, null)
 
-        val found = foundList.lastOrNull()
-        val foundAsset = found?.assets?.getOrNull(0)
-        val foundVersion = foundAsset?.name?.let { versionRegex.find(it) }
-
-        if (foundVersion == null) {
-            return Update(false, null, null, null, null)
-        }
+        val (found, foundAsset, foundVersionCode) = latestAndroidRelease
+        val foundVersion = apkVersionName(foundAsset.name)
+            ?: return Update(false, null, null, null, null)
 
         val currentVersion = packageName?.let {
             packageManager.getPackageInfo(it, 0)
         }
 
-        val shouldUpdate = if (foundAsset.browserDownloadUrl.isBlank()) {
-            false
-        } else {
-            currentVersion?.versionName?.let { versionName ->
-                versionRegexLocal.find(versionName)?.groupValues?.let {
-                    it[3].toInt() * 100_000_000 + it[4].toInt() * 10_000 + it[5].toInt()
-                }
-            }?.compareTo(
-                foundVersion.groupValues.let {
-                    it[3].toInt() * 100_000_000 + it[4].toInt() * 10_000 + it[5].toInt()
-                })!! < 0
+        val currentVersionCode = currentVersion?.versionName?.let { versionName ->
+            androidVersionCode(versionNameRegex.find(versionName)?.groupValues?.getOrNull(1))
         }
+        val shouldUpdate = !foundAsset.browserDownloadUrl.isBlank() &&
+            currentVersionCode?.let { foundVersionCode > it } == true
 
         return Update(
             shouldUpdate,
             foundAsset.browserDownloadUrl,
-            foundVersion.groupValues[2],
+            foundVersion,
             found.body,
             found.nodeId
         )
@@ -152,20 +162,19 @@ object InAppUpdater {
 
     private suspend fun Activity.getPreReleaseUpdate(): Update {
         val tagUrl =
-            "https://api.github.com/repos/$GITHUB_USER_NAME/$GITHUB_REPO/git/ref/tags/pre-release"
+            "https://api.github.com/repos/$GITHUB_USER_NAME/$GITHUB_REPO/git/ref/tags/$ANDROID_PRERELEASE_TAG"
         val releaseUrl = "https://api.github.com/repos/$GITHUB_USER_NAME/$GITHUB_REPO/releases"
         val headers = mapOf("Accept" to "application/vnd.github.v3+json")
         val response = parseJson<Array<GithubRelease>>(
             app.get(releaseUrl, headers = headers).text
         ).toList()
 
-        val found = response.lastOrNull { rel ->
-            rel.prerelease || rel.tagName == "pre-release"
-        }
+        val found = response.lastOrNull { it.tagName == ANDROID_PRERELEASE_TAG }
 
-        val foundAsset = found?.assets?.filter { it ->
-            it.contentType == "application/vnd.android.package-archive"
-        }?.getOrNull(0)
+        val foundAsset = found?.assets?.firstOrNull {
+            it.contentType == "application/vnd.android.package-archive" &&
+                it.name.startsWith("AurasOrbit", ignoreCase = true)
+        }
 
         if (foundAsset == null) {
             return Update(false, null, null, null, null)
@@ -189,7 +198,7 @@ object InAppUpdater {
     private suspend fun Activity.downloadUpdate(url: String): Boolean {
         try {
             Log.d(LOG_TAG, "Downloading update: $url")
-            val appUpdateName = "CloudStream"
+            val appUpdateName = "AurasOrbit"
             val appUpdateSuffix = "apk"
 
             // Delete all old updates

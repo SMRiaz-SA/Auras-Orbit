@@ -2,8 +2,8 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
         <item
             android:id="@+id/navigation_home"
-            android:icon="@drawable/home_icon_selector"
-            android:title="@string/title_home" />
+            android:icon="@drawable/auras_explore_icon"
+            android:title="@string/title_explore" />
         <item
             android:id="@+id/navigation_search"
             android:icon="@drawable/search_icon"

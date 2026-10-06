@@ -24,8 +24,8 @@
     <string name="new_update_format" formatted="true">ພົບການອັບເດດໃໝ່!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">ເນື້ອຫາເສີມ (Filler)</string>
     <string name="duration_format" formatted="true">%d ນາທີ</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">ຫຼິ້ນດ້ວຍ CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">ໜ້າຫຼັກ</string>
     <string name="title_search">ຄົ້ນຫາ</string>
     <string name="title_downloads">ດາວໂຫຼດ</string>
@@ -506,11 +506,11 @@
     <string name="plugins_disabled" formatted="true">ປິດການໃຊ້ງານ: %d</string>
     <string name="plugins_not_downloaded" formatted="true">ຍັງບໍ່ໄດ້ດາວໂຫຼດ: %d</string>
     <string name="plugins_updated" formatted="true">ອັບເດດແລ້ວ %d ປລັກອິນ</string>
-    <string name="blank_repo_message">CloudStream ບໍ່ມີເວັບໄຊຕິດຕັ້ງມາໃຫ້ແຕ່ທຳອິດ. ເຈົ້າຕ້ອງຕິດຕັ້ງເວັບໄຊຈາກບ່ອນເກັບຂໍ້ມູນ (Repositories). \n \nເຂົ້າຮ່ວມ Discord ຂອງພວກເຮົາ ຫຼື ຄົ້ນຫາທາງອອນລາຍ.</string>
+    <string name="blank_repo_message">Auras Orbit ບໍ່ມີເວັບໄຊຕິດຕັ້ງມາໃຫ້ແຕ່ທຳອິດ. ເຈົ້າຕ້ອງຕິດຕັ້ງເວັບໄຊຈາກບ່ອນເກັບຂໍ້ມູນ (Repositories). \n \nເຂົ້າຮ່ວມ Discord ຂອງພວກເຮົາ ຫຼື ຄົ້ນຫາທາງອອນລາຍ.</string>
     <string name="view_public_repositories_button">ເບິ່ງບ່ອນເກັບຂໍ້ມູນຂອງຊຸມຊົນ</string>
     <string name="view_public_repositories_button_short">ລາຍການສາທາລະນະ</string>
     <string name="uppercase_all_subtitles">ເຮັດໃຫ້ຄຳບັນຍາຍທັງໝົດເປັນຕົວພິມໃຫຍ່</string>
-    <string name="download_all_plugins_from_repo">ຄຳເຕືອນ: CloudStream ບໍ່ມີສ່ວນຮັບຜິດຊອບໃດໆໃນການໃຊ້ສ່ວນເສີມຈາກບຸກຄົນທີສາມ ແລະ ບໍ່ມີການຊ່ວຍເຫຼືອສຳລັບພວກມັນ!</string>
+    <string name="download_all_plugins_from_repo">ຄຳເຕືອນ: Auras Orbit ບໍ່ມີສ່ວນຮັບຜິດຊອບໃດໆໃນການໃຊ້ສ່ວນເສີມຈາກບຸກຄົນທີສາມ ແລະ ບໍ່ມີການຊ່ວຍເຫຼືອສຳລັບພວກມັນ!</string>
     <string name="single_plugin_disabled" formatted="true">%s (ປິດໃຊ້ງານ)</string>
     <string name="tracks">ແທຣັກ</string>
     <string name="audio_tracks">ແທຣັກສຽງ</string>
@@ -561,9 +561,9 @@
     <string name="dismiss">ຍົກເລີກ</string>
     <string name="open_downloaded_repo">ເປີດບ່ອນເກັບຂໍ້ມູນ</string>
     <string name="battery_dialog_title">ປິດການປະຢັດແບັດເຕີຣີ</string>
-    <string name="battery_dialog_message">ເພື່ອໃຫ້ການດາວໂຫຼດ ແລະ ການແຈ້ງເຕືອນລາຍການທີ່ຕິດຕາມບໍ່ຖືກຂັດຈັງຫວະ, CloudStream ຕ້ອງການການອະນຸຍາດໃຫ້ເຮັດວຽກຢູ່ພື້ນຫຼັງ. ເມື່ອກົດ ຕົກລົງ, ເຈົ້າຈະເຫັນໜ້າຕ່າງຂໍອະນຸຍາດ, ກະລຸນາກົດ \'ອະນຸຍາດ\'.\n\nໝາຍເຫດ: ການອະນຸຍາດນີ້ບໍ່ໄດ້ໝາຍຄວາມວ່າແອັບຈະກິນແບັດເຕີຣີ. ມັນຈະເຮັດວຽກຢູ່ພື້ນຫຼັງສະເພາະເວລາທີ່ຈຳເປັນ ເຊັ່ນ: ເວລາຮັບການແຈ້ງເຕືອນ ຫຼື ດາວໂຫຼດວິດີໂອ.</string>
+    <string name="battery_dialog_message">ເພື່ອໃຫ້ການດາວໂຫຼດ ແລະ ການແຈ້ງເຕືອນລາຍການທີ່ຕິດຕາມບໍ່ຖືກຂັດຈັງຫວະ, Auras Orbit ຕ້ອງການການອະນຸຍາດໃຫ້ເຮັດວຽກຢູ່ພື້ນຫຼັງ. ເມື່ອກົດ ຕົກລົງ, ເຈົ້າຈະເຫັນໜ້າຕ່າງຂໍອະນຸຍາດ, ກະລຸນາກົດ \'ອະນຸຍາດ\'.\n\nໝາຍເຫດ: ການອະນຸຍາດນີ້ບໍ່ໄດ້ໝາຍຄວາມວ່າແອັບຈະກິນແບັດເຕີຣີ. ມັນຈະເຮັດວຽກຢູ່ພື້ນຫຼັງສະເພາະເວລາທີ່ຈຳເປັນ ເຊັ່ນ: ເວລາຮັບການແຈ້ງເຕືອນ ຫຼື ດາວໂຫຼດວິດີໂອ.</string>
     <string name="app_unrestricted_toast">ການໃຊ້ແບັດເຕີຣີຂອງແອັບຖືກຕັ້ງເປັນແບບບໍ່ຈຳກັດແລ້ວ</string>
-    <string name="app_info_intent_error">ບໍ່ສາມາດເປີດຂໍ້ມູນແອັບ CloudStream ໄດ້.</string>
+    <string name="app_info_intent_error">ບໍ່ສາມາດເປີດຂໍ້ມູນແອັບ Auras Orbit ໄດ້.</string>
     <string name="update_notification_downloading">ກຳລັງດາວໂຫຼດອັບເດດແອັບ…</string>
     <string name="update_notification_installing">ກຳລັງຕິດຕັ້ງອັບເດດແອັບ…</string>
     <string name="update_notification_failed">ບໍ່ສາມາດຕິດຕັ້ງເວີຊັນໃໝ່ຂອງແອັບໄດ້</string>
@@ -652,15 +652,15 @@
     <string name="auto_rotate_video">ໝຸນອັດຕະໂນມັດ</string>
     <string name="favorite">ມັກ</string>
     <string name="unfavorite">ເລີກມັກ</string>
-    <string name="biometric_authentication_title">ປົດລັອກ CloudStream</string>
+    <string name="biometric_authentication_title">ປົດລັອກ Auras Orbit</string>
     <string name="biometric_setting">ລັອກດ້ວຍໄບໂອເມທຣິກ (ລາຍນິ້ວມື/ໃບໜ້າ)</string>
     <string name="password_pin_authentication_title">ການຢືນຢັນດ້ວຍລະຫັດຜ່ານ/PIN</string>
     <string name="biometric_unsupported">ອຸປະກອນນີ້ບໍ່ຮອງຮັບການຢືນຢັນດ້ວຍໄບໂອເມທຣິກ</string>
     <string name="biometric_setting_summary">ປົດລັອກແອັບດ້ວຍລາຍນິ້ວມື, ໃບໜ້າ, PIN, ຮູບແບບ ຫຼື ລະຫັດຜ່ານ.</string>
     <string name="biometric_prompt_description">ຫຼັງຈາກພະຍາຍາມລົ້ມເຫຼວຫຼາຍຄັ້ງ, ໜ້າຕ່າງຈະປິດລົງ. ໃຫ້ເລີ່ມແອັບໃໝ່ເພື່ອລອງອີກຄັ້ງ.</string>
-    <string name="biometric_warning">ຂໍ້ມູນ CloudStream ຂອງທ່ານຖືກສຳຮອງໄວ້ແລ້ວ. ເຖິງແມ່ນວ່າມັນຈະເກີດຂຶ້ນໄດ້ຍາກ, ແຕ່ອຸປະກອນແຕ່ລະເຄື່ອງອາດເຮັດວຽກຕ່າງກັນ. ໃນກໍລະນີທີ່ທ່ານຖືກລັອກບໍ່ໃຫ້ເຂົ້າເຖິງແອັບ, ໃຫ້ລ້າງຂໍ້ມູນແອັບທັງໝົດ ແລະ ກູ້ຄືນຈາກໄຟລ໌ສຳຮອງ. ພວກເຮົາຂໍອະໄພໃນຄວາມບໍ່ສະດວກ.</string>
+    <string name="biometric_warning">ຂໍ້ມູນ Auras Orbit ຂອງທ່ານຖືກສຳຮອງໄວ້ແລ້ວ. ເຖິງແມ່ນວ່າມັນຈະເກີດຂຶ້ນໄດ້ຍາກ, ແຕ່ອຸປະກອນແຕ່ລະເຄື່ອງອາດເຮັດວຽກຕ່າງກັນ. ໃນກໍລະນີທີ່ທ່ານຖືກລັອກບໍ່ໃຫ້ເຂົ້າເຖິງແອັບ, ໃຫ້ລ້າງຂໍ້ມູນແອັບທັງໝົດ ແລະ ກູ້ຄືນຈາກໄຟລ໌ສຳຮອງ. ພວກເຮົາຂໍອະໄພໃນຄວາມບໍ່ສະດວກ.</string>
     <string name="reset_btn">ຕັ້ງຄ່າໃໝ່</string>
-    <string name="cs3wiki">CloudStream Wiki</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="device_pin_url_message">ເຂົ້າໄປທີ່ <b>%s</b> ໃນມືຖື ຫຼື ຄອມພິວເຕີຂອງທ່ານ ແລະ ໃສ່ລະຫັດຂ້າງເທິງ</string>
     <string name="device_pin_error_message">ບໍ່ສາມາດຮັບລະຫັດ PIN ຂອງອຸປະກອນໄດ້, ລອງຢືນຢັນຕົວຕົນພາຍໃນເຄື່ອງ</string>
     <string name="device_pin_expired_message">ລະຫັດ PIN ໝົດອາຍຸແລ້ວ!</string>

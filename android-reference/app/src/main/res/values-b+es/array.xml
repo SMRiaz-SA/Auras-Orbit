@@ -170,6 +170,7 @@
     </array>
 
     <string-array name="themes_overlay_names">
+        <item>Auras Orbit</item>
         <item>Normal</item>
         <item>Diente de león amarilla</item>
         <item>Rosa clavel</item>
@@ -194,6 +195,7 @@
         <item>Material You (Secondary)</item>
     </string-array>
     <string-array name="themes_overlay_names_values">
+        <item>Auras</item>
         <item>Normal</item>
         <item>DandelionYellow</item>
         <item>CarnationPink</item>
@@ -220,6 +222,7 @@
 
 
     <string-array name="themes_names">
+        <item>Auras Orbit</item>
         <item>Oscuro</item>
         <item>Gris</item>
         <item>Amoled</item>
@@ -231,6 +234,7 @@
         <item>Azul Silencioso</item>
     </string-array>
     <string-array name="themes_names_values">
+        <item>Auras</item>
         <item>AmoledLight</item>
         <item>Black</item>
         <item>Amoled</item>

@@ -316,7 +316,7 @@ object CommonActivity {
     fun updateTheme(act: Activity) {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(act)
         if (settingsManager
-                .getString(act.getString(R.string.app_theme_key), "AmoledLight") == "System"
+                .getString(act.getString(R.string.app_theme_key), "Auras") == "System"
             && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         ) {
             loadThemes(act)
@@ -341,7 +341,8 @@ object CommonActivity {
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(act)
 
         val currentTheme =
-            when (settingsManager.getString(act.getString(R.string.app_theme_key), "AmoledLight")) {
+            when (settingsManager.getString(act.getString(R.string.app_theme_key), "Auras")) {
+                "Auras" -> R.style.AurasMode
                 "System" -> mapSystemTheme(act)
                 "Black" -> R.style.AppTheme
                 "Light" -> R.style.LightMode
@@ -358,7 +359,8 @@ object CommonActivity {
             }
 
         val currentOverlayTheme =
-            when (settingsManager.getString(act.getString(R.string.primary_color_key), "Normal")) {
+            when (settingsManager.getString(act.getString(R.string.primary_color_key), "Auras")) {
+                "Auras" -> R.style.OverlayPrimaryColorAuras
                 "Normal" -> R.style.OverlayPrimaryColorNormal
                 "DandelionYellow" -> R.style.OverlayPrimaryColorDandelionYellow
                 "CarnationPink" -> R.style.OverlayPrimaryColorCarnationPink

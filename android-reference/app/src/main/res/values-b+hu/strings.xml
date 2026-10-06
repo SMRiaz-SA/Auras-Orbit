@@ -13,7 +13,7 @@
     <string name="new_update_format" formatted="true">Új frissítés található! \n%1$s -&gt; %2$s</string>
     <string name="duration_format" formatted="true">%d perc</string>
     <string name="app_dub_sub_episode_text_format" formatted="true">%1$sEp%2$d</string>
-    <string name="app_name">CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
     <string name="preview_background_img_des">Háttér Előnézet</string>
     <string name="download_failed">Letöltés sikertelen</string>
     <string name="download">Letöltés</string>
@@ -42,7 +42,7 @@
     <string name="normal_no_plot">Nem található cselekmény</string>
     <string name="continue_watching">Lejátszás folytatása</string>
     <string name="filler" formatted="true">Filler</string>
-    <string name="play_with_app_name">Lejátszás CloudStreamel</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">Kezdőlap</string>
     <string name="title_search">Keresés</string>
     <string name="title_downloads">Letöltések</string>
@@ -412,7 +412,7 @@
     <string name="subtitles_remove_captions">Zárt feliratok eltávolítása a feliratokból</string>
     <string name="is_adult">18+</string>
     <string name="delete_repository_plugins">Ez az összes tároló bővítményt is törli</string>
-    <string name="blank_repo_message">A CloudStream alapértelmezés szerint nem telepített webhelyeket. A webhelyeket a tárolókból kell telepítenie. \n \nCsatlakozz a Discord-unkhoz vagy keress online.</string>
+    <string name="blank_repo_message">A Auras Orbit alapértelmezés szerint nem telepített webhelyeket. A webhelyeket a tárolókból kell telepítenie. \n \nCsatlakozz a Discord-unkhoz vagy keress online.</string>
     <string name="extension_version">Verzió</string>
     <string name="action_mark_as_watched">Megjelölés megtekintettként</string>
     <string name="action_remove_from_watched">Eltávolítás a megnézettek közül</string>
@@ -626,7 +626,7 @@
     <string name="biometric_setting_summary">Az alkalmazás feloldása ujjlenyomat, arcfelismerés, PIN-kód, minta vagy jelszó segítségével.</string>
     <string name="biometric_prompt_description">Néhány sikertelen kísérlet után a parancssor bezárul. Egyszerűen indítsa újra az alkalmazást, és próbálja meg újra.</string>
     <string name="reset_btn">Visszaállítás</string>
-    <string name="cs3wiki">CloudStream Wiki</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="device_pin_url_message">Látogasson el <b>%s</b> okostelefonján vagy számítógépén, és írja be a fenti kódot</string>
     <string name="device_pin_error_message">Nem működik az eszköz PIN-kódja, próbálkozzon helyi hitelesítéssel</string>
     <string name="device_pin_expired_message">A PIN-kód most lejárt!</string>

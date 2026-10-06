@@ -151,7 +151,7 @@ class FcastManager {
     }
 
     companion object {
-        const val APP_PREFIX = "CloudStream"
+        const val APP_PREFIX = "Auras Orbit"
         private val _currentDevices: MutableList<PublicDeviceInfo> = mutableListOf()
         val currentDevices: List<PublicDeviceInfo> = _currentDevices
 

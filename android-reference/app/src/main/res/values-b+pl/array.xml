@@ -180,6 +180,7 @@
     </array>
 
     <string-array name="themes_overlay_names">
+        <item>Auras Orbit</item>
         <item>Normalny</item>
         <item>Żółty mniszek lekarski</item>
         <item>Goździk różowy</item>
@@ -204,6 +205,7 @@
         <item>Material You (drugorzędny)</item>
     </string-array>
     <string-array name="themes_overlay_names_values">
+        <item>Auras</item>
         <item>Normal</item>
         <item>DandelionYellow</item>
         <item>CarnationPink</item>
@@ -230,6 +232,7 @@
 
 
     <string-array name="themes_names">
+        <item>Auras Orbit</item>
         <item>Ciemny</item>
         <item>Szary</item>
         <item>Amoled</item>
@@ -241,6 +244,7 @@
         <item>Cichy Błękit</item>
     </string-array>
     <string-array name="themes_names_values">
+        <item>Auras</item>
         <item>AmoledLight</item>
         <item>Black</item>
         <item>Amoled</item>

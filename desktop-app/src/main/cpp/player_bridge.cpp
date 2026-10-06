@@ -64,9 +64,9 @@ ICoreWebView2*           g_webview           = nullptr;
 bool                     g_webviewReady      = false;
 static std::atomic<bool> g_uiReady{false};
 std::wstring             g_pendingUrl        = L"";
-std::wstring             g_controlsUrl       = L"";
+std::wstring             g_activeUiUrl       = L"";
 
-class ControlsNavigationHandler : public ICoreWebView2NavigationStartingEventHandler {
+class TrustedUiNavigationHandler : public ICoreWebView2NavigationStartingEventHandler {
     std::atomic<ULONG> refs{1};
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
@@ -81,7 +81,7 @@ public:
         PWSTR uri = nullptr;
         bool allowed = false;
         if (SUCCEEDED(args->get_Uri(&uri)) && uri) {
-            allowed = auras::isControlsUiUrl(uri, g_controlsUrl);
+            allowed = auras::isTrustedUiUrl(uri, g_activeUiUrl);
             CoTaskMemFree(uri);
         }
         args->put_Cancel(allowed ? FALSE : TRUE);
@@ -203,7 +203,7 @@ public:
         PWSTR source = nullptr;
         bool allowed = false;
         if (SUCCEEDED(args->get_Source(&source)) && source) {
-            allowed = auras::isControlsUiUrl(source, g_controlsUrl);
+            allowed = auras::isTrustedUiUrl(source, g_activeUiUrl);
             CoTaskMemFree(source);
         }
         if (!allowed) return S_OK;
@@ -475,7 +475,7 @@ public:
         EventRegistrationToken token;
         g_webview->add_WebMessageReceived(new WebMessageReceivedHandler(), &token);
         EventRegistrationToken navigationToken;
-        auto navigationHandler = new ControlsNavigationHandler();
+        auto navigationHandler = new TrustedUiNavigationHandler();
         g_webview->add_NavigationStarting(navigationHandler, &navigationToken);
         navigationHandler->Release();
 
@@ -1383,8 +1383,12 @@ JNIEXPORT void JNICALL Java_com_lagradost_cloudstream3_desktop_player_webview_Na
 
     postUiTask([wurl]() {
         auto controls = auras::normalizeControlsUrl(wurl);
-        if (controls.empty()) return;
-        g_controlsUrl = controls;
+        auto trailer = auras::normalizeLocalTrailerUrl(wurl);
+        if (controls.empty() && trailer.empty()) {
+            LOG_TO_FILE("[NativeBridge] Rejected unsupported WebView URL");
+            return;
+        }
+        g_activeUiUrl = controls.empty() ? trailer : controls;
         if (g_webview) {
             g_webview->Navigate(wurl.c_str());
         } else {

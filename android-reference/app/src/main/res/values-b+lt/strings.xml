@@ -127,7 +127,7 @@
     <string name="action_remove_watching">Pašalinti</string>
     <string name="action_open_watching">Daugiau informacijos</string>
     <string name="type_on_hold">Sustabdyta</string>
-    <string name="app_name">CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
     <string name="home_play">Paleisti</string>
     <string name="livestreams">Gyvos transliacijos</string>
     <string name="apk_installer_settings">APK įrašymas</string>
@@ -137,7 +137,7 @@
     <string name="app_language">Programos kalba</string>
     <string name="sort_close">Uždaryti</string>
     <string name="action_add_to_bookmarks">Nustatyti žiūrėjimo statusą</string>
-    <string name="play_with_app_name">Paleisti su CloudStream</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="subs_subtitle_elevation">Subtitrų lygis</string>
     <string name="episodes">Serijos</string>
     <string name="cast_format" formatted="true">Skleisti: %s</string>
@@ -179,7 +179,7 @@
     <string name="example_ip">127.0.0.1</string>
     <string name="batch_download_finish_format" formatted="true">Atsiųsta %1$d %2$s</string>
     <string name="skip_type_format" formatted="true">Praleisti %s</string>
-    <string name="blank_repo_message">Pagal numatytuosius nustatymus „CloudStream“ neturi įdiegtų svetainių. Turite įdiegti svetaines iš saugyklų. \n \nDėl beprotiško DMCA reikalavimų, kurios atliko Sky UK Limited 🤮, negalime susieti saugyklos svetainės programoje. \n \nPrisijunkite prie mūsų Discord arba ieškokite internete.</string>
+    <string name="blank_repo_message">Pagal numatytuosius nustatymus „Auras Orbit“ neturi įdiegtų svetainių. Turite įdiegti svetaines iš saugyklų. \n \nDėl beprotiško DMCA reikalavimų, kurios atliko Sky UK Limited 🤮, negalime susieti saugyklos svetainės programoje. \n \nPrisijunkite prie mūsų Discord arba ieškokite internete.</string>
     <string name="mobile_data">Mobilūs duomenys</string>
     <string name="example_username">šaunusPrisijungimoVardas</string>
     <string name="extension_authors">Autoriai</string>

@@ -14,8 +14,8 @@
     <string name="rated_format" formatted="true">تقييم: %.1f</string>
     <string name="new_update_format" formatted="true">يوجد تحديث جديد! \n%1$s -&gt; %2$s</string>
     <string name="duration_format" formatted="true">%d دقيقة</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">تشغيل بواسطة CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">الرئيسية</string>
     <string name="title_search">البحث</string>
     <string name="title_downloads">التنزيلات</string>
@@ -398,11 +398,11 @@
     <string name="plugins_downloaded" formatted="true">تم تحميل: %d</string>
     <string name="plugins_disabled" formatted="true">مُعطل %d</string>
     <string name="plugins_not_downloaded" formatted="true">غير مُحمل: %d</string>
-    <string name="blank_repo_message">لا يحتوي CloudStream على مواقع مثبتة افتراضيًا. تحتاج إلى تثبيت المواقع من المستودعات. \n \nانضم إلى ديسكورد أو ابحث عبر الإنترنت.</string>
+    <string name="blank_repo_message">لا يحتوي Auras Orbit على مواقع مثبتة افتراضيًا. تحتاج إلى تثبيت المواقع من المستودعات. \n \nانضم إلى ديسكورد أو ابحث عبر الإنترنت.</string>
     <string name="view_public_repositories_button">عرض مستودعات المجتمع</string>
     <string name="view_public_repositories_button_short">قائمة عامة</string>
     <string name="uppercase_all_subtitles">جميع الترجمات حروف كبيرة</string>
-    <string name="download_all_plugins_from_repo">تحذير: لا يتحمل CloudStream 3 أي مسؤولية عن استخدام ملحقات الطرف الثالث ولا يقدم أي دعم لها!</string>
+    <string name="download_all_plugins_from_repo">تحذير: لا يتحمل Auras Orbit أي مسؤولية عن استخدام ملحقات الطرف الثالث ولا يقدم أي دعم لها!</string>
     <string name="single_plugin_disabled" formatted="true">%s (معطل)</string>
     <string name="tracks">المسارات</string>
     <string name="audio_tracks">مسار الصوت</string>
@@ -579,7 +579,7 @@
     <string name="biometric_authentication_title">فتح سحابة البث</string>
     <string name="password_pin_authentication_title">مصادقة كلمة المرور/رقم التعريف الشخصي</string>
     <string name="biometric_prompt_description">بعد عدة محاولات فاشلة، سيتم إغلاق المطالبة. ما عليك سوى إعادة تشغيل التطبيق للمحاولة مرة أخرى.</string>
-    <string name="biometric_warning">لقد تم الآن نسخ بيانات CloudStream احتياطيًا. على الرغم من أن احتمال حدوث ذلك منخفض جدًا، إلا أن جميع الأجهزة يمكن أن تتصرف بشكل مختلف. في الحالات النادرة، التي يتم فيها منعك من الوصول إلى التطبيق، قم بمسح بيانات التطبيق بالكامل واستعادتها من نسخة احتياطية. نحن نأسف جدًا لأي إزعاج ناتج عن هذا.</string>
+    <string name="biometric_warning">لقد تم الآن نسخ بيانات Auras Orbit احتياطيًا. على الرغم من أن احتمال حدوث ذلك منخفض جدًا، إلا أن جميع الأجهزة يمكن أن تتصرف بشكل مختلف. في الحالات النادرة، التي يتم فيها منعك من الوصول إلى التطبيق، قم بمسح بيانات التطبيق بالكامل واستعادتها من نسخة احتياطية. نحن نأسف جدًا لأي إزعاج ناتج عن هذا.</string>
     <string name="resume_remaining" formatted="true">%s \nمتبقي</string>
     <string name="favorite">المفضلة</string>
     <string name="unfavorite">إزالة من المفضلة</string>
@@ -589,10 +589,10 @@
     <string name="clipboard_unknown_error">خطأ في عملية النسخ، برجاء نسخ ال logcat و ارساله الى مسؤولين دعم التطبيق.</string>
     <string name="battery_dialog_title">تعطيل تحسين البطارية</string>
     <string name="app_unrestricted_toast">تم ضبط استخدام بطارية التطبيق بالفعل على غير مقيد</string>
-    <string name="app_info_intent_error">غير قادر على فتح معلومات تطبيق CloudStream.</string>
+    <string name="app_info_intent_error">غير قادر على فتح معلومات تطبيق Auras Orbit.</string>
     <string name="audio_book_singular">كتاب صوتي</string>
     <string name="ok">حسناً</string>
-    <string name="battery_dialog_message">لضمان عدم انقطاع التنزيلات والإشعارات للعروض التلفزيونية التي اشتركت بها ، يحتاج CloudStream إلى إذن للتشغيل في الخلفية. بالضغط على \"موافق\"، سيظهر لك مربع حوار طلب. يُرجى الضغط على \"السماح\".\n\nيرجى ملاحظة أن هذا الإذن لا يعني أن CS3 سيستنزف بطاريتك. سيعمل في الخلفية فقط عند الضرورة، مثلا عند تلقي الإشعارات أو تنزيل مقاطع الفيديو من الإضافات الرسمية.</string>
+    <string name="battery_dialog_message">لضمان عدم انقطاع التنزيلات والإشعارات للعروض التلفزيونية التي اشتركت بها ، يحتاج Auras Orbit إلى إذن للتشغيل في الخلفية. بالضغط على \"موافق\"، سيظهر لك مربع حوار طلب. يُرجى الضغط على \"السماح\".\n\nيرجى ملاحظة أن هذا الإذن لا يعني أن Auras Orbit سيستنزف بطاريتك. سيعمل في الخلفية فقط عند الضرورة، مثلا عند تلقي الإشعارات أو تنزيل مقاطع الفيديو من الإضافات الرسمية.</string>
     <string name="music_singular">موسيقى</string>
     <string name="custom_media_singular">الوسائط</string>
     <string name="reset_btn">اعادة تعيين</string>
@@ -600,7 +600,7 @@
     <string name="next_season_episode_format" formatted="true">سيتم إصدار الحلقة %1$d من الموسم %2$d في</string>
     <string name="episode_action_cast_mirror">مرآة البث</string>
     <string name="player_settings_select_cast_device">حدد جهاز البث</string>
-    <string name="cs3wiki">CloudStream ويكي</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="pref_category_security">إعدادات الأمان</string>
     <string name="pref_category_accounts">الحسابات</string>
     <string name="qr_image">صورة رمز الاستجابة السريعة</string>

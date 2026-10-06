@@ -171,6 +171,7 @@
     </array>
 
     <string-array name="themes_overlay_names">
+        <item>Auras Orbit</item>
         <item>Mặc định</item>
         <item>bồ công anh màu vàng</item>
         <item>Hồng nhạt</item>
@@ -195,6 +196,7 @@
         <item>Material You (Secondary)</item>
     </string-array>
     <string-array name="themes_overlay_names_values">
+        <item>Auras</item>
         <item>Normal</item>
         <item>DandelionYellow</item>
         <item>CarnationPink</item>
@@ -221,6 +223,7 @@
 
 
     <string-array name="themes_names">
+        <item>Auras Orbit</item>
         <item>Tối</item>
         <item>Xám</item>
         <item>Amoled</item>
@@ -232,6 +235,7 @@
         <item>Xanh Lam Tĩnh Lặng</item>
     </string-array>
     <string-array name="themes_names_values">
+        <item>Auras</item>
         <item>AmoledLight</item>
         <item>Black</item>
         <item>Amoled</item>
