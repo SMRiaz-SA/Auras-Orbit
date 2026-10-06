@@ -1,6 +1,7 @@
 package com.lagradost.runtime.executor
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -44,6 +45,7 @@ object PluginWorkerProcess {
     internal const val MAX_TIMEOUT_MS = 10 * 60 * 1000L
     private const val KILL_GRACE_MS = 250L
     private const val DESCENDANT_EXIT_WAIT_MS = 2_000L
+    internal val blockingIoExecutor = Dispatchers.IO.asExecutor()
 
     suspend fun execute(
         command: List<String>,
@@ -76,12 +78,18 @@ object PluginWorkerProcess {
             val worker = process
             val workerId = worker.pid()
 
-            stdoutDrain = CompletableFuture.supplyAsync { drain(worker.inputStream, maxStdoutBytes) { destroyTree(worker) } }
-            stderrDrain = CompletableFuture.supplyAsync { drain(worker.errorStream, maxStderrBytes) { destroyTree(worker) } }
-            val writer = CompletableFuture.supplyAsync {
+            stdoutDrain = CompletableFuture.supplyAsync(
+                { drain(worker.inputStream, maxStdoutBytes) { destroyTree(worker) } },
+                blockingIoExecutor,
+            )
+            stderrDrain = CompletableFuture.supplyAsync(
+                { drain(worker.errorStream, maxStderrBytes) { destroyTree(worker) } },
+                blockingIoExecutor,
+            )
+            val writer = CompletableFuture.supplyAsync({
                 worker.outputStream.use { output -> output.write(request) }
                 Unit
-            }
+            }, blockingIoExecutor)
             requestWriter = writer
 
             if (!worker.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {

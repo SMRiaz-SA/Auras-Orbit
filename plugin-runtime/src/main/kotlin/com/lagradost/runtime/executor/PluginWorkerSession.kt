@@ -82,9 +82,9 @@ class PluginWorkerSession private constructor(
     private val stderrCapture = ByteArrayOutputStream(minOf(maxStderrBytes, 8192))
     private val stderrExceeded = AtomicBoolean(false)
     private val outputLock = Any()
-    private val stderrDrain = CompletableFuture.runAsync {
+    private val stderrDrain = CompletableFuture.runAsync({
         drainStderr(process.errorStream)
-    }
+    }, PluginWorkerProcess.blockingIoExecutor)
 
     val processId: Long get() = process.pid()
 
@@ -107,14 +107,17 @@ class PluginWorkerSession private constructor(
         require(timeoutMs in 1..PluginWorkerProcess.MAX_TIMEOUT_MS) { "Worker timeout is outside the allowed range" }
         check(isAlive) { "Plugin worker session is not alive" }
 
-        val writer = CompletableFuture.runAsync {
+        val writer = CompletableFuture.runAsync({
             synchronized(outputLock) {
                 output.writeInt(request.size)
                 output.write(request)
                 output.flush()
             }
-        }
-        val reader = CompletableFuture.supplyAsync { readFinalFrame(onIntermediateFrame, onWorkerRequest) }
+        }, PluginWorkerProcess.blockingIoExecutor)
+        val reader = CompletableFuture.supplyAsync(
+            { readFinalFrame(onIntermediateFrame, onWorkerRequest) },
+            PluginWorkerProcess.blockingIoExecutor,
+        )
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
 
         try {
