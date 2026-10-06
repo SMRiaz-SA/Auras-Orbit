@@ -2,21 +2,17 @@ package com.lagradost.cloudstream3.desktop.ui.screens.details.dialogs
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,11 +88,9 @@ fun TrailerPlayerDialog(
     CloudstreamCustomDialog(
         show = show,
         onDismissRequest = onDismissRequest,
-        modifier = Modifier
-            .fillMaxWidth(0.70f)
-            .widthIn(min = 640.dp, max = 1100.dp)
-            .wrapContentHeight(),
+        modifier = Modifier.fillMaxSize(),
         containerColor = Color.Transparent,
+        shape = RectangleShape,
     ) {
         if (trailer == null) return@CloudstreamCustomDialog
 
@@ -160,14 +155,16 @@ fun TrailerPlayerDialog(
         }
 
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Floating Top Header Bar (Trailer Title Pill on Left, Floating Close Button on Right)
+            // Keep the app controls above the native WebView surface.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp, start = 2.dp, end = 2.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -206,13 +203,12 @@ fun TrailerPlayerDialog(
                 }
             }
 
-            // 16:9 Borderless Video Card with Clean Cinema Border
+            // Use the available screen area so the native player has no rounded-edge clipping.
             Box(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(Color.Black)
-                    .border(1.dp, Color.White.copy(alpha = 0.15f)),
+                    .background(Color.Black),
             ) {
                 SwingPanel(
                     background = Color.Black,

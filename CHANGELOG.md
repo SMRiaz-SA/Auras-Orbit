@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0.23 — 2026-10-06
+
+### Added
+
+- Added the Auras Android app foundation with an Explore screen linking to catalogs, search, sources, and library.
+- Shared the desktop source version with the Android app and documented the local Android build entry point.
+
+### Fixed
+
+- Expanded the in-app trailer player to the full app window and kept its native video surface square-edged so the player no longer clips at the corners.
+- Allowed the native WebView bridge to load capability-protected local trailer URLs while continuing to reject unrelated navigation.
+
 ## 0.2.0.22 — 2026-10-06
 
 ### Fixed

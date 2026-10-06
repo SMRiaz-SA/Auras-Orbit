@@ -15,6 +15,33 @@ plugins {
 
 val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
 
+val repositoryGradleProperties = providers.fileContents(
+    rootProject.layout.projectDirectory.file("../gradle.properties")
+).asText.get()
+val aurasVersionName = Regex("(?m)^APP_VERSION\\s*=\\s*([^\\r\\n]+)")
+    .find(repositoryGradleProperties)
+    ?.groupValues
+    ?.getOrNull(1)
+    ?.trim()
+    ?: error("APP_VERSION must be set in the repository root gradle.properties file.")
+val aurasVersionParts = aurasVersionName.split(".")
+require(aurasVersionParts.size in 3..4) {
+    "APP_VERSION must contain three or four numeric components: $aurasVersionName"
+}
+val numericVersionParts = aurasVersionParts.map { part ->
+    part.toIntOrNull() ?: error("APP_VERSION must contain only numeric components: $aurasVersionName")
+}
+val (versionMajor, versionMinor, versionPatch, versionBuild) =
+    if (numericVersionParts.size == 3) numericVersionParts + 0 else numericVersionParts
+require(versionMajor in 0..21 && versionMinor in 0..99 && versionPatch in 0..99 && versionBuild in 0..9999) {
+    "Auras Android version components exceed the versionCode allocation: $aurasVersionName"
+}
+val aurasVersionCode =
+    versionMajor * 100_000_000 + versionMinor * 1_000_000 + versionPatch * 10_000 + versionBuild
+require(aurasVersionCode in 1..2_100_000_000) {
+    "APP_VERSION exceeds Android's versionCode range: $aurasVersionName"
+}
+
 abstract class GenerateGitHashTask : DefaultTask() {
 
     @get:InputFile
@@ -53,7 +80,9 @@ abstract class GenerateGitHashTask : DefaultTask() {
 }
 
 val generateGitHash = tasks.register<GenerateGitHashTask>("generateGitHash") {
-    val gitDir = layout.projectDirectory.dir("../.git")
+    // The Android project lives inside the desktop repository; resolve Git metadata
+    // from the shared repository root rather than this nested project directory.
+    val gitDir = rootProject.layout.projectDirectory.dir("../.git")
 
     headFile.set(gitDir.file("HEAD"))
     headsDir.set(gitDir.dir("refs/heads"))
@@ -103,11 +132,11 @@ android {
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.lagradost.cloudstream3"
+        applicationId = "com.auras.orbit"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = libs.versions.versionCode.get().toInt()
-        versionName = libs.versions.versionName.get()
+        versionCode = aurasVersionCode
+        versionName = aurasVersionName
 
         manifestPlaceholders["target_sdk_version"] = libs.versions.targetSdk.get()
 
@@ -176,7 +205,7 @@ android {
                 logger.warn("No prerelease signing config!")
             }
             versionNameSuffix = "-PRE"
-            versionCode = (System.currentTimeMillis() / 60000).toInt()
+            versionCode = aurasVersionCode
         }
     }
 
@@ -211,6 +240,7 @@ android {
         }
     }
 
+    // Keep the source namespace stable for CloudStream extension compatibility.
     namespace = "com.lagradost.cloudstream3"
 }
 
@@ -296,6 +326,13 @@ dependencies {
 
     implementation(project(":library"))
     implementation(project(":shared"))
+}
+
+// NiceHttp and Coil's OkHttp transport both publish JVM artifacts alongside
+// okhttp-android. The Android artifact already contains these classes, so keep
+// the duplicate JVM jar out of Android runtime packaging.
+configurations.configureEach {
+    exclude(group = "com.squareup.okhttp3", module = "okhttp-jvm")
 }
 
 tasks.register<Jar>("androidSourcesJar") {

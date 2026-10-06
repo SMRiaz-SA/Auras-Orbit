@@ -1,4 +1,4 @@
-> **Auras Orbit source note:** This directory contains the upstream CloudStream reference source used by Orbit's desktop compatibility layer. The installation and contribution instructions below describe upstream CloudStream, not Auras Orbit. For Orbit setup and desktop build instructions, see the [repository README](../README.md).
+> **Auras Orbit Android:** This is the Android Gradle project for Auras Orbit, based on the pinned CloudStream Android source for provider and extension compatibility. Auras is developing its own application identity and phone/TV experience around that compatibility layer. Keep the upstream license and provenance with the source. The CloudStream installation and contribution instructions below describe upstream CloudStream, not Auras Orbit. See the [repository README](../README.md) for desktop instructions.
 
 # CloudStream
 

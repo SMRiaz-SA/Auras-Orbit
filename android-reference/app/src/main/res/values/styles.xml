@@ -90,6 +90,19 @@
         <item name="boxItemBackground">@color/amoledModeLight</item>
     </style>
 
+    <style name="AurasMode">
+        <item name="primaryGrayBackground">@color/aurasSurface</item>
+        <item name="primaryBlackBackground">@color/aurasBackground</item>
+        <item name="iconGrayBackground">@color/aurasSurfaceRaised</item>
+        <item name="boxItemBackground">@color/boxItemBackground</item>
+        <item name="textColor">@color/aurasText</item>
+        <item name="grayTextColor">@color/aurasTextMuted</item>
+        <item name="iconColor">@color/aurasTextMuted</item>
+        <item name="white">@color/aurasText</item>
+        <item name="black">@color/aurasBackground</item>
+        <item name="colorOnPrimary">@color/aurasBackground</item>
+    </style>
+
     <style name="ChipFilled" parent="@style/Widget.Material3.Chip.Filter">
         <item name="chipBackgroundColor">@color/chip_color</item>
         <item name="chipStrokeColor">@color/white_transparent_toggle</item>
@@ -244,6 +257,15 @@
         <item name="colorOnPrimary">@color/whiteText</item>
         <!-- Needed for leanback fuckery -->
         <item name="android:colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="OverlayPrimaryColorAuras">
+        <item name="colorPrimary">@color/aurasAccent</item>
+        <item name="android:colorPrimary">@color/aurasAccent</item>
+        <item name="colorPrimaryDark">@color/aurasAccentDark</item>
+        <item name="colorAccent">@color/aurasAccentBright</item>
+        <item name="colorOnPrimary">@color/aurasBackground</item>
+        <item name="android:colorAccent">@color/aurasAccent</item>
     </style>
 
     <style name="OverlayPrimaryColorMonet">

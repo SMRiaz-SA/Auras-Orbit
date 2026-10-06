@@ -23,8 +23,8 @@
     <string name="new_update_format" formatted="true">Đã tìm thấy bản cập nhật mới!\n%1$s -&gt; %2$s</string>
     <string name="filler" formatted="true">Bộ lọc</string>
     <string name="duration_format" formatted="true">%d phút</string>
-    <string name="app_name">CloudStream</string>
-    <string name="play_with_app_name">Phát bằng CloudStream</string>
+    <string name="app_name">Auras Orbit</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">Trang chủ</string>
     <string name="title_search">Tìm kiếm</string>
     <string name="title_downloads">Tải xuống</string>
@@ -408,11 +408,11 @@
     <string name="plugins_downloaded" formatted="true">Đã tải xuống: %d</string>
     <string name="plugins_disabled" formatted="true">Đã vô hiệu: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Chưa tải xuống: %d</string>
-    <string name="blank_repo_message">CloudStream không có sẵn trang web nào. Bạn cần cài đặt các trang web từ kho lưu trữ. \n \nHãy tham gia Discord của chúng tôi hoặc tìm kiếm trực tuyến.</string>
+    <string name="blank_repo_message">Auras Orbit không có sẵn trang web nào. Bạn cần cài đặt các trang web từ kho lưu trữ. \n \nHãy tham gia Discord của chúng tôi hoặc tìm kiếm trực tuyến.</string>
     <string name="view_public_repositories_button">Xem các kho nguồn phim của cộng đồng</string>
     <string name="view_public_repositories_button_short">Danh sách công khai</string>
     <string name="uppercase_all_subtitles">In hoa toàn bộ phụ đề</string>
-    <string name="download_all_plugins_from_repo">Cảnh báo: CloudStream không chịu trách nhiệm về các tiện ích mở rộng bên thứ ba và không cung cấp bất kỳ sự hỗ trợ nào!</string>
+    <string name="download_all_plugins_from_repo">Cảnh báo: Auras Orbit không chịu trách nhiệm về các tiện ích mở rộng bên thứ ba và không cung cấp bất kỳ sự hỗ trợ nào!</string>
     <string name="single_plugin_disabled" formatted="true">%s (Đã vô hiệu)</string>
     <string name="tracks">Âm thanh &amp; video</string>
     <string name="audio_tracks">Âm thanh</string>
@@ -580,16 +580,16 @@
     <string name="favorite">Yêu thích</string>
     <string name="ok">OK</string>
     <string name="battery_dialog_title">Tắt tối ưu hóa pin</string>
-    <string name="app_info_intent_error">Không thể mở thông tin ứng dụng CloudStream.</string>
+    <string name="app_info_intent_error">Không thể mở thông tin ứng dụng Auras Orbit.</string>
     <string name="unfavorite">Bỏ yêu thích</string>
-    <string name="biometric_authentication_title">Mở khóa Cloudstream</string>
+    <string name="biometric_authentication_title">Mở khóa Auras Orbit</string>
     <string name="music_singular">Nhạc</string>
     <string name="audio_book_singular">Sách nói</string>
     <string name="biometric_setting">Khóa bằng sinh trắc học</string>
     <string name="resume_remaining" formatted="true">%s\ncòn lại</string>
     <string name="biometric_unsupported">Xác thực bằng sinh trắc học không được hỗ trợ trên thiết bị này</string>
     <string name="password_pin_authentication_title">Xác thực bằng Mật khẩu/PIN</string>
-    <string name="biometric_warning">Dữ liệu CloudStream của bạn hiện đã được sao lưu. Mặc dù khả năng xảy ra điều này là rất thấp nhưng tất cả các thiết bị đều có thể hoạt động khác nhau. Trong trường hợp hiếm gặp là bạn bị khóa truy cập ứng dụng, hãy xóa hoàn toàn dữ liệu ứng dụng và khôi phục từ bản sao lưu. Chúng tôi rất xin lỗi vì bất kỳ sự bất tiện nào phát sinh từ việc này.</string>
+    <string name="biometric_warning">Dữ liệu Auras Orbit của bạn hiện đã được sao lưu. Mặc dù khả năng xảy ra điều này là rất thấp nhưng tất cả các thiết bị đều có thể hoạt động khác nhau. Trong trường hợp hiếm gặp là bạn bị khóa truy cập ứng dụng, hãy xóa hoàn toàn dữ liệu ứng dụng và khôi phục từ bản sao lưu. Chúng tôi rất xin lỗi vì bất kỳ sự bất tiện nào phát sinh từ việc này.</string>
     <string name="biometric_setting_summary">Mở khóa ứng dụng bằng Vân tay, Khuôn mặt, PIN, Hình vẽ và Mật khẩu.</string>
     <string name="biometric_prompt_description">Sau vài lần thử thất bại, hộp thoại sẽ tự đóng. Chỉ cần khởi động lại ứng dụng để thử lại.</string>
     <string name="test_extensions_summary">Bài kiểm tra này chỉ dành cho các nhà phát triển và không xác nhận hay phủ nhận việc hoạt động của bất kỳ tiện ích mở rộng nào.</string>
@@ -597,7 +597,7 @@
     <string name="custom_media_singular">Phương tiện</string>
     <string name="repo_copy_label">Tên và URL kho nguồn phim</string>
     <string name="reset_btn">Đặt lại</string>
-    <string name="battery_dialog_message">Để đảm bảo quá trình tải xuống và thông báo cho các chương trình truyền hình đã đăng ký không bị gián đoạn, CloudStream cần có quyền chạy ở chế độ nền. Bằng cách nhấn OK, một hộp thoại yêu cầu sẽ hiển thị. Vui lòng nhấn \"Cho phép\".\n\nXin lưu ý, quyền này không có nghĩa là CS3 sẽ làm hao pin của bạn. Nó sẽ chỉ hoạt động ở chế độ nền khi cần thiết, chẳng hạn như khi nhận được thông báo hoặc tải xuống video từ các tiện ích mở rộng chính thức.</string>
+    <string name="battery_dialog_message">Để đảm bảo quá trình tải xuống và thông báo cho các chương trình truyền hình đã đăng ký không bị gián đoạn, Auras Orbit cần có quyền chạy ở chế độ nền. Bằng cách nhấn OK, một hộp thoại yêu cầu sẽ hiển thị. Vui lòng nhấn \"Cho phép\".\n\nXin lưu ý, quyền này không có nghĩa là Auras Orbit sẽ làm hao pin của bạn. Nó sẽ chỉ hoạt động ở chế độ nền khi cần thiết, chẳng hạn như khi nhận được thông báo hoặc tải xuống video từ các tiện ích mở rộng chính thức.</string>
     <string name="next_season_episode_format" formatted="true">Mùa %1$d Tập %2$d sẽ được phát hành vào</string>
     <string name="episode_upcoming_format" formatted="true">Sắp ra mắt sau %s</string>
     <string name="player_settings_select_cast_device">Chọn thiết bị truyền</string>
@@ -606,7 +606,7 @@
     <string name="qr_image">Mã QR</string>
     <string name="dismiss">Bỏ qua</string>
     <string name="open_downloaded_repo">Mở kho nguồn phim</string>
-    <string name="cs3wiki">CloudStream Wiki</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="device_pin_url_message">Truy cập <b>%s</b> trên điện thoại hoặc máy tính và nhập mã bên trên</string>
     <string name="device_pin_expired_message">Mã PIN đã hết hạn!</string>
     <string name="device_pin_counter_text">Mã sẽ hết hạn trong %1$d phút %2$d giây</string>

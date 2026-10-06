@@ -77,7 +77,7 @@
         android:name=".CloudStreamApp"
         android:allowBackup="true"
         android:appCategory="video"
-        android:banner="@mipmap/ic_banner"
+        android:banner="@drawable/auras_orbit_tv_banner"
         android:fullBackupContent="@xml/backup_descriptor"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
@@ -105,7 +105,7 @@
             android:resizeableActivity="true"
             android:screenOrientation="userLandscape"
             android:supportsPictureInPicture="true"
-            android:taskAffinity="com.lagradost.cloudstream3.downloadedplayer"
+            android:taskAffinity="${applicationId}.downloadedplayer"
             android:launchMode="singleTask"
             tools:ignore="DiscouragedApi">
             <intent-filter>

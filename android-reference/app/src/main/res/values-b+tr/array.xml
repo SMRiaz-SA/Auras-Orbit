@@ -192,6 +192,7 @@
     </array>
 
     <string-array name="themes_overlay_names">
+        <item>Auras Orbit</item>
         <item>Normal</item>
         <item>Karahindiba sarı</item>
         <item>Karanfil Pembesi</item>
@@ -216,6 +217,7 @@
         <item>Material You (İkincil)</item>
     </string-array>
     <string-array name="themes_overlay_names_values">
+        <item>Auras</item>
         <item>Normal</item>
         <item>DandelionYellow</item>
         <item>CarnationPink</item>
@@ -241,6 +243,7 @@
     </string-array>
 
     <string-array name="themes_names">
+        <item>Auras Orbit</item>
         <item>Koyu</item>
         <item>Gri</item>
         <item>Amoled</item>
@@ -252,6 +255,7 @@
         <item>Sessiz Mavi</item>
     </string-array>
     <string-array name="themes_names_values">
+        <item>Auras</item>
         <item>AmoledLight</item>
         <item>Black</item>
         <item>Amoled</item>

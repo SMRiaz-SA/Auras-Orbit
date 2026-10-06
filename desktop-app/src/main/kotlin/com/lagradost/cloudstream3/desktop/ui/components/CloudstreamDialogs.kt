@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -111,6 +112,7 @@ fun CloudstreamCustomDialog(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color? = null,
+    shape: Shape = RoundedCornerShape(28.dp),
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
@@ -140,7 +142,7 @@ fun CloudstreamCustomDialog(
                 exit = fadeOut(tween(100)) + scaleOut(tween(100), targetScale = 0.96f),
             ) {
                 Surface(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = shape,
                     color = effectiveColor,
                     contentColor = if (isAmoled) Color.White else androidx.compose.material3.contentColorFor(MaterialTheme.colorScheme.surface),
                     modifier = modifier.then(if (showBorder) Modifier.border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(28.dp)) else Modifier),

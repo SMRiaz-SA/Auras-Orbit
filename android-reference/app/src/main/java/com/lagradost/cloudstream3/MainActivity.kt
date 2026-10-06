@@ -502,6 +502,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
         val isNavVisible = listOf(
             R.id.navigation_home,
+            R.id.navigation_catalogs,
             R.id.navigation_search,
             R.id.navigation_library,
             R.id.navigation_downloads,
@@ -573,6 +574,11 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
              * highlight the wrong one in UI.
              */
             when (destination.id) {
+                R.id.navigation_catalogs -> {
+                    navRailView.menu.findItem(R.id.navigation_home).isChecked = true
+                    navView.menu.findItem(R.id.navigation_home).isChecked = true
+                }
+
                 in listOf(
                     R.id.navigation_downloads,
                     R.id.navigation_download_child,
@@ -1704,7 +1710,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             .setPopUpTo(navController.graph.startDestination, false)
             .build()*/
 
-        val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.1f))
+        val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.12f))
 
         binding?.navView?.apply {
             itemRippleColor = rippleColor
@@ -1724,12 +1730,9 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 itemRippleColor = rippleColor
                 itemActiveIndicatorColor = rippleColor
             } else {
-                val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.textColor, 1.0f))
-                val rippleColorTransparent =
-                    ColorStateList.valueOf(getResourceColor(R.attr.textColor, 0.2f))
                 itemSpacing = 12.toPx // expandedItemSpacing does not have an attr
-                itemRippleColor = rippleColorTransparent
-                itemActiveIndicatorColor = rippleColor
+                itemRippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.13f))
+                itemActiveIndicatorColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.22f))
             }
             setupWithNavController(navController)
             /*if (isLayout(TV or EMULATOR)) {

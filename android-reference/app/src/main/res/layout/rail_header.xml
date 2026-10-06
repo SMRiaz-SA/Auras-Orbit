@@ -1,21 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:padding="1dp"
-    android:visibility="gone"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools">
+    android:layout_width="match_parent"
+    android:layout_height="64dp"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingTop="9dp"
+    android:paddingBottom="5dp">
 
-        <ImageView
-            android:id="@+id/nav_header_notification"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            app:itemIconTint="@color/item_select_color"
-            android:focusable="true"
-            android:nextFocusRight="@id/home_preview_info_btt"
-            android:src="@drawable/notifications_icon_selector"
-            android:contentDescription="@string/account"
-            app:tint="@color/item_select_color" />
+    <ImageView
+        android:layout_width="27dp"
+        android:layout_height="27dp"
+        android:contentDescription="@string/app_name"
+        android:src="@drawable/auras_orbit_mark" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/google_sans"
+        android:letterSpacing="0.08"
+        android:text="ORBIT"
+        android:textColor="?attr/grayTextColor"
+        android:textSize="8sp"
+        android:textStyle="bold" />
 
 </LinearLayout>

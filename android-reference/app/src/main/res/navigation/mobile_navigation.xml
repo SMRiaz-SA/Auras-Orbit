@@ -291,6 +291,15 @@
 
     <fragment
         android:id="@+id/navigation_home"
+        android:name="com.lagradost.cloudstream3.ui.explore.AurasExploreFragment"
+        android:label="@string/title_explore"
+        app:enterAnim="@anim/enter_anim"
+        app:exitAnim="@anim/exit_anim"
+        app:popEnterAnim="@anim/enter_anim"
+        app:popExitAnim="@anim/exit_anim" />
+
+    <fragment
+        android:id="@+id/navigation_catalogs"
         android:name="com.lagradost.cloudstream3.ui.home.HomeFragment"
         android:label="@string/title_home"
         app:enterAnim="@anim/enter_anim"

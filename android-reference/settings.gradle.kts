@@ -17,5 +17,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CloudStream"
+rootProject.name = "auras-orbit-android"
 include(":app", ":shared", ":library", ":docs", ":desktopApp")

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- For true intellectuals -->
-    <string name="app_name">aauugghhaauuh</string>
+    <string name="app_name">Auras Orbit</string>
     <string name="title_home">ooh</string>
     <string name="title_search">oouuh</string>
     <string name="title_downloads">ouuhhuhooh ooh</string>
@@ -196,7 +196,7 @@
     <string name="rated_format" formatted="true">aghaaaooo-ough %.1f</string>
     <string name="filler" formatted="true">aaaaaaaaaaaaaaaaaaaaaaaaaaaaaooooohhuhuhuhuhuhhuhuhhhaaagaha-agagaoooo</string>
     <string name="duration_format" formatted="true">%d ooaaaugha</string>
-    <string name="play_with_app_name">oooooh aaah aauuuggghauuh</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="search_hint_site" formatted="true">aaoohhu %s aoouu</string>
     <string name="browser">oooaaaauhgaaaa</string>
     <string name="type_re_watching">aaaaaah-ooooooooouuagh</string>
@@ -283,7 +283,7 @@
     <string name="history">aaaaggg</string>
     <string name="rotate_video">uuuuhh</string>
     <string name="reset_btn">aaahh</string>
-    <string name="cs3wiki">uuuuhhhaaak aagg</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="result_search_tooltip">aaaagg og ooogg aaaahhhaah</string>
     <string name="double_tap_to_pause_settings">aaaagg aah ah ooogg</string>
     <string name="automatic_plugin_updates">aaaahhhuh aaaagg uuuuhhh</string>
@@ -489,7 +489,7 @@
     <string name="episode_upcoming_format" formatted="true">uuuugggg og %s</string>
     <string name="custom_media_singular">uuugg</string>
     <string name="app_unrestricted_toast">ooh oooohhh uuuhh ak aaaaggg aak ag uuuugggaaaak</string>
-    <string name="app_info_intent_error">uuuugg ah uuhh CloudStream uuh uuhh</string>
+    <string name="app_info_intent_error">uuuugg ah uuhh Auras Orbit uuh uuhh</string>
     <string name="pref_category_security">oooohhhg</string>
     <string name="pref_category_accounts">uuuugggg</string>
     <string name="downloads_empty">uuuhh aah uuuugggog ug aaaagggog</string>
@@ -586,7 +586,7 @@
     <string name="skip_type_ed">uuuuuk</string>
     <string name="skip_type_mixed_op">aaagg aaaahhh</string>
     <string name="skip_type_credits">ooooggg</string>
-    <string name="battery_dialog_message">oh oooogg ooooggguuuugg aaaahhhug ooh aaaaggguuuuuk ooh aaaagggoog uk shows, aaaaggguugg aaagg uuuuggguug ug uug oh aaaahhhooh ah eeeeeekh OK, youl og aaaaaakg uh uuk aagg There, aaaagg uk oog uuuuhhh ooohh uug uuh oooohhh aaagg ug uuuuhhhooohh oooohh note, aagg aaaahhhaak oohh uug uugg CS3 aagg eeeek aahh uuuuhhh uh uugg oogg ooooggg ek uug aaaahhhaak oohh necessary, uugg oh uuhh uuuuhhhuh uuuuuukaaaahh ah oooohhhaagg uuuuuk oogg aaaagggh oooogggoog uh uuh aaaahh ug cancel, uuh uug aaaahh uugg uuuuggg ooogg uh aaaahhh uuuugggg</string>
+    <string name="battery_dialog_message">oh oooogg ooooggguuuugg aaaahhhug ooh aaaaggguuuuuk ooh aaaagggoog uk shows, aaaaggguugg aaagg uuuuggguug ug uug oh aaaahhhooh ah eeeeeekh OK, youl og aaaaaakg uh uuk aagg There, aaaagg uk oog uuuuhhh ooohh uug uuh oooohhh aaagg ug uuuuhhhooohh oooohh note, aagg aaaahhhaak oohh uug uugg Auras Orbit aagg eeeek aahh uuuuhhh uh uugg oogg ooooggg ek uug aaaahhhaak oohh necessary, uugg oh uuhh uuuuhhhuh uuuuuukaaaahh ah oooohhhaagg uuuuuk oogg aaaagggh oooogggoog uh uuh aaaahh ug cancel, uuh uug aaaahh uugg uuuuggg ooogg uh aaaahhh uuuugggg</string>
     <string name="sort_updated_old">uuuuggg (Old og New)</string>
     <string name="sort_alphabetical_z">uuuuggguuuhh (Z ak A)</string>
     <string name="select_library">uuuugg uuuuggg</string>

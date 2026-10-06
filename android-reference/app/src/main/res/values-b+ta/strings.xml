@@ -109,7 +109,7 @@
     <string name="home_next_random_img_des">அடுத்து ஏதாவது</string>
     <string name="browser">உலாவி</string>
     <string name="duration_format" formatted="true">%d நிமி</string>
-    <string name="play_with_app_name">CloudStream-உடன் இயக்கு</string>
+    <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="new_update_format" formatted="true">புதிய புதுப்பிப்பு உள்ளது\n%1$s-&gt;%2$s</string>
     <string name="filler" formatted="true">நிரப்பி</string>
     <string name="search_poster_img_des">போச்டர்</string>
@@ -133,7 +133,7 @@
     <string name="category_account">கணக்குகள் மற்றும் பாதுகாப்பு</string>
     <string name="hls_playlist">எச்.எல்.எச் பிளேலிச்ட்</string>
     <string name="skip_type_mixed_ed">கலப்பு முடிவு</string>
-    <string name="app_name">கிளவுட்ச்ட்ரீம்</string>
+    <string name="app_name">Auras Orbit</string>
     <string name="benene_count_text_none">பெனின்கள் எதுவும் கொடுக்கப்படவில்லை</string>
     <string name="eigengraumode_settings">பிளேபேக் விரைவு</string>
     <string name="swipe_to_seek_settings">தேட ச்வைப்</string>
@@ -286,7 +286,7 @@
     <string name="no_repository_found_error">களஞ்சியம் கிடைக்கவில்லை, முகவரி ஐ சரிபார்த்து VPN ஐ முயற்சிக்கவும்</string>
     <string name="batch_download">தொகுதி பதிவிறக்கம்</string>
     <string name="plugin_singular">சொருகு</string>
-    <string name="download_all_plugins_from_repo">எச்சரிக்கை: மூன்றாம் தரப்பு நீட்டிப்புகளைப் பயன்படுத்துவதற்கு CloudStream எந்தப் பொறுப்பையும் ஏற்காது, அவற்றிற்கு எந்த ஆதரவையும் வழங்காது!</string>
+    <string name="download_all_plugins_from_repo">எச்சரிக்கை: மூன்றாம் தரப்பு நீட்டிப்புகளைப் பயன்படுத்துவதற்கு Auras Orbit எந்தப் பொறுப்பையும் ஏற்காது, அவற்றிற்கு எந்த ஆதரவையும் வழங்காது!</string>
     <string name="extension_language">மொழி</string>
     <string name="revert">திரும்பவும்</string>
     <string name="subscription_deleted">%s இலிருந்து குழுவிலகப்பட்டது</string>
@@ -555,7 +555,7 @@
     <string name="logout">விடுபதிகை</string>
     <string name="quality_webrip">விரலிடைத் தோல்</string>
     <string name="apk_installer_settings_des">சில சாதனங்கள் புதிய தொகுப்பு நிறுவியை ஆதரிக்கவில்லை. புதுப்பிப்புகள் நிறுவப்படவில்லை என்றால், மரபு விருப்பத்தை முயற்சிக்கவும்.</string>
-    <string name="battery_dialog_message">சந்தா தொலைக்காட்சி நிகழ்ச்சிகளுக்கான தடையற்ற பதிவிறக்கங்கள் மற்றும் அறிவிப்புகளை உறுதிப்படுத்த, கிளவுட்ச்ட்ரீம் பின்னணியில் இயங்க இசைவு தேவை. சரி என்பதை அழுத்துவதன் மூலம், உங்களுக்கு கோரிக்கை உரையாடல் காண்பிக்கப்படும். தயவுசெய்து \'இசைவு\' என்பதை அழுத்தவும். \n\nதயவுசெய்து கவனிக்கவும், இந்த இசைவு CS3 உங்கள் பேட்டரியை வெளியேற்றும் என்று அர்த்தமல்ல. அறிவிப்புகளைப் பெறும்போது அல்லது உத்தியோகபூர்வ நீட்டிப்புகளிலிருந்து வீடியோக்களைப் பதிவிறக்குவது போன்ற பின்னணியில் மட்டுமே இது செயல்படும்.</string>
+    <string name="battery_dialog_message">சந்தா தொலைக்காட்சி நிகழ்ச்சிகளுக்கான தடையற்ற பதிவிறக்கங்கள் மற்றும் அறிவிப்புகளை உறுதிப்படுத்த, கிளவுட்ச்ட்ரீம் பின்னணியில் இயங்க இசைவு தேவை. சரி என்பதை அழுத்துவதன் மூலம், உங்களுக்கு கோரிக்கை உரையாடல் காண்பிக்கப்படும். தயவுசெய்து \'இசைவு\' என்பதை அழுத்தவும். \n\nதயவுசெய்து கவனிக்கவும், இந்த இசைவு Auras Orbit உங்கள் பேட்டரியை வெளியேற்றும் என்று அர்த்தமல்ல. அறிவிப்புகளைப் பெறும்போது அல்லது உத்தியோகபூர்வ நீட்டிப்புகளிலிருந்து வீடியோக்களைப் பதிவிறக்குவது போன்ற பின்னணியில் மட்டுமே இது செயல்படும்.</string>
     <string name="app_unrestricted_toast">பயன்பாட்டு பேட்டரி பயன்பாடு ஏற்கனவே கட்டுப்பாடற்றதாக அமைக்கப்பட்டுள்ளது</string>
     <string name="update_notification_installing">பயன்பாட்டு புதுப்பிப்பை நிறுவுகிறது…</string>
     <string name="update_notification_failed">பயன்பாட்டின் புதிய பதிப்பை நிறுவ முடியவில்லை</string>
@@ -613,7 +613,7 @@
     <string name="device_pin_error_message">சாதன முள் குறியீட்டைப் பெற முடியாது, உள்ளக அங்கீகாரத்தை முயற்சிக்கவும்</string>
     <string name="device_pin_expired_message">முள் குறியீடு இப்போது காலாவதியானது!</string>
     <string name="subs_edge_size">விளிம்பு அளவு</string>
-    <string name="cs3wiki">கிளவுட்ச்ட்ரீம் விக்கி</string>
+    <string name="cs3wiki">Auras Orbit Guide</string>
     <string name="preview_seekbar">சீக்பார் முன்னோட்டம்</string>
     <string name="backup_path_title">காப்பு கோப்புறை இருப்பிடம்</string>
     <string name="open_local_video">உள்ளக வீடியோவைத் திறக்கவும்</string>

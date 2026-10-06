@@ -6,7 +6,7 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current source version:** Beta **0.2.0.22**<br>
+**Current source version:** Beta **0.2.0.23**<br>
 **Source build date:** 2026-10-06<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds appear on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
@@ -125,6 +125,19 @@ The local packaging helper builds and verifies the portable app, Windows install
 GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using GitHub-hosted Windows x64 runners. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v**.
 
 The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in **gradle.properties** to change the app version; installer version metadata is generated under **desktop-app/build/generated/installer/**.
+
+### Android build foundation
+
+The Android app has a separate Gradle root in **android-reference/** and does not build the Windows application. It starts from the pinned CloudStream Android source for extension compatibility and is being adapted into the Auras phone and TV app. The Android package ID is **com.auras.orbit**, so it can be installed alongside CloudStream. Android reads **APP_VERSION** from the repository-root **gradle.properties**, matching the desktop version without a second version setting.
+
+With an Android SDK installed, build the local stable debug APK from PowerShell:
+
+~~~powershell
+cd .\android-reference
+.\gradlew.bat :app:assembleStableDebug
+~~~
+
+ This command builds locally; it does not publish an APK or write to GitHub.
 
 ## Acknowledgements
 
