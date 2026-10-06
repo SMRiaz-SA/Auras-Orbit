@@ -10,4 +10,5 @@ interface BookmarksRepository {
     suspend fun isBookmarked(id: String, profileId: Int? = null): Boolean
     suspend fun addBookmark(bookmark: DesktopBookmark, profileId: Int? = null)
     suspend fun removeBookmark(id: String, profileId: Int? = null)
+    suspend fun refresh(profileId: Int? = null)
 }

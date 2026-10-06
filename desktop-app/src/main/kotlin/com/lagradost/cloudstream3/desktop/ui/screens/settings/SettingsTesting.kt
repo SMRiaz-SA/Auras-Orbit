@@ -161,7 +161,7 @@ fun SettingsTesting(
                                     }
                                     if (result.exception != null) {
                                         Text(
-                                            text = result.exception!!.stackTraceToString(),
+                                            text = result.exception.stackTraceToString(),
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 12.sp,
                                             color = Color(0xFFFF5252),

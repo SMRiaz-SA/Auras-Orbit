@@ -2,21 +2,29 @@ package com.lagradost.cloudstream3.desktop.utils
 
 import com.lagradost.cloudstream3.app
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.awt.image.BufferedImage
 import java.io.InputStream
+import java.util.LinkedHashMap
 import javax.imageio.ImageIO
 
 object ImageColorExtractor {
-    private val globalColorCache = java.util.concurrent.ConcurrentHashMap<String, androidx.compose.ui.graphics.Color>()
+    private const val MAX_COLOR_CACHE_ENTRIES = 256
+    private const val MAX_IMAGE_RESPONSE_BYTES = 8 * 1024 * 1024
+    private const val MAX_SOURCE_IMAGE_PIXELS = 40_000_000L
+    private val globalColorCache = LinkedHashMap<String, androidx.compose.ui.graphics.Color>(32, 0.75f, true)
+    private val globalColorCacheLock = Any()
 
     fun getCachedColor(imageUrl: String?): androidx.compose.ui.graphics.Color? {
         if (imageUrl.isNullOrBlank()) return null
-        return globalColorCache[imageUrl]
+        return synchronized(globalColorCacheLock) { globalColorCache[imageUrl] }
     }
 
     fun decodeSubsampled(inputStream: InputStream, subsampleX: Int = 8, subsampleY: Int = 8): BufferedImage? {
+        require(subsampleX > 0 && subsampleY > 0)
         val imageInputStream = ImageIO.createImageInputStream(inputStream) ?: return null
         try {
             val readers = ImageIO.getImageReaders(imageInputStream)
@@ -24,6 +32,9 @@ object ImageColorExtractor {
             val reader = readers.next()
             try {
                 reader.input = imageInputStream
+                val width = reader.getWidth(0)
+                val height = reader.getHeight(0)
+                if (width <= 0 || height <= 0 || width.toLong() * height > MAX_SOURCE_IMAGE_PIXELS) return null
                 val param = reader.defaultReadParam
                 param.setSourceSubsampling(subsampleX, subsampleY, 0, 0)
                 return reader.read(0, param)
@@ -37,17 +48,26 @@ object ImageColorExtractor {
 
     suspend fun extractDominantColorFromUrl(imageUrl: String): androidx.compose.ui.graphics.Color? {
         if (imageUrl.isBlank()) return null
-        globalColorCache[imageUrl]?.let { return it }
+        synchronized(globalColorCacheLock) { globalColorCache[imageUrl] }?.let { return it }
         return withContext(Dispatchers.IO) {
             try {
                 val response = app.get(imageUrl)
-                val bytes = response.body.bytes()
+                val bytes = response.body.byteStream().use { stream ->
+                    stream.readBoundedBytes(MAX_IMAGE_RESPONSE_BYTES)
+                }
                 val img = decodeSubsampled(bytes.inputStream(), subsampleX = 8, subsampleY = 8) ?: return@withContext null
                 val color = sampleDominantColor(img)
                 if (color != null) {
-                    globalColorCache[imageUrl] = color
+                    synchronized(globalColorCacheLock) {
+                        globalColorCache[imageUrl] = color
+                        while (globalColorCache.size > MAX_COLOR_CACHE_ENTRIES) {
+                            globalColorCache.remove(globalColorCache.keys.first())
+                        }
+                    }
                 }
                 color
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.w("ImageColorExtractor: Failed to extract color from $imageUrl — ${e.message}")
                 null

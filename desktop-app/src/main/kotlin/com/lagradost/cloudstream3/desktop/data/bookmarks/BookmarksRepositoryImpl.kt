@@ -113,4 +113,11 @@ class BookmarksRepositoryImpl(
             refreshForProfile(requestedProfileId, force = true)
         }
     }
+
+    override suspend fun refresh(profileId: Int?) {
+        val requestedProfileId = profileId ?: ProfileManager.activeProfileId
+        withContext(Dispatchers.IO) {
+            refreshForProfile(requestedProfileId, force = true)
+        }
+    }
 }

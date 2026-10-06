@@ -195,26 +195,28 @@ class PluginProviderWorkerIntegrationTest {
             assertTrue(linksAfterCrossExtractorUnload.isEmpty(), "an unloaded extractor must not emit links")
             assertTrue(subtitlesAfterCrossExtractorUnload.isEmpty(), "an unloaded extractor must not emit subtitles")
 
-            val link = com.lagradost.cloudstream3.utils.ExtractorLink(
+            val link = com.lagradost.cloudstream3.utils.newExtractorLink(
                 source = "Worker Fixture",
                 name = "Fixture stream",
                 url = "https://worker-fixture.invalid/video.mp4",
-                referer = "",
-                quality = 1080,
                 type = com.lagradost.cloudstream3.utils.ExtractorLinkType.VIDEO,
-            )
+            ) {
+                referer = ""
+                quality = 1080
+            }
             val remoteInterceptor = provider.getVideoInterceptor(link) ?: error("Worker interceptor was not returned")
             val hostChain = FixtureInterceptorChain(Request.Builder().url(link.url).build())
             remoteInterceptor.intercept(hostChain).close()
             assertEquals("active", hostChain.proceededRequest?.header("X-Worker-Interceptor"))
-            val responseLink = com.lagradost.cloudstream3.utils.ExtractorLink(
+            val responseLink = com.lagradost.cloudstream3.utils.newExtractorLink(
                 source = link.source,
                 name = link.name,
                 url = "https://worker-fixture.invalid/response-interceptor.mp4",
-                referer = link.referer,
-                quality = link.quality,
                 type = link.type,
-            )
+            ) {
+                referer = link.referer
+                quality = link.quality
+            }
             val responseInterceptor = provider.getVideoInterceptor(responseLink) ?: error("Worker response interceptor was not returned")
             val responseChain = FixtureInterceptorChain(Request.Builder().url(responseLink.url).build())
             val transformedResponse = responseInterceptor.intercept(responseChain)
@@ -227,14 +229,15 @@ class PluginProviderWorkerIntegrationTest {
                 assertEquals(null, response.header("X-Remove-Me"), "a plugin must be able to remove a host response header")
                 assertEquals("worker transformed: host response body", response.body.string())
             }
-            val largeResponseLink = com.lagradost.cloudstream3.utils.ExtractorLink(
+            val largeResponseLink = com.lagradost.cloudstream3.utils.newExtractorLink(
                 source = link.source,
                 name = link.name,
                 url = "https://worker-fixture.invalid/large-response-interceptor.mp4",
-                referer = link.referer,
-                quality = link.quality,
                 type = link.type,
-            )
+            ) {
+                referer = link.referer
+                quality = link.quality
+            }
             val largeResponseChain = FixtureInterceptorChain(Request.Builder().url(largeResponseLink.url).build())
             provider.getVideoInterceptor(largeResponseLink)!!.intercept(largeResponseChain).use { response ->
                 assertEquals("large", response.header("X-Worker-Response"))
@@ -242,14 +245,15 @@ class PluginProviderWorkerIntegrationTest {
                 assertEquals(1024 * 1024 + 1, returnedBytes.size)
                 assertTrue(returnedBytes.all { it == 'L'.code.toByte() }, "large media body should remain intact without IPC buffering")
             }
-            val noInterceptorLink = com.lagradost.cloudstream3.utils.ExtractorLink(
+            val noInterceptorLink = com.lagradost.cloudstream3.utils.newExtractorLink(
                 source = "Worker Fixture",
                 name = "Fixture stream",
                 url = "https://worker-fixture.invalid/no-interceptor.mp4",
-                referer = "",
-                quality = 1080,
                 type = com.lagradost.cloudstream3.utils.ExtractorLinkType.VIDEO,
-            )
+            ) {
+                referer = ""
+                quality = 1080
+            }
             assertEquals(null, provider.getVideoInterceptor(noInterceptorLink))
 
             val clone = provider.cloneRemote("Cloned Worker Fixture", "https://clone-fixture.invalid", "fr")

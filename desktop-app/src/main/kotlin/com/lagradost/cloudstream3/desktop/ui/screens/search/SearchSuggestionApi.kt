@@ -5,9 +5,11 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
 import com.lagradost.common.logging.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
+import java.util.LinkedHashMap
+import java.util.Locale
 
 data class SearchSuggestionItem(
     val title: String,
@@ -19,9 +21,10 @@ object SearchSuggestionApi {
     private const val TAG = "SearchSuggestionApi"
     private const val TMDB_API_URL = "https://api.themoviedb.org/3/search/multi"
     private const val TMDB_API_KEY = "e6333b32409e02a4a6eba6fb7ff866bb"
+    private const val MAX_CACHE_ENTRIES = 128
 
-    // In-memory cache for suggestions
-    private val memoryCache = ConcurrentHashMap<String, List<SearchSuggestionItem>>()
+    // Keep recent queries available without retaining every query for the whole app session.
+    private val memoryCache = LinkedHashMap<String, List<SearchSuggestionItem>>(16, 0.75f, true)
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class TmdbSearchResult(
@@ -41,9 +44,10 @@ object SearchSuggestionApi {
         val trimmed = query.trim()
         if (trimmed.length < 2) return@withContext emptyList()
 
-        val cacheKey = trimmed.lowercase()
-        memoryCache[cacheKey]?.let { cached ->
-            return@withContext mergeHistory(trimmed, history, cached)
+        val cacheKey = trimmed.lowercase(Locale.ROOT)
+        val cached = synchronized(memoryCache) { memoryCache[cacheKey] }
+        cached?.let { cachedItems ->
+            return@withContext mergeHistory(trimmed, history, cachedItems)
         }
 
         val networkResults = mutableListOf<SearchSuggestionItem>()
@@ -60,6 +64,8 @@ object SearchSuggestionApi {
                 val year = meta.releaseInfo?.take(4)?.filter { it.isDigit() }?.takeIf { it.length == 4 }
                 networkResults.add(SearchSuggestionItem(title = name, year = year))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             AppLogger.d(TAG, "Catalog bridge query failed for '$trimmed': ${e.message}")
         }
@@ -88,13 +94,20 @@ object SearchSuggestionApi {
                             networkResults.add(SearchSuggestionItem(title = name, year = year))
                         }
                     }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 AppLogger.d(TAG, "Secondary multi-search failed for '$trimmed': ${e.message}")
             }
         }
 
         val finalNetwork = networkResults.take(10)
-        memoryCache[cacheKey] = finalNetwork
+        synchronized(memoryCache) {
+            memoryCache[cacheKey] = finalNetwork
+            while (memoryCache.size > MAX_CACHE_ENTRIES) {
+                memoryCache.remove(memoryCache.keys.first())
+            }
+        }
 
         return@withContext mergeHistory(trimmed, history, finalNetwork)
     }

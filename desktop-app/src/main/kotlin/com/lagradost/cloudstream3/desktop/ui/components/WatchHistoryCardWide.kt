@@ -59,6 +59,7 @@ fun WatchHistoryCardWide(
     onRemove: () -> Unit,
     onClick: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
+    onPrimaryClick: (() -> Unit)? = null,
 ) {
     val style = LocalPosterCardStyle.current
     val posterHoverGlowEnabled = style.hoverGlowEnabled
@@ -67,6 +68,7 @@ fun WatchHistoryCardWide(
 
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    val currentOnPrimaryClick by rememberUpdatedState(onPrimaryClick)
     val scale by animateFloatAsState(
         targetValue = if (isHovered) 1.03f else 1f,
         animationSpec = tween(200),
@@ -185,7 +187,7 @@ fun WatchHistoryCardWide(
                                         onPlayClick = onPlayClick,
                                     )
                                 } else if (event.button == PointerButton.Primary) {
-                                    onClick()
+                                    (currentOnPrimaryClick ?: onClick).invoke()
                                 }
                             }
                         }

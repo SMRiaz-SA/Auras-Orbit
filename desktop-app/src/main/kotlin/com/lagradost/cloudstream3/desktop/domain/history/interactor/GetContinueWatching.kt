@@ -1,37 +1,46 @@
 package com.lagradost.cloudstream3.desktop.domain.history.interactor
 
 import com.lagradost.cloudstream3.desktop.domain.history.repository.WatchHistoryRepository
+import com.lagradost.common.storage.DesktopDataStore
+import com.lagradost.common.storage.EpisodeWatchMark
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class GetContinueWatching(
     private val repository: WatchHistoryRepository,
 ) {
     fun subscribe(): Flow<List<WatchHistory>> {
-        return repository.subscribeAll().map { allHistory ->
-            filterContinueWatching(allHistory)
+        return combine(repository.subscribeAll(), DesktopDataStore.episodeTrackingUpdates) { allHistory, _ ->
+            filterContinueWatching(allHistory, DesktopDataStore.getEpisodeWatchMarks())
         }.flowOn(Dispatchers.IO)
     }
 
     suspend fun await(): List<WatchHistory> = withContext(Dispatchers.IO) {
         val historyList = repository.subscribeAll().first()
-        filterContinueWatching(historyList)
+        filterContinueWatching(historyList, DesktopDataStore.getEpisodeWatchMarks())
     }
 
     companion object {
-        fun filterContinueWatching(allHistory: List<WatchHistory>): List<WatchHistory> {
+        fun filterContinueWatching(
+            allHistory: List<WatchHistory>,
+            watchedEpisodes: List<EpisodeWatchMark> = emptyList(),
+        ): List<WatchHistory> {
             val valid = allHistory.filter {
                 it.apiName != "Offline" && !it.parentId.startsWith("offline") && it.parentId != "local"
             }
             val grouped = valid.groupBy { it.parentId }
             return grouped.mapNotNull { (_, histories) ->
-                val hasAnyCompleted = histories.any {
+                val first = histories.first()
+                val showMarks = watchedEpisodes.filter {
+                    it.providerName == first.apiName && it.showUrl == first.showUrl
+                }
+                val hasAnyCompleted = showMarks.isNotEmpty() || histories.any {
                     it.duration > 0L && PlayerLinkHandler.isCompleted(it.position, it.duration)
                 }
                 val hasRealProgress = histories.any { it.position > 0L }
@@ -43,13 +52,19 @@ class GetContinueWatching(
 
                 val inProgressOrQueued = histories.filter {
                     val isCompleted = it.duration > 0L && PlayerLinkHandler.isCompleted(it.position, it.duration)
-                    !isCompleted && (it.position > 0L || hasAnyCompleted)
+                    val isMarkedWatched = showMarks.any { mark ->
+                        it.episodeId == mark.episodeId ||
+                            (it.season == mark.seasonNumber && it.episode == mark.episodeNumber)
+                    }
+                    !isCompleted && !isMarkedWatched && (it.position > 0L || hasAnyCompleted)
                 }.maxByOrNull { it.updateTime }
 
                 if (inProgressOrQueued != null) {
                     inProgressOrQueued
                 } else {
-                    val latestCompleted = histories.maxByOrNull { it.updateTime }
+                    val latestCompleted = histories.filter {
+                        it.duration > 0L && PlayerLinkHandler.isCompleted(it.position, it.duration)
+                    }.maxByOrNull { it.updateTime }
                     if (latestCompleted != null && (latestCompleted.episode != null || latestCompleted.season != null)) {
                         latestCompleted.copy(
                             episode = (latestCompleted.episode ?: 0) + 1,

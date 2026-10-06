@@ -56,7 +56,6 @@ class PluginWorkerSession private constructor(
                         residentSessions.sortedBy { it.lastUsedNanos }.firstOrNull { session ->
                             session.evictIfIdle?.invoke { session.close() } == true
                         }
-                        Unit
                     }
                 },
             )

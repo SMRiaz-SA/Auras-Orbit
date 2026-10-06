@@ -16,11 +16,13 @@ sealed interface DetailsUiEvent : UiEvent {
     data class OnToggleEpisodeWatched(val ep: com.lagradost.cloudstream3.Episode, val isWatched: Boolean) : DetailsUiEvent
     data class OnRemoveEpisodeWatched(val ep: com.lagradost.cloudstream3.Episode) : DetailsUiEvent
     data class OnToggleSeasonWatched(val episodes: List<com.lagradost.cloudstream3.Episode>, val isWatched: Boolean) : DetailsUiEvent
+    data object OnToggleScheduleFollow : DetailsUiEvent
     data class OnToggleEpisodesStackedView(val isStacked: Boolean) : DetailsUiEvent
     data class OnSetEpisodeViewMode(val viewMode: Int) : DetailsUiEvent
     data object OnRefresh : DetailsUiEvent
     data class OnAddBookmark(val bookmark: com.lagradost.common.storage.DesktopBookmark) : DetailsUiEvent
     data class OnRemoveBookmark(val id: String) : DetailsUiEvent
+    data class OnSetBookmarkInCustomList(val listId: String, val bookmarkId: String, val included: Boolean) : DetailsUiEvent
     data class OnSelectSeason(val season: Int?) : DetailsUiEvent
     data class OnShowPlaybackError(val message: String?) : DetailsUiEvent
     data object OnDismissPlaybackError : DetailsUiEvent

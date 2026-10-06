@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop.player
 import com.lagradost.cloudstream3.desktop.player.ytdl.DesktopYtDlpBinary
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,7 +119,7 @@ object QualityDataHelper {
         UNKNOWN,
     }
 
-    private val seekabilityCache = java.util.concurrent.ConcurrentHashMap<String, Seekability>()
+    private val seekabilityCache = BoundedLruCache<String, Seekability>(512)
     private val RESOLUTION_REGEX = Regex("(?i)(?:^|[^0-9a-z])(2160p|4k|uhd|1440p|2k|qhd|1080p|fhd|720p|hd|480p|sd|360p|1080|720)(?:[^0-9a-z]|$)")
 
     internal fun classifyRangeSupport(code: Int, contentRange: String?, acceptRanges: String?): Seekability {
@@ -313,6 +314,7 @@ object QualityDataHelper {
                 seekability
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.w("QualityDataHelper", "Range probe failed for ${link.name}: ${e.message}")
             Seekability.UNKNOWN
         }

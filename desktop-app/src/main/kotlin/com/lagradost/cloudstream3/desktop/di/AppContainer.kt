@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop.di
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.lagradost.cloudstream3.desktop.data.bookmarks.BookmarksRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.category.CategoryRepositoryImpl
+import com.lagradost.cloudstream3.desktop.data.customlists.CustomListsRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.hero.HeroRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.history.WatchHistoryRepositoryImpl
 import com.lagradost.cloudstream3.desktop.data.plugins.PluginRepositoryImpl
@@ -11,6 +12,7 @@ import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.*
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.repository.BookmarksRepository
 import com.lagradost.cloudstream3.desktop.domain.category.interactor.*
 import com.lagradost.cloudstream3.desktop.domain.category.repository.CategoryRepository
+import com.lagradost.cloudstream3.desktop.domain.customlists.repository.CustomListsRepository
 import com.lagradost.cloudstream3.desktop.domain.hero.repository.HeroRepository
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.*
 import com.lagradost.cloudstream3.desktop.domain.history.repository.WatchHistoryRepository
@@ -27,6 +29,7 @@ interface AppContainer {
     val watchHistoryRepository: WatchHistoryRepository
     val bookmarksRepository: BookmarksRepository
     val categoryRepository: CategoryRepository
+    val customListsRepository: CustomListsRepository
     val pluginRepository: PluginRepository
     val activeProviderRepository: ActiveProviderRepository
     val heroRepository: HeroRepository
@@ -64,6 +67,7 @@ class DefaultAppContainer : AppContainer {
     override val watchHistoryRepository: WatchHistoryRepository by lazy { WatchHistoryRepositoryImpl() }
     override val bookmarksRepository: BookmarksRepository by lazy { BookmarksRepositoryImpl() }
     override val categoryRepository: CategoryRepository by lazy { CategoryRepositoryImpl() }
+    override val customListsRepository: CustomListsRepository by lazy { CustomListsRepositoryImpl() }
     override val pluginRepository: PluginRepository by lazy { PluginRepositoryImpl() }
     override val activeProviderRepository: ActiveProviderRepository by lazy { ActiveProviderRepositoryImpl() }
     override val heroRepository: HeroRepository by lazy { HeroRepositoryImpl() }

@@ -1,9 +1,12 @@
 package com.lagradost.cloudstream3.desktop.ui.theme
 
 import com.lagradost.cloudstream3.desktop.ui.DockPosition
+import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeContinueWatchingPosition
+import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeFeedSectionKey
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -222,6 +225,9 @@ object AppearanceConfig {
     private const val PREF_TOPBAR_SHOW_PROFILE = "pref_topbar_show_profile"
     private const val PREF_TOPBAR_SHOW_PROFILE_NAME = "pref_topbar_show_profile_name"
     private const val PREF_SHOW_CONTINUE_WATCHING = "pref_show_continue_watching"
+    private const val PREF_HOME_FEED_SECTION_ORDER = "pref_home_feed_section_order"
+    private const val PREF_HOME_FEED_DISABLED_SECTIONS = "pref_home_feed_disabled_sections"
+    private const val PREF_HOME_CONTINUE_WATCHING_POSITION = "pref_home_continue_watching_position"
 
     private val _dockItemOrder = MutableStateFlow(
         DockItemKey.parseOrder(DesktopDataStore.getKey<String>(PREF_DOCK_ITEM_ORDER)),
@@ -247,6 +253,21 @@ object AppearanceConfig {
         DesktopDataStore.getKey<Boolean>(PREF_SHOW_CONTINUE_WATCHING) ?: true,
     )
     val showContinueWatching: StateFlow<Boolean> = _showContinueWatching.asStateFlow()
+
+    private val _homeFeedSectionOrder = MutableStateFlow(
+        HomeFeedSectionKey.parseOrder(DesktopDataStore.getKey<String>(PREF_HOME_FEED_SECTION_ORDER)),
+    )
+    val homeFeedSectionOrder: StateFlow<List<HomeFeedSectionKey>> = _homeFeedSectionOrder.asStateFlow()
+
+    private val _homeFeedDisabledSections = MutableStateFlow(
+        HomeFeedSectionKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_HOME_FEED_DISABLED_SECTIONS)),
+    )
+    val homeFeedDisabledSections: StateFlow<Set<HomeFeedSectionKey>> = _homeFeedDisabledSections.asStateFlow()
+
+    private val _homeContinueWatchingPosition = MutableStateFlow(
+        HomeContinueWatchingPosition.fromString(DesktopDataStore.getKey<String>(PREF_HOME_CONTINUE_WATCHING_POSITION)),
+    )
+    val homeContinueWatchingPosition: StateFlow<HomeContinueWatchingPosition> = _homeContinueWatchingPosition.asStateFlow()
 
     private val _themeAccent = MutableStateFlow(DesktopDataStore.getKey<String>(PREF_THEME_ACCENT) ?: "Purple")
     val themeAccent: StateFlow<String> = _themeAccent.asStateFlow()
@@ -397,16 +418,24 @@ object AppearanceConfig {
     val customPresets: StateFlow<List<ThemePreset>> = _customPresets.asStateFlow()
 
     private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistenceLock = Any()
+    private val persistenceJobs = mutableMapOf<String, Job>()
 
     private fun persist(key: String, value: Any?) {
-        persistenceScope.launch {
-            DesktopDataStore.setKey(key, value)
-        }
+        enqueuePersistence(key) { DesktopDataStore.setKey(key, value) }
     }
 
     private fun removeKey(key: String) {
-        persistenceScope.launch {
-            DesktopDataStore.removeKey(key)
+        enqueuePersistence(key) { DesktopDataStore.removeKey(key) }
+    }
+
+    private fun enqueuePersistence(key: String, write: () -> Unit) {
+        synchronized(persistenceLock) {
+            val previousWrite = persistenceJobs[key]
+            persistenceJobs[key] = persistenceScope.launch {
+                previousWrite?.join()
+                write()
+            }
         }
     }
 
@@ -940,12 +969,51 @@ object AppearanceConfig {
         persist(PREF_SHOW_CONTINUE_WATCHING, enabled)
     }
 
+    fun setHomeFeedSectionOrder(order: List<HomeFeedSectionKey>) {
+        val completeOrder = order.distinct() + HomeFeedSectionKey.defaultOrder.filterNot(order::contains)
+        _homeFeedSectionOrder.value = completeOrder
+        persist(PREF_HOME_FEED_SECTION_ORDER, HomeFeedSectionKey.serialize(completeOrder))
+    }
+
+    fun moveHomeFeedSection(fromIndex: Int, toIndex: Int) {
+        val current = _homeFeedSectionOrder.value.toMutableList()
+        if (fromIndex in current.indices && toIndex in current.indices && fromIndex != toIndex) {
+            val section = current.removeAt(fromIndex)
+            current.add(toIndex, section)
+            setHomeFeedSectionOrder(current)
+        }
+    }
+
+    fun toggleHomeFeedSection(key: HomeFeedSectionKey, enabled: Boolean) {
+        val current = _homeFeedDisabledSections.value.toMutableSet()
+        if (enabled) current.remove(key) else current.add(key)
+        _homeFeedDisabledSections.value = current
+        persist(PREF_HOME_FEED_DISABLED_SECTIONS, HomeFeedSectionKey.serialize(current))
+    }
+
+    fun setHomeContinueWatchingPosition(position: HomeContinueWatchingPosition) {
+        _homeContinueWatchingPosition.value = position
+        persist(PREF_HOME_CONTINUE_WATCHING_POSITION, position.name)
+    }
+
+    fun resetHomeFeedSections() {
+        _homeFeedSectionOrder.value = HomeFeedSectionKey.defaultOrder
+        _homeFeedDisabledSections.value = emptySet()
+        _homeContinueWatchingPosition.value = HomeContinueWatchingPosition.BELOW_HERO
+        removeKey(PREF_HOME_FEED_SECTION_ORDER)
+        removeKey(PREF_HOME_FEED_DISABLED_SECTIONS)
+        removeKey(PREF_HOME_CONTINUE_WATCHING_POSITION)
+    }
+
     fun reloadFromDataStore() {
         _dockItemOrder.value = DockItemKey.parseOrder(DesktopDataStore.getKey<String>(PREF_DOCK_ITEM_ORDER))
         _dockDisabledItems.value = DockItemKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_DOCK_DISABLED_ITEMS))
         _topBarShowProfile.value = DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE) ?: true
         _topBarShowProfileName.value = DesktopDataStore.getKey<Boolean>(PREF_TOPBAR_SHOW_PROFILE_NAME) ?: true
         _showContinueWatching.value = DesktopDataStore.getKey<Boolean>(PREF_SHOW_CONTINUE_WATCHING) ?: true
+        _homeFeedSectionOrder.value = HomeFeedSectionKey.parseOrder(DesktopDataStore.getKey<String>(PREF_HOME_FEED_SECTION_ORDER))
+        _homeFeedDisabledSections.value = HomeFeedSectionKey.parseDisabled(DesktopDataStore.getKey<String>(PREF_HOME_FEED_DISABLED_SECTIONS))
+        _homeContinueWatchingPosition.value = HomeContinueWatchingPosition.fromString(DesktopDataStore.getKey<String>(PREF_HOME_CONTINUE_WATCHING_POSITION))
         _themeAccent.value = DesktopDataStore.getKey<String>(PREF_THEME_ACCENT) ?: "Purple"
         _antiSpoilerEnabled.value = DesktopDataStore.getKey<Boolean>(PREF_ANTI_SPOILER_ENABLED) ?: true
         _lockUnreleasedEpisodes.value = DesktopDataStore.getKey<Boolean>(PREF_LOCK_UNRELEASED_EPISODES) ?: true

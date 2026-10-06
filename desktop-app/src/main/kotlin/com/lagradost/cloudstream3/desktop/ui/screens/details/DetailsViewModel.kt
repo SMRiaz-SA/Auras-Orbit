@@ -5,17 +5,22 @@ import com.lagradost.cloudstream3.desktop.core.preference.PreferenceKeys
 import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.GetBookmarks
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.repository.BookmarksRepository
+import com.lagradost.cloudstream3.desktop.domain.customlists.repository.CustomListsRepository
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.GetWatchHistory
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.RemoveWatchHistory
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.UpsertWatchHistory
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiState
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
+import com.lagradost.common.storage.EpisodeWatchMark
+import com.lagradost.common.storage.FollowedShow
 import com.lagradost.common.storage.WatchHistory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class DetailsViewModel(
@@ -26,6 +31,8 @@ class DetailsViewModel(
     val preloadedBg: String? = null,
     val initialSeason: Int? = null,
     val targetEpisodeId: String? = null,
+    val targetEpisode: Int? = null,
+    val playNextEpisode: Boolean = false,
     cachedResponse: LoadResponse? = DetailsCache.get(url),
     cachedUiState: DetailsUiState? = EnrichedDetailsCache.get(url),
     private val getWatchHistory: GetWatchHistory = AppContainerHolder.container.getWatchHistory,
@@ -33,6 +40,7 @@ class DetailsViewModel(
     private val removeWatchHistory: RemoveWatchHistory = AppContainerHolder.container.removeWatchHistory,
     private val getBookmarks: GetBookmarks = AppContainerHolder.container.getBookmarks,
     private val bookmarksRepository: BookmarksRepository = AppContainerHolder.container.bookmarksRepository,
+    private val customListsRepository: CustomListsRepository = AppContainerHolder.container.customListsRepository,
 ) : BaseMviViewModel<DetailsUiState, DetailsUiEvent, DetailsUiEffect>(
     initialState = cachedUiState?.copy(
         fetchFailed = false,
@@ -102,6 +110,24 @@ class DetailsViewModel(
                 updateState { copy(bookmarks = bookmarks) }
             }
         }
+        viewModelScope.launch {
+            customListsRepository.subscribeActive().collect { snapshot ->
+                updateState {
+                    copy(
+                        customLists = snapshot.lists,
+                        customListItems = snapshot.items,
+                    )
+                }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.flow.combine(
+                DesktopDataStore.episodeTrackingUpdates,
+                ProfileManager.activeProfile,
+            ) { _, profile -> profile.id }
+                .distinctUntilChanged()
+                .collect { refreshEpisodeTrackingState(uiState.value.response?.url ?: url) }
+        }
     }
 
     override fun handleEvent(event: DetailsUiEvent) {
@@ -117,6 +143,7 @@ class DetailsViewModel(
             is DetailsUiEvent.OnToggleEpisodeWatched -> handleToggleEpisodeWatched(event.ep, event.isWatched)
             is DetailsUiEvent.OnRemoveEpisodeWatched -> handleRemoveEpisodeWatched(event.ep)
             is DetailsUiEvent.OnToggleSeasonWatched -> handleToggleSeasonWatched(event.episodes, event.isWatched)
+            DetailsUiEvent.OnToggleScheduleFollow -> toggleScheduleFollow()
             is DetailsUiEvent.OnToggleEpisodesStackedView -> handleToggleEpisodesStackedView(event.isStacked)
             is DetailsUiEvent.OnSetEpisodeViewMode -> handleSetEpisodeViewMode(event.viewMode)
             is DetailsUiEvent.OnRefresh -> refresh()
@@ -130,6 +157,12 @@ class DetailsViewModel(
                 val profileId = com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId
                 viewModelScope.launch(Dispatchers.IO) {
                     bookmarksRepository.removeBookmark(event.id, profileId)
+                }
+            }
+            is DetailsUiEvent.OnSetBookmarkInCustomList -> {
+                val profileId = ProfileManager.activeProfileId
+                viewModelScope.launch(Dispatchers.IO) {
+                    customListsRepository.setBookmark(event.listId, event.bookmarkId, event.included, profileId)
                 }
             }
             is DetailsUiEvent.OnSelectSeason -> selectSeason(event.season)
@@ -175,9 +208,23 @@ class DetailsViewModel(
                             else -> emptyList()
                         }.filter { it > 0 }
                         val firstAvailableSeason = availableSeasons.firstOrNull() ?: 1
+                        val queuedTargetSeason = if (playNextEpisode && !targetEpisodeId.isNullOrBlank()) {
+                            DetailsWatchCoordinator.determineAutoPlayTarget(
+                                provider = provider,
+                                resp = update.response,
+                                watchHistory = uiState.value.watchHistory,
+                                targetEpisodeId = targetEpisodeId,
+                                targetSeason = initialSeason,
+                                targetEpisode = targetEpisode,
+                                playNextEpisode = true,
+                            )?.season
+                        } else {
+                            null
+                        }
                         val resolvedSeason = if (isSeries) {
                             (
-                                uiState.value.selectedSeason?.takeIf { it in availableSeasons }
+                                queuedTargetSeason?.takeIf { it in availableSeasons }
+                                    ?: uiState.value.selectedSeason?.takeIf { it in availableSeasons }
                                     ?: initialSeason?.takeIf { it in availableSeasons }
                                     ?: latestHistorySeason?.takeIf { it in availableSeasons }
                                     ?: firstAvailableSeason
@@ -199,6 +246,7 @@ class DetailsViewModel(
                                 selectedSeason = resolvedSeason,
                             )
                         }
+                        refreshEpisodeTrackingState(update.response.url)
                         val targetSeason = resolvedSeason ?: uiState.value.selectedSeason
                         val currentTmdb = rawTmdbId ?: uiState.value.tmdbId
                         if (targetSeason != null && targetSeason > 0 && currentTmdb != null) {
@@ -244,7 +292,16 @@ class DetailsViewModel(
                         }
                     }
                     is EnrichmentUpdate.TrailersLoaded -> {
-                        updateState { copy(enrichedTrailers = update.trailers, enrichedTrailerUrl = update.trailers.firstOrNull()?.url) }
+                        updateState {
+                            val language = com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.tmdbLanguage.value
+                            val maxTrailers = com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.maxTrailers.value.coerceIn(3, 50)
+                            val mergedTrailers = com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerUtils
+                                .mergeAndRank(enrichedTrailers + update.trailers, language, maxTrailers)
+                            copy(
+                                enrichedTrailers = mergedTrailers,
+                                enrichedTrailerUrl = mergedTrailers.firstOrNull()?.url,
+                            )
+                        }
                     }
                     is EnrichmentUpdate.ReviewsLoaded -> {
                         updateState { copy(enrichedReviews = update.reviews) }
@@ -417,11 +474,14 @@ class DetailsViewModel(
                 resp = resp,
                 watchHistory = uiState.value.watchHistory,
                 targetEpisodeId = targetEpisodeId,
+                targetSeason = initialSeason,
+                targetEpisode = targetEpisode,
+                playNextEpisode = playNextEpisode,
             )
             if (targetEp != null) {
                 val patchedData = DetailsWatchCoordinator.patchEpisodeData(targetEp, resp)
                 val history = DetailsWatchCoordinator.buildWatchHistory(provider.name, targetEp, resp)
-                handlePlayRequest(Triple(provider, patchedData, history))
+                handlePlayRequest(Triple(provider, patchedData, history), forceAutoPlay = true)
             }
         }
     }
@@ -461,134 +521,147 @@ class DetailsViewModel(
 
     private fun handleRemoveEpisodeWatched(ep: com.lagradost.cloudstream3.Episode) {
         val data = uiState.value.response ?: return
-
-        val matchingHistories = uiState.value.watchHistory.values.filter { ep.matchesHistory(it) || it.episodeId == ep.data }
-        val candidateIds = (matchingHistories.mapNotNull { it.episodeId } + listOf(ep.data, DetailsWatchCoordinator.patchEpisodeData(ep, data))).distinct()
-
-        // Optimistic in-memory update for instant UI feedback
-        val updatedMap = uiState.value.watchHistory.toMutableMap()
-        updatedMap.entries.removeAll { it.key == ep.data || ep.matchesHistory(it.value) }
-        updateState { copy(watchHistory = updatedMap) }
-
+        val profileId = ProfileManager.activeProfileId
+        val updatedMarks = uiState.value.episodeWatchMarks.filterValues { !ep.matchesWatchMark(it) }
+        updateState { copy(episodeWatchMarks = updatedMarks) }
         viewModelScope.launch(Dispatchers.IO) {
-            DetailsWatchCoordinator.removeEpisodeWatched(
-                providerName = provider.name,
-                currentDataUrl = data.url,
-                fallbackUrl = url,
-                epData = ep.data,
-                removeWatchHistory = removeWatchHistory,
-                season = ep.season,
-                episode = ep.episode,
-                extraEpisodeIds = candidateIds,
-            )
+            DesktopDataStore.setEpisodeWatchMarks(episodeWatchMarksForRemoval(listOf(ep), data, profileId), watched = false)
         }
     }
 
     private fun handleToggleEpisodeWatched(ep: Episode, isWatched: Boolean) {
         val data = uiState.value.response ?: return
+        val profileId = ProfileManager.activeProfileId
+        val mark = makeEpisodeWatchMark(ep, data, profileId)
+        val updatedMarks = uiState.value.episodeWatchMarks.toMutableMap()
+        updatedMarks.entries.removeAll { ep.matchesWatchMark(it.value) }
+        if (isWatched) updatedMarks[mark.episodeKey] = mark
+        updateState { copy(episodeWatchMarks = updatedMarks) }
 
-        // Optimistic in-memory update for instant UI feedback
-        val updatedMap = uiState.value.watchHistory.toMutableMap()
-        if (isWatched) {
-            val currentParentId = DesktopDataStore.watchHistoryId(provider.name, data.url)
-            val saved = updatedMap[ep.data] ?: updatedMap.values.find { ep.matchesHistory(it) }
-            val dur = if (saved != null && saved.duration > 0L) saved.duration else 60L
-            val isMovie = data is MovieLoadResponse
-            val newHist = WatchHistory(
-                parentId = currentParentId,
-                showName = data.name,
-                showUrl = data.url,
-                apiName = provider.name,
-                posterUrl = data.posterUrl,
-                episodeThumbnailUrl = ep.posterUrl,
-                screenshotUrl = saved?.screenshotUrl,
-                episode = if (isMovie) null else ep.episode,
-                season = if (isMovie) null else ep.season,
-                episodeId = ep.data,
-                position = dur,
-                duration = dur,
-                updateTime = System.currentTimeMillis(),
-                episodeName = if (isMovie) null else ep.name,
-                episodeDescription = ep.description ?: data.plot,
-            )
-            updatedMap[ep.data] = newHist
-            updateState { copy(watchHistory = updatedMap) }
-
-            viewModelScope.launch(Dispatchers.IO) {
-                DetailsWatchCoordinator.toggleEpisodeWatched(
-                    providerName = provider.name,
-                    data = data,
-                    fallbackUrl = url,
-                    ep = ep,
-                    isWatched = true,
-                )
-            }
-        } else {
-            val matchingHistories = uiState.value.watchHistory.values.filter { ep.matchesHistory(it) || it.episodeId == ep.data }
-            val candidateIds = (matchingHistories.mapNotNull { it.episodeId } + listOf(ep.data, DetailsWatchCoordinator.patchEpisodeData(ep, data))).distinct()
-            updatedMap.entries.removeAll { it.key == ep.data || ep.matchesHistory(it.value) }
-            updateState { copy(watchHistory = updatedMap) }
-
-            viewModelScope.launch(Dispatchers.IO) {
-                DetailsWatchCoordinator.toggleEpisodeWatched(
-                    providerName = provider.name,
-                    data = data,
-                    fallbackUrl = url,
-                    ep = ep,
-                    isWatched = false,
-                    extraEpisodeIds = candidateIds,
-                )
-            }
+        viewModelScope.launch(Dispatchers.IO) {
+            val marks = if (isWatched) listOf(mark) else episodeWatchMarksForRemoval(listOf(ep), data, profileId)
+            DesktopDataStore.setEpisodeWatchMarks(marks, watched = isWatched)
+            if (isWatched) DetailsWatchCoordinator.queueNextEpisode(provider.name, data, ep, profileId)
         }
     }
 
     private fun handleToggleSeasonWatched(episodes: List<Episode>, isWatched: Boolean) {
         val data = uiState.value.response ?: return
-
-        // Optimistic in-memory update for instant UI feedback
-        val updatedMap = uiState.value.watchHistory.toMutableMap()
-        if (isWatched) {
-            val currentParentId = DesktopDataStore.watchHistoryId(provider.name, data.url)
-            val isMovie = data is MovieLoadResponse
-            episodes.forEach { ep ->
-                val saved = updatedMap[ep.data] ?: updatedMap.values.find { ep.matchesHistory(it) }
-                val dur = if (saved != null && saved.duration > 0L) saved.duration else 60L
-                updatedMap[ep.data] = WatchHistory(
-                    parentId = currentParentId,
-                    showName = data.name,
-                    showUrl = data.url,
-                    apiName = provider.name,
-                    posterUrl = data.posterUrl,
-                    episodeThumbnailUrl = ep.posterUrl,
-                    screenshotUrl = saved?.screenshotUrl,
-                    episode = if (isMovie) null else ep.episode,
-                    season = if (isMovie) null else ep.season,
-                    episodeId = ep.data,
-                    position = dur,
-                    duration = dur,
-                    updateTime = System.currentTimeMillis(),
-                    episodeName = if (isMovie) null else ep.name,
-                    episodeDescription = ep.description ?: data.plot,
-                )
-            }
-        } else {
-            episodes.forEach { ep ->
-                updatedMap.entries.removeAll { it.key == ep.data || ep.matchesHistory(it.value) }
+        val profileId = ProfileManager.activeProfileId
+        val marks = episodes.map { makeEpisodeWatchMark(it, data, profileId) }
+        val updatedMarks = uiState.value.episodeWatchMarks.toMutableMap()
+        episodes.forEach { ep -> updatedMarks.entries.removeAll { ep.matchesWatchMark(it.value) } }
+        if (isWatched) marks.forEach { updatedMarks[it.episodeKey] = it }
+        updateState { copy(episodeWatchMarks = updatedMarks) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val marksToPersist = if (isWatched) marks else episodeWatchMarksForRemoval(episodes, data, profileId)
+            DesktopDataStore.setEpisodeWatchMarks(marksToPersist, watched = isWatched)
+            if (isWatched) {
+                episodes.lastOrNull()?.let {
+                    DetailsWatchCoordinator.queueNextEpisode(provider.name, data, it, profileId)
+                }
             }
         }
-        updateState { copy(watchHistory = updatedMap) }
+    }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            val newBackup = DetailsWatchCoordinator.toggleSeasonWatched(
-                providerName = provider.name,
-                data = data,
-                fallbackUrl = url,
-                episodes = episodes,
-                isWatched = isWatched,
-                currentWatchHistory = uiState.value.watchHistory,
-                backupSeasonHistory = uiState.value.backupSeasonHistory,
+    private fun episodeWatchMarksForRemoval(episodes: List<Episode>, data: LoadResponse, profileId: Int): List<EpisodeWatchMark> {
+        val showUrls = setOf(data.url, url)
+        val storedMarks = showUrls.flatMap { showUrl ->
+            DesktopDataStore.getEpisodeWatchMarks(profileId, provider.name, showUrl)
+        }
+        val marksToRemove = episodes.flatMap { episode ->
+            val matchingMarks = storedMarks.filter(episode::matchesWatchMark)
+            matchingMarks.ifEmpty { listOf(makeEpisodeWatchMark(episode, data, profileId)) }
+        }
+        return marksToRemove.distinctBy { it.showUrl to it.episodeKey }
+    }
+
+    private fun makeEpisodeWatchMark(ep: Episode, data: LoadResponse, profileId: Int): EpisodeWatchMark {
+        val season = ep.season ?: 1
+        val episodeNumber = ep.episode ?: 0
+        val key = if (ep.episode != null) "s$season:e$episodeNumber" else "data:${ep.data}"
+        return EpisodeWatchMark(
+            profileId = profileId,
+            providerName = provider.name,
+            showUrl = data.url,
+            episodeKey = key,
+            episodeId = ep.data,
+            showName = data.name,
+            seasonNumber = season,
+            episodeNumber = episodeNumber,
+        )
+    }
+
+    private fun refreshEpisodeTrackingState(showUrl: String) {
+        val profileId = ProfileManager.activeProfileId
+        val currentUrl = uiState.value.response?.url ?: showUrl
+        val marks = (
+            DesktopDataStore.getEpisodeWatchMarks(profileId, provider.name, currentUrl) +
+                DesktopDataStore.getEpisodeWatchMarks(profileId, provider.name, url)
             )
-            updateState { copy(backupSeasonHistory = newBackup) }
+            .distinctBy { it.episodeKey }
+            .associateBy { it.episodeKey }
+        val follows = DesktopDataStore.getFollowedShows(profileId)
+            .any { it.providerName == provider.name && (it.showUrl == currentUrl || it.showUrl == url) }
+        updateState {
+            if (ProfileManager.activeProfileId != profileId || (response?.url ?: showUrl) != currentUrl) {
+                this
+            } else {
+                copy(episodeWatchMarks = marks, isFollowingSchedule = follows)
+            }
+        }
+    }
+
+    private fun toggleScheduleFollow() {
+        val data = uiState.value.response ?: return
+        if (data !is TvSeriesLoadResponse && data !is AnimeLoadResponse) return
+        val profileId = ProfileManager.activeProfileId
+        val existing = DesktopDataStore.getFollowedShows(profileId)
+            .firstOrNull { it.providerName == provider.name && (it.showUrl == data.url || it.showUrl == url) }
+        if (existing != null) {
+            updateState { copy(isFollowingSchedule = false) }
+            viewModelScope.launch(Dispatchers.IO) {
+                DesktopDataStore.unfollowShow(profileId, existing.providerName, existing.showUrl)
+            }
+            return
+        }
+
+        updateState { copy(isFollowingSchedule = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val tmdbId = uiState.value.tmdbId
+                ?: data.syncData["tmdb"]?.toIntOrNull()
+                ?: try {
+                    TmdbEpisodeCalendarRepository.resolveTmdbId(data)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+            val followed = FollowedShow(
+                profileId = profileId,
+                providerName = provider.name,
+                showUrl = data.url,
+                showName = data.name,
+                posterUrl = data.posterUrl,
+                tmdbId = tmdbId,
+                lastRefreshError = if (tmdbId == null) "No confident TMDB match was found" else null,
+            )
+            DesktopDataStore.followShow(followed)
+            if (tmdbId != null) {
+                try {
+                    TmdbEpisodeCalendarRepository.refreshShow(followed)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    DesktopDataStore.updateFollowedShowRefresh(
+                        profileId = profileId,
+                        providerName = provider.name,
+                        showUrl = data.url,
+                        refreshedAt = System.currentTimeMillis(),
+                        error = failure.localizedMessage ?: "Could not load episode dates",
+                    )
+                }
+            }
         }
     }
 

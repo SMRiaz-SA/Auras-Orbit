@@ -130,7 +130,7 @@ internal object PluginFileUtils {
             plugin.fileHash != null &&
                 it.internalName == plugin.internalName &&
                 it.fileHash.equals(plugin.fileHash, ignoreCase = true) &&
-                it.url != plugin.url && it.url.startsWith("http")
+                it.url != plugin.url && PluginNetworkClient.isAllowedRepositoryUrl(it.url)
         }
         .map { it.url }
         .distinct()
@@ -155,13 +155,17 @@ internal object PluginFileUtils {
         val repoDir = destFile.parentFile ?: return@withContext null
         if (!repoDir.exists()) repoDir.mkdirs()
         val tempFile = File.createTempFile(destFile.name, ".tmp", repoDir)
+        val safeClient = PluginNetworkClient.enforceRepositoryTransport(client)
 
         try {
             var downloadSuccess = false
             for (candidateUrl in candidateUrls) {
                 try {
+                    require(PluginNetworkClient.isAllowedRepositoryUrl(candidateUrl)) {
+                        "Plugin downloads require HTTPS"
+                    }
                     val request = Request.Builder().url(candidateUrl).build()
-                    client.newCall(request).execute().use { response ->
+                    safeClient.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code} downloading from $candidateUrl")
                         val body = response.body
                         val contentLength = body.contentLength()
@@ -225,8 +229,11 @@ internal object PluginFileUtils {
                 val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", jvmDestFile.parentFile)
                 var installedJvmSidecar = false
                 try {
+                    require(PluginNetworkClient.isAllowedRepositoryUrl(plugin.jarUrl)) {
+                        "Pre-compiled plugin downloads require HTTPS"
+                    }
                     val jvmRequest = Request.Builder().url(plugin.jarUrl).build()
-                    client.newCall(jvmRequest).execute().use { response ->
+                    safeClient.newCall(jvmRequest).execute().use { response ->
                         if (response.isSuccessful) {
                             val body = response.body
                             if (body.contentLength() > 64 * 1024 * 1024L) {

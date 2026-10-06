@@ -25,6 +25,8 @@ sealed class Config {
         val autoPlay: Boolean = false,
         val targetSeason: Int? = null,
         val targetEpisodeId: String? = null,
+        val targetEpisode: Int? = null,
+        val playNextEpisode: Boolean = false,
     ) : Config()
     data class CategoryGrid(
         val providerName: String,

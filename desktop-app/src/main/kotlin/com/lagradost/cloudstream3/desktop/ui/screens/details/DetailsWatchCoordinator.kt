@@ -46,10 +46,6 @@ internal object DetailsWatchCoordinator {
             } else {
                 null
             }
-        val resumePos = PlayerLinkHandler.resumeStartSeconds(
-            saved?.position ?: 0L,
-            saved?.duration ?: 0L,
-        )
         val isMovie = data is MovieLoadResponse
         return WatchHistory(
             parentId = parentId,
@@ -62,7 +58,8 @@ internal object DetailsWatchCoordinator {
             episode = if (isMovie) null else ep.episode,
             season = if (isMovie) null else ep.season,
             episodeId = ep.data,
-            position = resumePos,
+            // Keep the persisted position raw; the player launch path applies the resume adjustment once.
+            position = saved?.position ?: 0L,
             duration = saved?.duration ?: 0L,
             episodeName = if (isMovie) null else ep.name,
             episodeDescription = ep.description ?: data.plot,
@@ -74,6 +71,9 @@ internal object DetailsWatchCoordinator {
         resp: LoadResponse,
         watchHistory: Map<String, WatchHistory>,
         targetEpisodeId: String? = null,
+        targetSeason: Int? = null,
+        targetEpisode: Int? = null,
+        playNextEpisode: Boolean = false,
     ): Episode? {
         val allEpisodes = when (resp) {
             is TvSeriesLoadResponse -> resp.episodes
@@ -85,9 +85,31 @@ internal object DetailsWatchCoordinator {
                 .thenBy { it.episode ?: 1 },
         )
 
-        if (targetEpisodeId != null) {
-            val matchedEp = sortedEpisodes.find { it.data == targetEpisodeId }
-            if (matchedEp != null) return matchedEp
+        val episodeById = targetEpisodeId?.let { id -> sortedEpisodes.find { it.data == id } }
+        if (playNextEpisode && episodeById != null) {
+            // Synthetic Up Next rows retain the completed episode ID but advance their episode coordinates.
+            val isRequestedEpisode = (targetSeason == null || episodeById.season == targetSeason) &&
+                (targetEpisode == null || episodeById.episode == targetEpisode)
+            val historyForEpisode = watchHistory.values.firstOrNull { it.episodeId == episodeById.data }
+            val isCompleted = historyForEpisode != null && historyForEpisode.duration > 0L &&
+                PlayerLinkHandler.isCompleted(historyForEpisode.position, historyForEpisode.duration)
+            if (!isRequestedEpisode || isCompleted) {
+                val currentIndex = sortedEpisodes.indexOf(episodeById)
+                val nextEpisode = sortedEpisodes.getOrNull(currentIndex + 1)
+                if (nextEpisode != null || !isRequestedEpisode) return nextEpisode
+            }
+        }
+
+        if (targetEpisode != null) {
+            val coordinateMatch = sortedEpisodes.find { episode ->
+                episode.episode == targetEpisode &&
+                    (targetSeason == null || episode.season == targetSeason)
+            }
+            if (coordinateMatch != null) return coordinateMatch
+        }
+
+        if (episodeById != null) {
+            return episodeById
         }
 
         val latestHistory = watchHistory.values.maxByOrNull { it.updateTime }
@@ -108,10 +130,30 @@ internal object DetailsWatchCoordinator {
         } else if (sortedEpisodes.isNotEmpty()) {
             sortedEpisodes.firstOrNull()
         } else if (resp is MovieLoadResponse) {
-            provider.newEpisode(resp.dataUrl) {
-                this.name = resp.name
-                this.posterUrl = resp.backgroundPosterUrl ?: resp.posterUrl
-                this.description = resp.plot
+            resp.dataUrl.takeIf { it.isNotBlank() }?.let { dataUrl ->
+                provider.newEpisode(dataUrl) {
+                    this.name = resp.name
+                    this.posterUrl = resp.backgroundPosterUrl ?: resp.posterUrl
+                    this.description = resp.plot
+                }
+            }
+        } else if (resp is TorrentLoadResponse) {
+            val dataUrl = resp.torrent?.takeIf { it.isNotBlank() }
+                ?: resp.magnet?.takeIf { it.isNotBlank() }
+            dataUrl?.let { torrentUrl ->
+                provider.newEpisode(torrentUrl) {
+                    this.name = resp.name
+                    this.posterUrl = resp.posterUrl
+                    this.description = resp.plot
+                }
+            }
+        } else if (resp is LiveStreamLoadResponse) {
+            resp.dataUrl.takeIf { it.isNotBlank() }?.let { dataUrl ->
+                provider.newEpisode(dataUrl) {
+                    this.name = resp.name
+                    this.posterUrl = resp.backgroundPosterUrl ?: resp.posterUrl
+                    this.description = resp.plot
+                }
             }
         } else {
             null
@@ -148,6 +190,62 @@ internal object DetailsWatchCoordinator {
             )
         }
         cleanupOrphanWatchHistory(listOf(currentParentId, fallbackParentId))
+    }
+
+    suspend fun queueNextEpisode(providerName: String, data: LoadResponse, ep: Episode, profileId: Int) {
+        val allEpisodes = when (data) {
+            is TvSeriesLoadResponse -> data.episodes
+            is AnimeLoadResponse -> data.episodes.values.flatten()
+            else -> emptyList()
+        }.sortedWith(compareBy<Episode> { it.season ?: 1 }.thenBy { it.episode ?: 1 })
+        val currentIndex = allEpisodes.indexOfFirst { it.data == ep.data }.takeIf { it >= 0 }
+            ?: allEpisodes.indexOfFirst { it.season == ep.season && it.episode == ep.episode }.takeIf { it >= 0 }
+            ?: return
+        val parentId = DesktopDataStore.watchHistoryId(providerName, data.url, profileId = profileId)
+        val watchedMarks = DesktopDataStore.getEpisodeWatchMarks(
+            profileId,
+            providerName,
+            data.url,
+        )
+        val nextEpisode = allEpisodes.drop(currentIndex + 1).firstOrNull { candidate ->
+            !candidate.data.startsWith("unreleased_") &&
+                !parseEpisodeReleaseStatus(candidate, providerName).isUnreleased &&
+                watchedMarks.none(candidate::matchesWatchMark) &&
+                DesktopDataStore.getEpisodeWatched(parentId, candidate.data)?.let {
+                    it.duration <= 0L || !PlayerLinkHandler.isCompleted(it.position, it.duration)
+                } != false
+        } ?: return
+
+        val existing = DesktopDataStore.getEpisodeWatched(parentId, nextEpisode.data)
+        val queued = if (existing == null) {
+            WatchHistory(
+                parentId = parentId,
+                showName = data.name,
+                showUrl = data.url,
+                apiName = providerName,
+                posterUrl = data.posterUrl,
+                episodeThumbnailUrl = nextEpisode.posterUrl ?: data.posterUrl,
+                screenshotUrl = null,
+                episode = nextEpisode.episode,
+                season = nextEpisode.season,
+                episodeId = nextEpisode.data,
+                position = 0,
+                duration = 0,
+                updateTime = System.currentTimeMillis() + 1000,
+                episodeName = nextEpisode.name,
+                episodeDescription = nextEpisode.description ?: data.plot,
+            )
+        } else if (existing.duration <= 0L || !PlayerLinkHandler.isCompleted(existing.position, existing.duration)) {
+            existing.copy(
+                updateTime = System.currentTimeMillis() + 1000,
+                episodeThumbnailUrl = existing.episodeThumbnailUrl ?: nextEpisode.posterUrl ?: data.posterUrl,
+                episodeName = existing.episodeName ?: nextEpisode.name,
+                episodeDescription = existing.episodeDescription ?: nextEpisode.description ?: data.plot,
+            )
+        } else {
+            return
+        }
+        DesktopDataStore.setLastWatched(queued, forceNotify = true)
     }
 
     suspend fun toggleEpisodeWatched(

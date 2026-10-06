@@ -5,25 +5,28 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.stremio.StremioAddonManager
 import com.lagradost.cloudstream3.desktop.stremio.StremioTransport
 import com.lagradost.cloudstream3.desktop.utils.appScope
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Asynchronous rating lookup for media cards.
  */
 object FastRatingEnricher {
     private const val TAG = "FastRatingEnricher"
+    private const val MAX_RESPONSE_BYTES = 1024 * 1024
     private val mapper = jacksonObjectMapper()
 
     // Normalized Title -> Rating (e.g. 8.8)
-    private val ratingCache = ConcurrentHashMap<String, Double>()
-    private val inFlightQueries = ConcurrentHashMap.newKeySet<String>()
+    private val ratingCache = BoundedLruCache<String, Double>(512)
+    private val inFlightQueries = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     private val _ratingsUpdateSignal = MutableStateFlow(0L)
     val ratingsUpdateSignal: StateFlow<Long> = _ratingsUpdateSignal.asStateFlow()
@@ -35,9 +38,7 @@ object FastRatingEnricher {
 
     fun requestRatingAsync(cleanTitle: String, isAnime: Boolean, isSeries: Boolean = false) {
         val key = normalizeKey(cleanTitle)
-        if (ratingCache.containsKey(key) || inFlightQueries.contains(key)) return
-
-        inFlightQueries.add(key)
+        if (ratingCache[key] != null || !inFlightQueries.add(key)) return
         appScope.launch(Dispatchers.IO) {
             try {
                 val rating = if (isAnime) {
@@ -50,6 +51,8 @@ object FastRatingEnricher {
                     ratingCache[key] = rating
                     _ratingsUpdateSignal.value = System.currentTimeMillis()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.d(TAG, "Failed rating lookup for '$cleanTitle': ${e.message}")
             } finally {
@@ -79,7 +82,8 @@ object FastRatingEnricher {
     private suspend fun queryCinemetaType(baseUrl: String, type: String, encodedQuery: String): Double? {
         return try {
             val searchUrl = "$baseUrl/catalog/$type/top/search=$encodedQuery.json"
-            val responseText = app.get(searchUrl, timeout = 3000L).text
+            val responseText = app.get(searchUrl, timeout = 3000L)
+                .body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
             val root = mapper.readTree(responseText)
             val metas = root["metas"]
             if (metas != null && metas.isArray && metas.size() > 0) {
@@ -89,7 +93,8 @@ object FastRatingEnricher {
 
                 // Direct meta query to fetch the verified IMDb rating
                 val metaUrl = "$baseUrl/meta/$metaType/$id.json"
-                val metaRespText = app.get(metaUrl, timeout = 3000L).text
+                val metaRespText = app.get(metaUrl, timeout = 3000L)
+                    .body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
                 val metaRoot = mapper.readTree(metaRespText)
                 val metaObj = metaRoot["meta"]
                 val scoreStr = metaObj?.get("imdbRating")?.asText()
@@ -99,6 +104,8 @@ object FastRatingEnricher {
                 }
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -127,12 +134,15 @@ object FastRatingEnricher {
                 timeout = 3000L,
             )
 
-            val root = mapper.readTree(response.text)
+            val responseText = response.body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
+            val root = mapper.readTree(responseText)
             val scoreInt = root["data"]?.get("Media")?.get("averageScore")?.asInt()
             if (scoreInt != null && scoreInt > 0) {
                 return (scoreInt / 10.0)
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }

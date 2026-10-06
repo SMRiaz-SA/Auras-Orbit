@@ -242,6 +242,7 @@ fun ComposeDetailsScreen(
                             uiState = uiState,
                             showHistory = showHistory,
                             activeBgUrl = activeBgUrl,
+                            targetEpisode = viewModel.targetEpisode,
                             onEvent = viewModel::onEvent,
                         )
                     }
@@ -401,6 +402,7 @@ fun DetailsContent(
     uiState: com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiState? = null,
     showHistory: Map<String, com.lagradost.common.storage.WatchHistory> = emptyMap(),
     activeBgUrl: String? = null,
+    targetEpisode: Int? = null,
     onEvent: (DetailsUiEvent) -> Unit = {},
 ) {
     val scrollState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -558,9 +560,12 @@ fun DetailsContent(
                                             onToggleWatched = onToggleWatched,
                                             onToggleSeasonWatched = onToggleSeasonWatched,
                                             onRemoveEpisodeWatched = onRemoveEpisodeWatched,
+                                            isFollowingSchedule = uiState?.isFollowingSchedule == true,
+                                            onToggleScheduleFollow = { onEvent(DetailsUiEvent.OnToggleScheduleFollow) },
                                             onToggleEpisodesStackedView = onToggleEpisodesStackedView,
                                             onSetEpisodeViewMode = onSetEpisodeViewMode ?: {},
                                             selectedSeason = currentSeason,
+                                            targetEpisode = targetEpisode,
                                             onSeasonChange = { onEvent(DetailsUiEvent.OnSelectSeason(it)) },
                                         )
                                     }
@@ -669,7 +674,17 @@ fun DetailsContent(
                     }
                     com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsSectionKey.TRAILERS -> {
                         val enrichedTrailers = uiState?.enrichedTrailers ?: emptyList()
-                        if (enrichedTrailers.isNotEmpty()) {
+                        val supportsTrailers = data.type in setOf(
+                            com.lagradost.cloudstream3.TvType.Movie,
+                            com.lagradost.cloudstream3.TvType.TvSeries,
+                            com.lagradost.cloudstream3.TvType.Anime,
+                            com.lagradost.cloudstream3.TvType.AnimeMovie,
+                            com.lagradost.cloudstream3.TvType.OVA,
+                            com.lagradost.cloudstream3.TvType.Cartoon,
+                            com.lagradost.cloudstream3.TvType.Documentary,
+                            com.lagradost.cloudstream3.TvType.AsianDrama,
+                        )
+                        if (supportsTrailers) {
                             item(key = "Trailers") {
                                 BoxWithConstraints(modifier = Modifier.animateItem().fillMaxWidth()) {
                                     val hPadding = if (maxWidth < 1100.dp) 24.dp else 64.dp
@@ -678,6 +693,12 @@ fun DetailsContent(
                                             trailers = enrichedTrailers,
                                             trailersExpanded = trailersExpanded,
                                             onToggleExpand = { trailersExpanded = !trailersExpanded },
+                                            onSearchYouTube = {
+                                                val searchUrl = com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerUtils
+                                                    .youtubeSearchUrl(data.name, data.year)
+                                                onEvent(DetailsUiEvent.OnSetPendingExternalUrl(searchUrl))
+                                            },
+                                            isResolving = uiState?.enrichmentPhase != com.lagradost.cloudstream3.desktop.ui.screens.details.contract.EnrichmentPhase.Complete,
                                             onTrailerClick = { url ->
                                                 val trailer = enrichedTrailers.find { it.url == url }
                                                     ?: com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerData(id = url, name = "${data.name} Official Trailer", url = url)
@@ -838,6 +859,10 @@ fun DetailsContent(
         com.lagradost.cloudstream3.desktop.ui.screens.details.dialogs.TrailerPlayerDialog(
             trailer = uiState?.activeTrailer,
             onDismissRequest = { onEvent(DetailsUiEvent.OnSelectTrailer(null)) },
+            onOpenYouTube = { youtubeUrl ->
+                onEvent(DetailsUiEvent.OnSelectTrailer(null))
+                onEvent(DetailsUiEvent.OnSetPendingExternalUrl(youtubeUrl))
+            },
         )
     }
 }

@@ -6,8 +6,8 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current source version:** Beta **0.2.0.20**<br>
-**Source build date:** 2026-10-04<br>
+**Current source version:** Beta **0.2.0.21**<br>
+**Source build date:** 2026-10-06<br>
 **Platform:** Windows 10 or 11, 64-bit<br>
 **Downloads:** Published builds appear on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)
 
@@ -94,6 +94,8 @@ Torrent playback connects to other peers in a swarm, so your public IP address i
 ## Profiles and privacy
 
 Auras Orbit stores profiles, playback progress, watch history, bookmarks, settings, extension data, and subtitle-service credentials in local application data. Each profile keeps its own library activity on the device. External watch-tracking accounts and playback syncing are not supported.
+
+From **Library → Library file**, export the active profile's saved titles and episode progress as an `.orbitlib` file, or import one into a profile. Imports add missing titles and keep the newer episode progress; matching saved titles are left unchanged and no library entries are deleted. Library files contain title and provider URLs, statuses, and playback progress. They do not contain credentials, extension data, settings, downloads, or screenshots. Store exported files privately.
 
 Catalog browsing and stream lookup send search text or media IDs to the extensions and Stremio add-ons selected for those requests. Torrent Search sends the title query to the Magnetz search API. Avoid copying app-data folders into bug reports or source archives: they can contain profile databases, account identities, watchlist titles, credentials, and tokens. Orbit's portable packaging checks intentionally exclude this private app data.
 

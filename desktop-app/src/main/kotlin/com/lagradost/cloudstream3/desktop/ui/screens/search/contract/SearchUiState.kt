@@ -6,6 +6,13 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
 
 @Immutable
+data class SearchProviderPagination(
+    val nextPage: Int = 2,
+    val canPaginate: Boolean = true,
+    val isLoadingMore: Boolean = false,
+)
+
+@Immutable
 data class SearchUiState(
     val searchQuery: String = "",
     val searchResultsGrouped: Map<String, Pair<com.lagradost.cloudstream3.MainAPI, List<SearchResponse>>>? = null,
@@ -21,5 +28,9 @@ data class SearchUiState(
     val searchHistory: List<String> = emptyList(),
     val searchSuggestions: List<com.lagradost.cloudstream3.desktop.ui.screens.search.SearchSuggestionItem> = emptyList(),
     val showSuggestions: Boolean = false,
+    val isLoadingSuggestions: Boolean = false,
+    val awaitingSearchSubmission: Boolean = false,
     val providerTypeFilter: Set<TvType> = emptySet(),
+    val providerPagination: Map<String, SearchProviderPagination> = emptyMap(),
+    val failedProviderKeys: Set<String> = emptySet(),
 ) : UiState

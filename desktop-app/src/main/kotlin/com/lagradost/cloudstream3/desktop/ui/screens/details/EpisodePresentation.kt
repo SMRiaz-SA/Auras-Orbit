@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiState
 import com.lagradost.cloudstream3.desktop.utils.TitleUtils
 import com.lagradost.cloudstream3.fixUrlNull
+import com.lagradost.common.storage.EpisodeWatchMark
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.player.impl.PlayerLinkHandler
 
@@ -65,8 +66,8 @@ object EpisodePresentationHelper {
             0f
         }
 
-        val isWatched = progress > 0.9f
-        val hasStartedPlayback = progress > 0f || (history != null && history.position > 5)
+        val isWatched = uiState?.episodeWatchMarks?.values?.any { ep.matchesWatchMark(it) } == true
+        val hasStartedPlayback = progress > 0f || isWatched || (history != null && history.position > 5)
         val shouldHideSpoilers = isAntiSpoiler && !hasStartedPlayback && !isWatched
 
         val rawTitle = ep.name ?: "Episode ${ep.episode ?: "?"}"
@@ -144,7 +145,7 @@ fun rememberEpisodePresentation(
     lockUnreleasedEpisodes: Boolean,
     thumbnailVersion: Int = 0,
 ): EpisodePresentation {
-    return remember(ep, history, data, uiState?.enrichedBackdropUrl, uiState?.isEnriching, isAntiSpoiler, lockUnreleasedEpisodes, thumbnailVersion) {
+    return remember(ep, history, data, uiState?.enrichedBackdropUrl, uiState?.isEnriching, uiState?.episodeWatchMarks, isAntiSpoiler, lockUnreleasedEpisodes, thumbnailVersion) {
         EpisodePresentationHelper.compute(
             ep = ep,
             history = history,
@@ -155,6 +156,11 @@ fun rememberEpisodePresentation(
             lockUnreleasedEpisodes = lockUnreleasedEpisodes,
         )
     }
+}
+
+fun Episode.matchesWatchMark(mark: EpisodeWatchMark): Boolean {
+    if (mark.episodeId == data) return true
+    return season != null && episode != null && mark.seasonNumber == season && mark.episodeNumber == episode
 }
 
 fun Episode.matchesHistory(history: WatchHistory?): Boolean {

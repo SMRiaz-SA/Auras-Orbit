@@ -3,8 +3,10 @@ package com.lagradost.cloudstream3.desktop.ui.screens.search.dialogs
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,6 +28,14 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.desktop.ui.components.CloudstreamCustomDialog
 import java.io.File
 import java.net.URI
+
+private val PROVIDER_TYPE_FILTERS = listOf(
+    TvType.Movie to "Movies",
+    TvType.TvSeries to "Series",
+    TvType.Anime to "Anime",
+    TvType.Documentary to "Documentaries",
+    TvType.Live to "Live",
+)
 
 private val SANITIZE_NAME_REGEX = Regex("[^a-z0-9]")
 
@@ -50,6 +60,7 @@ fun ProviderSelectionDialog(
     providerTypeFilter: Set<TvType>,
     onSelectGlobalSearch: () -> Unit,
     onSelectProvider: (name: String, sourcePlugin: String?) -> Unit,
+    onSetProviderTypeFilter: (Set<TvType>) -> Unit,
 ) {
     var providerModalSearch by remember { mutableStateOf("") }
 
@@ -101,6 +112,30 @@ fun ProviderSelectionDialog(
                 shape = RoundedCornerShape(10.dp),
             )
 
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    FilterChip(
+                        selected = providerTypeFilter.isEmpty(),
+                        onClick = { onSetProviderTypeFilter(emptySet()) },
+                        label = { Text("All types") },
+                    )
+                }
+                items(PROVIDER_TYPE_FILTERS, key = { it.first.name }) { (type, label) ->
+                    FilterChip(
+                        selected = type in providerTypeFilter,
+                        onClick = {
+                            val updated = if (type in providerTypeFilter) {
+                                providerTypeFilter - type
+                            } else {
+                                providerTypeFilter + type
+                            }
+                            onSetProviderTypeFilter(updated)
+                        },
+                        label = { Text(label) },
+                    )
+                }
+            }
+
             // Provider Grid
             val matchingProviders = remember(providers, providerModalSearch, providerTypeFilter) {
                 providers
@@ -116,108 +151,121 @@ fun ProviderSelectionDialog(
                 matchingProviders.groupBy { it.name }.filterValues { it.size > 1 }.keys
             }
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 180.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 440.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(matchingProviders.size, key = { idx -> "${matchingProviders[idx].name}_${matchingProviders[idx].mainUrl}_${matchingProviders[idx].sourcePlugin ?: ""}" }) { idx ->
-                    val provider = matchingProviders[idx]
-                    val isSelected = !isGlobalSearchEnabled && selectedProviderName == provider.name && (selectedProviderSource == null || selectedProviderSource == provider.sourcePlugin)
-                    Surface(
-                        onClick = {
-                            onSelectProvider(provider.name, provider.sourcePlugin)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                        ),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            if (matchingProviders.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "No providers match these filters.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 180.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 440.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(matchingProviders.size, key = { idx -> "${matchingProviders[idx].name}_${matchingProviders[idx].mainUrl}_${matchingProviders[idx].sourcePlugin ?: ""}" }) { idx ->
+                        val provider = matchingProviders[idx]
+                        val isSelected = !isGlobalSearchEnabled && selectedProviderName == provider.name && (selectedProviderSource == null || selectedProviderSource == provider.sourcePlugin)
+                        Surface(
+                            onClick = {
+                                onSelectProvider(provider.name, provider.sourcePlugin)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                            ),
                         ) {
-                            val icon = pluginIcons[provider.name] ?: fuzzyMatchPluginIcon(provider.name, pluginIcons)
-                            if (icon != null) {
-                                AsyncImage(
-                                    model = icon,
-                                    contentDescription = null,
-                                    filterQuality = FilterQuality.High,
-                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White),
-                                )
-                            } else {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    modifier = Modifier.size(28.dp),
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = provider.name.take(1).uppercase(),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                val repoTag = if (provider.name in duplicateNames) {
-                                    provider.sourcePlugin?.let {
-                                        try {
-                                            File(it).parentFile?.name?.replace("_", " ")
-                                        } catch (_: Exception) {
-                                            null
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                val icon = pluginIcons[provider.name] ?: fuzzyMatchPluginIcon(provider.name, pluginIcons)
+                                if (icon != null) {
+                                    AsyncImage(
+                                        model = icon,
+                                        contentDescription = null,
+                                        filterQuality = FilterQuality.High,
+                                        modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White),
+                                    )
+                                } else {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(28.dp),
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = provider.name.take(1).uppercase(),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
                                         }
                                     }
-                                } else {
-                                    null
                                 }
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = provider.name,
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false),
-                                    )
-                                    if (!repoTag.isNullOrBlank()) {
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val repoTag = if (provider.name in duplicateNames) {
+                                        provider.sourcePlugin?.let {
+                                            try {
+                                                File(it).parentFile?.name?.replace("_", " ")
+                                            } catch (_: Exception) {
+                                                null
+                                            }
+                                        }
+                                    } else {
+                                        null
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Text(
-                                            text = "($repoTag)",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
+                                            text = provider.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false),
                                         )
+                                        if (!repoTag.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "($repoTag)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
                                     }
-                                }
-                                val domain = try {
-                                    URI(provider.mainUrl).host ?: provider.mainUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
-                                } catch (_: Exception) {
-                                    provider.mainUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
-                                }
-                                val typesStr = provider.supportedTypes.take(2).joinToString { it.name }
-                                val subtitle = if (domain.isNotBlank()) "$typesStr • $domain" else typesStr
+                                    val domain = try {
+                                        URI(provider.mainUrl).host ?: provider.mainUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
+                                    } catch (_: Exception) {
+                                        provider.mainUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
+                                    }
+                                    val typesStr = provider.supportedTypes.take(2).joinToString { it.name }
+                                    val subtitle = if (domain.isNotBlank()) "$typesStr • $domain" else typesStr
 
-                                Text(
-                                    text = subtitle,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                     }

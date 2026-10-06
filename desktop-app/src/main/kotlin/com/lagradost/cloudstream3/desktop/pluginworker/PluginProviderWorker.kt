@@ -1440,6 +1440,7 @@ private fun ObjectNode.putNullableLong(field: String, value: Long?): ObjectNode 
 
 /** Child-process entry point invoked by the packaged app executable. Stdout is reserved for framed RPC. */
 object PluginProviderWorkerMain {
+    @Suppress("DEPRECATION") // ThreadDeath is rethrown because plugin worker bootstrap must preserve JVM fatal errors.
     fun run(args: Array<String>) {
         require(args.size == 3) { "Expected plugin archive, provider index, and app data path" }
         System.setProperty("auras.data.dir", args[2])
@@ -1829,8 +1830,8 @@ object PluginProviderWorkerMain {
             String::class.java,
             Int::class.javaObjectType,
             Int::class.javaObjectType,
-            kotlin.jvm.functions.Function1::class.java,
-            kotlin.jvm.functions.Function1::class.java,
+            kotlin.Function1::class.java,
+            kotlin.Function1::class.java,
             Continuation::class.java,
         )
 
@@ -1877,14 +1878,14 @@ object PluginProviderWorkerMain {
                     title,
                     season,
                     episode,
-                    object : kotlin.jvm.functions.Function1<SubtitleFile, Unit> {
-                        override fun invoke(subtitle: SubtitleFile) {
-                            subtitles.add(subtitle)
+                    object : kotlin.Function1<SubtitleFile, Unit> {
+                        override fun invoke(p1: SubtitleFile) {
+                            subtitles.add(p1)
                         }
                     },
-                    object : kotlin.jvm.functions.Function1<ExtractorLink, Unit> {
-                        override fun invoke(link: ExtractorLink) {
-                            links.add(link)
+                    object : kotlin.Function1<ExtractorLink, Unit> {
+                        override fun invoke(p1: ExtractorLink) {
+                            links.add(p1)
                         }
                     },
                     continuation,

@@ -147,7 +147,7 @@ object UnifiedUpdateManager {
             client.newCall(req).execute().use { response ->
                 check(response.isSuccessful) { "Update service returned HTTP ${response.code}" }
                 if (response.isSuccessful) {
-                    val body = checkNotNull(response.body?.string()) { "Update service returned an empty response" }
+                    val body = response.body.string()
                     val release = mapper.readValue<GitHubApiRelease>(body)
                     val remoteTag = release.tag_name
                     val installedTag = getTorrServerInstalledVersion()
@@ -190,7 +190,7 @@ object UnifiedUpdateManager {
             client.newCall(req).execute().use { response ->
                 check(response.isSuccessful) { "Update service returned HTTP ${response.code}" }
                 if (response.isSuccessful) {
-                    val body = checkNotNull(response.body?.string()) { "Update service returned an empty response" }
+                    val body = response.body.string()
                     val release = mapper.readValue<GitHubApiRelease>(body)
                     val remoteTag = release.tag_name.removePrefix("v")
                     val installedTag = getYtDlpInstalledVersion().removePrefix("v")

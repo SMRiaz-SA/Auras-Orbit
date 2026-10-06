@@ -2,11 +2,14 @@ package com.lagradost.cloudstream3.desktop.metadata.providers
 
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.addDate
 import com.lagradost.cloudstream3.desktop.metadata.MetadataEnrichmentCallbacks
 import com.lagradost.cloudstream3.desktop.metadata.MetadataEnrichmentContext
 import com.lagradost.cloudstream3.desktop.metadata.MetadataMatch
 import com.lagradost.cloudstream3.desktop.metadata.MetadataProvider
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
+import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerData
+import com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerUtils
 import com.lagradost.cloudstream3.desktop.utils.StringUtils
 import com.lagradost.cloudstream3.desktop.utils.TitleUtils
 import com.lagradost.common.logging.AppLogger
@@ -215,6 +218,29 @@ object CinemetaMetadataProvider : MetadataProvider {
 
         if (cinemetaData == null && match == null) return false
 
+        val addonTrailers = cinemetaData?.trailers.orEmpty().mapNotNull { trailer ->
+            val videoId = TrailerUtils.youtubeId(trailer.ytId)
+                ?: TrailerUtils.youtubeId(trailer.source)
+                ?: TrailerUtils.youtubeId(trailer.url)
+                ?: return@mapNotNull null
+            val trailerType = trailer.type?.takeIf { it.isNotBlank() } ?: "Trailer"
+            TrailerData(
+                id = videoId,
+                name = trailer.name?.takeIf { it.isNotBlank() }
+                    ?: trailer.title?.takeIf { it.isNotBlank() }
+                    ?: "${cinemetaData?.name ?: loaded.name} $trailerType",
+                url = "https://www.youtube.com/watch?v=$videoId",
+                rawKey = videoId,
+                thumbnailUrl = trailer.thumbnail ?: "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                isOfficial = false,
+                type = trailerType,
+                source = "stremio",
+            )
+        }
+        if (addonTrailers.isNotEmpty()) {
+            callbacks.onTrailersLoaded(addonTrailers)
+        }
+
         val imdbRating = cinemetaData?.imdbRating?.toDoubleOrNull() ?: match?.rating
         val poster = cinemetaData?.poster ?: match?.posterUrl
         val backdrop = (cinemetaData?.background?.replace("t/p/original//", "t/p/original/")) ?: match?.backdropUrl
@@ -280,8 +306,8 @@ object CinemetaMetadataProvider : MetadataProvider {
                         }
                         if (cinemetaEp.released != null) {
                             val releaseDateIso = cinemetaEp.released.take(10)
-                            val cleanDesc = (ep.description ?: "").replace(Regex("\\|\\|DATE:.*?\\|\\|"), "")
-                            ep.description = "||DATE:$releaseDateIso||" + cleanDesc
+                            ep.addDate(releaseDateIso)
+                            ep.description = (ep.description ?: "").replace(Regex("\\|\\|DATE:.*?\\|\\|"), "").trim()
                         }
                         if (!cinemetaEp.thumbnail.isNullOrBlank()) {
                             ep.posterUrl = cinemetaEp.thumbnail

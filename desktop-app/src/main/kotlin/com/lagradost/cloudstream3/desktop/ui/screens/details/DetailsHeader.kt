@@ -587,6 +587,7 @@ fun DetailsMetadata(
                         val allBookmarks = uiState?.bookmarks ?: emptyMap()
                         val currentBookmark = allBookmarks[bookmarkId]
                         var isEditingStatus by remember { mutableStateOf(false) }
+                        var isEditingLists by remember { mutableStateOf(false) }
 
                         val activeWatchType = currentBookmark?.let { b ->
                             com.lagradost.common.storage.DesktopWatchType.entries.find { it.id == b.watchType }
@@ -752,6 +753,15 @@ fun DetailsMetadata(
                                             }
                                         }
                                     }
+                                    if (currentBookmark != null) {
+                                        TextButton(
+                                            onClick = {
+                                                isEditingStatus = false
+                                                isEditingLists = true
+                                            },
+                                            modifier = Modifier.align(Alignment.End),
+                                        ) { Text("Add to custom lists…") }
+                                    }
                                 }
                             },
                             confirmButton = {
@@ -772,6 +782,29 @@ fun DetailsMetadata(
                                 }
                             },
                         )
+
+                        if (isEditingLists && currentBookmark != null) {
+                            val includedListIds = uiState?.customListItems.orEmpty()
+                                .asSequence()
+                                .filter { it.bookmarkId == currentBookmark.id }
+                                .map { it.listId }
+                                .toSet()
+                            CustomListAssignmentDialog(
+                                bookmark = currentBookmark,
+                                lists = uiState?.customLists.orEmpty(),
+                                selectedListIds = includedListIds,
+                                onToggle = { listId, included ->
+                                    onEvent(
+                                        com.lagradost.cloudstream3.desktop.ui.screens.details.contract.DetailsUiEvent.OnSetBookmarkInCustomList(
+                                            listId,
+                                            currentBookmark.id,
+                                            included,
+                                        ),
+                                    )
+                                },
+                                onDismiss = { isEditingLists = false },
+                            )
+                        }
 
                         if (isButtonsNarrow) {
                             Row(

@@ -1,6 +1,7 @@
 package com.lagradost.runtime.loader.stubs
 
 /** Bytecode compatibility shims that preserve normal JVM Runtime behavior. */
+@Suppress("DEPRECATION") // Runtime.exec signatures are intentionally mirrored for transformed plugin bytecode.
 object RuntimeStub {
     @JvmStatic
     fun exec(runtime: Runtime, command: String): Process = runtime.exec(command)

@@ -11,6 +11,7 @@ object SystemStub {
     @JvmStatic
     fun load(filename: String) = System.load(filename)
 
+    @Suppress("DEPRECATION") // Preserve this Runtime/System compatibility signature for transformed plugins.
     @JvmStatic
     fun setSecurityManager(s: SecurityManager?) = System.setSecurityManager(s)
 

@@ -428,7 +428,7 @@ object StreamDecryptor {
             }
 
             while (!source.exhausted()) {
-                val chunk = source.readByteArray(minOf(65536L, source.buffer.size.coerceAtLeast(1024).toLong()))
+                val chunk = source.readByteArray(minOf(65536L, source.buffer.size.coerceAtLeast(1024)))
                 onBytesDecrypted(chunk)
             }
         }

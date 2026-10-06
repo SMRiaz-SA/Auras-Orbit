@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -24,8 +25,10 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object MetadataPipeline {
     private const val TAG = "MetadataPipeline"
+    private const val MAX_IDENTITY_CACHE_ENTRIES = 512
 
-    private val identityCache = ConcurrentHashMap<String, MetadataMatch>()
+    private val identityCache = LinkedHashMap<String, MetadataMatch>(64, 0.75f, true)
+    private val identityCacheLock = Any()
     private val inFlightResolutions = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<MetadataMatch?>>()
 
     private val providers = mutableListOf<MetadataProvider>(
@@ -99,19 +102,21 @@ object MetadataPipeline {
      */
     fun clearCache(title: String? = null) {
         if (title.isNullOrBlank()) {
-            identityCache.clear()
+            synchronized(identityCacheLock) { identityCache.clear() }
             inFlightResolutions.clear()
             AppLogger.d(TAG, "Cleared entire metadata identity cache")
         } else {
             val keyPrefix = title.lowercase().trim()
             var count = 0
-            val it = identityCache.keys.iterator()
-            while (it.hasNext()) {
-                val key = it.next()
-                if (key.startsWith(keyPrefix)) {
-                    it.remove()
-                    inFlightResolutions.remove(key)
-                    count++
+            synchronized(identityCacheLock) {
+                val it = identityCache.keys.iterator()
+                while (it.hasNext()) {
+                    val key = it.next()
+                    if (key.startsWith(keyPrefix)) {
+                        it.remove()
+                        inFlightResolutions.remove(key)
+                        count++
+                    }
                 }
             }
             AppLogger.d(TAG, "Evicted $count cache entries for '$title'")
@@ -130,6 +135,24 @@ object MetadataPipeline {
         withContext(Dispatchers.IO) {
             val isDummy = url.startsWith("dummy_")
             val urlClean = url.removePrefix("dummy_")
+
+            val providerTrailers = loaded.trailers.mapNotNull { providerTrailer ->
+                val videoId = com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerUtils
+                    .youtubeId(providerTrailer.extractorUrl)
+                    ?: return@mapNotNull null
+                com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerData(
+                    id = videoId,
+                    name = "${loaded.name} Trailer",
+                    url = "https://www.youtube.com/watch?v=$videoId",
+                    rawKey = videoId,
+                    thumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg",
+                    isOfficial = false,
+                    source = "provider:${loaded.apiName}",
+                )
+            }
+            if (providerTrailers.isNotEmpty()) {
+                callbacks.onTrailersLoaded(providerTrailers)
+            }
 
             // 1. Season adjustment from title if all episodes default to null or 1
             val titleSeason = Regex("""(?i)\b(?:season|series)\b\s*(\d+)""").find(loaded.name)?.groupValues?.get(1)?.toIntOrNull()
@@ -222,7 +245,7 @@ object MetadataPipeline {
 
             // 3. Resolve Media Identity (Stage 1 Resolvers with Canonical Identity Caching)
             val identityKey = "${cleanName.lowercase().trim()}_${loaded.year}_${loaded.type}"
-            var activeMatch: MetadataMatch? = identityCache[identityKey]
+            var activeMatch: MetadataMatch? = synchronized(identityCacheLock) { identityCache[identityKey] }
 
             if (activeMatch == null) {
                 var isInitiator = false
@@ -261,7 +284,12 @@ object MetadataPipeline {
                         }
 
                         if (resolved != null) {
-                            identityCache[identityKey] = resolved
+                            synchronized(identityCacheLock) {
+                                identityCache[identityKey] = resolved
+                                while (identityCache.size > MAX_IDENTITY_CACHE_ENTRIES) {
+                                    identityCache.remove(identityCache.keys.first())
+                                }
+                            }
                         }
                         deferred.complete(resolved)
                     } catch (e: Throwable) {
@@ -362,9 +390,11 @@ object MetadataPipeline {
         if (showName.isNullOrBlank()) return null
         val (cleanName, _) = TitleUtils.cleanProviderTitle(showName)
         val cleanLower = cleanName.lowercase().trim()
-        return identityCache.values.firstOrNull { match ->
-            match.imdbId?.startsWith("tt", ignoreCase = true) == true &&
-                (match.matchedTitle.equals(cleanName, ignoreCase = true) || match.matchedTitle.lowercase().trim() == cleanLower)
-        }?.imdbId
+        return synchronized(identityCacheLock) {
+            identityCache.values.firstOrNull { match ->
+                match.imdbId?.startsWith("tt", ignoreCase = true) == true &&
+                    (match.matchedTitle.equals(cleanName, ignoreCase = true) || match.matchedTitle.lowercase().trim() == cleanLower)
+            }?.imdbId
+        }
     }
 }

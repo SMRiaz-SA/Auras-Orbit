@@ -1315,7 +1315,7 @@ public class AutosplitMethodWriter extends MethodNode {
             localEntryCode(v, i, commonEntry[i]);
         }
         v.visitInsn(Opcodes.SWAP);
-        int firstj = firstJump.get(fno);
+        int firstj = firstJump.getInt(fno);
         v.visitTableSwitchInsn(firstj, firstj + entryPts.length - 1, entryTrampolineLabels[0] /*XXX*/, entryTrampolineLabels);
 
         int stash = nlocal;
@@ -1432,7 +1432,7 @@ public class AutosplitMethodWriter extends MethodNode {
                 v.visitTypeInsn(Opcodes.NEW, box_types[t]);
                 v.visitInsn(Opcodes.DUP);
                 v.visitVarInsn(Opcodes.ILOAD + t, nlocal+1);
-                v.visitMethodInsn(Opcodes.INVOKESPECIAL, box_types[t], "<init>", box_descs[t]);
+                v.visitMethodInsn(Opcodes.INVOKESPECIAL, box_types[t], "<init>", box_descs[t], false);
             } else {
                 v.visitVarInsn(Opcodes.ILOAD + t, nlocal+1);
             }
@@ -1479,7 +1479,7 @@ public class AutosplitMethodWriter extends MethodNode {
                     v.visitVarInsn(ty0 == 'D' ? Opcodes.DLOAD : ty0 == 'J' ? Opcodes.LLOAD : ty0 == 'I' ? Opcodes.ILOAD : ty0 == 'F' ? Opcodes.FLOAD : Opcodes.ALOAD, spillarg[d]);
                 }
 
-                v.visitMethodInsn(Opcodes.INVOKESPECIAL, mi.owner, mi.name, mi.desc);
+                v.visitMethodInsn(Opcodes.INVOKESPECIAL, mi.owner, mi.name, mi.desc, mi.itf);
                 return;
             }
         }
@@ -1579,7 +1579,7 @@ public class AutosplitMethodWriter extends MethodNode {
             default: throw new IllegalArgumentException();
         }
         v.visitTypeInsn(Opcodes.CHECKCAST, c);
-        v.visitMethodInsn(Opcodes.INVOKEVIRTUAL, c, m, d);
+        v.visitMethodInsn(Opcodes.INVOKEVIRTUAL, c, m, d, false);
     }
 
     private void localExitCode(MethodVisitor v, int loc, String desc) {
@@ -1610,7 +1610,7 @@ public class AutosplitMethodWriter extends MethodNode {
                     v.visitTypeInsn(Opcodes.NEW, ty);
                     v.visitInsn(Opcodes.DUP);
                     v.visitVarInsn(load, loc);
-                    v.visitMethodInsn(Opcodes.INVOKESPECIAL, ty, "<init>", "("+c0+")V");
+                    v.visitMethodInsn(Opcodes.INVOKESPECIAL, ty, "<init>", "("+c0+")V", false);
                 }
                 v.visitInsn(Opcodes.AASTORE);
                 break;
@@ -1670,7 +1670,7 @@ public class AutosplitMethodWriter extends MethodNode {
         v.visitTypeInsn(Opcodes.NEW, ty);
         v.visitInsn(Opcodes.DUP);
         v.visitVarInsn(load, scratch);
-        v.visitMethodInsn(Opcodes.INVOKESPECIAL, ty, "<init>", "("+c0+")V");
+        v.visitMethodInsn(Opcodes.INVOKESPECIAL, ty, "<init>", "("+c0+")V", false);
         v.visitInsn(Opcodes.AASTORE);
     }
 
@@ -1701,7 +1701,7 @@ public class AutosplitMethodWriter extends MethodNode {
         for (int i = firstJump.size() - 1; i >= 0; i--) {
             LabelNode not_my_problem = new LabelNode();
             instructions.add(new VarInsnNode(Opcodes.ILOAD, 1));
-            instructions.add(intNode(firstJump.get(i)));
+            instructions.add(intNode(firstJump.getInt(i)));
             instructions.add(new JumpInsnNode(Opcodes.IF_ICMPLT, not_my_problem));
             instructions.add(new VarInsnNode(Opcodes.ILOAD, 1));
             instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));

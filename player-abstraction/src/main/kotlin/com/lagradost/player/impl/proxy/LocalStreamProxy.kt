@@ -47,17 +47,17 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation 
     enqueue(object : Callback {
         override fun onResponse(call: Call, response: Response) {
             if (continuation.isCancelled) {
-                response.body?.close()
+                response.body.close()
                 return
             }
             try {
                 // Resume with onCancellation block to prevent leaks if cancelled during dispatch
-                continuation.resume(response) {
-                    response.body?.close()
+                continuation.resume(response) { _, cancelledResponse, _ ->
+                    cancelledResponse.body.close()
                 }
             } catch (e: Exception) {
                 com.lagradost.common.logging.AppLogger.e("Proxy:LocalStream", "Error resuming coroutine onResponse: ${e.message}", e)
-                response.body?.close()
+                response.body.close()
             }
         }
         override fun onFailure(call: Call, e: IOException) {
@@ -386,9 +386,9 @@ object LocalStreamProxy {
                     throw Exception("Prefetch HTTP failed. Code: $code Error: ${lastError?.message}")
                 }
 
-                val m3u8Content = response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
+                val m3u8Content = response.body.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) }
                 val finalUrl = response.request.url.toString()
-                response.body?.close()
+                response.body.close()
 
                 val rewritten = HlsRewriter.rewriteM3u8(m3u8Content, finalUrl, sessionId, tracksListener)
                 rewritten.toByteArray(Charsets.UTF_8)
@@ -451,7 +451,7 @@ object LocalStreamProxy {
 
             val response = imageProxyClient.newCall(requestBuilder.build()).await()
             if (!response.isSuccessful) {
-                response.body?.close()
+                response.body.close()
                 call.respond(io.ktor.http.HttpStatusCode.fromValue(response.code))
                 return
             }
@@ -624,7 +624,7 @@ object LocalStreamProxy {
                 val code = response.code
                 if (code == 403 || code == 400 || code == 416 || code == 405) {
                     AppLogger.w("Proxy:LocalStream", "Range request failed with HTTP $code, retrying WITHOUT Range header for URL: $url")
-                    response.body?.close()
+                    response.body.close()
                     val retryHeaders = mergedHeaders.toMutableMap()
                     retryHeaders.remove("Range")
                     val retryBuilder = okhttp3.Request.Builder().url(url)
@@ -659,16 +659,16 @@ object LocalStreamProxy {
 
             if (!response.isSuccessful) {
                 AppLogger.e("Proxy:LocalStream", "Proxy Request Failed! Code: ${response.code} URL: $url")
-                response.body?.close()
+                response.body.close()
                 call.respond(HttpStatusCode.fromValue(response.code))
                 return
             }
 
             if (action == "init_decrypt") {
                 val rawBytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) } ?: ByteArray(0)
+                    response.body.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
                 }
-                response.body?.close()
+                response.body.close()
                 rawInitSegmentCache[url] = InitCacheEntry(rawBytes, System.currentTimeMillis())
                 val cleaned = StreamDecryptor.cleanInitSegment(rawBytes)
                 initSegmentCache[url] = InitCacheEntry(cleaned, System.currentTimeMillis())
@@ -680,9 +680,9 @@ object LocalStreamProxy {
 
             if (action == "decrypt") {
                 val mediaBytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) } ?: ByteArray(0)
+                    response.body.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
                 }
-                response.body?.close()
+                response.body.close()
 
                 var rawInitBytes: ByteArray? = null
                 if (initUrl != null) {
@@ -693,16 +693,16 @@ object LocalStreamProxy {
                             mergedHeaders.forEach { (k, v) -> initReqBuilder.header(k, v) }
                             val initResp = client.newCall(initReqBuilder.build()).await()
                             if (initResp.isSuccessful) {
-                                val fetchedRaw = initResp.body?.use { it.byteStream().readBoundedBytes(16 * 1024 * 1024) }
-                                initResp.body?.close()
-                                if (fetchedRaw != null && fetchedRaw.isNotEmpty()) {
+                                val fetchedRaw = initResp.body.use { it.byteStream().readBoundedBytes(16 * 1024 * 1024) }
+                                initResp.body.close()
+                                if (fetchedRaw.isNotEmpty()) {
                                     rawInitBytes = fetchedRaw
                                     rawInitSegmentCache[initUrl] = InitCacheEntry(fetchedRaw, System.currentTimeMillis())
                                     val cleaned = StreamDecryptor.cleanInitSegment(fetchedRaw)
                                     initSegmentCache[initUrl] = InitCacheEntry(cleaned, System.currentTimeMillis())
                                 }
                             } else {
-                                initResp.body?.close()
+                                initResp.body.close()
                             }
                         } catch (e: Exception) {
                             AppLogger.w("Proxy:LocalStream", "Failed to fetch init segment: ${e.message}")
@@ -744,9 +744,9 @@ object LocalStreamProxy {
 
             if (action == "dash") {
                 val mpdContent = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
+                    response.body.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) }
                 }
-                response.body?.close()
+                response.body.close()
                 session.mpdCache[url] = MpdCacheEntry(mpdContent, System.currentTimeMillis())
                 val m3u8 = if (rep == null) {
                     NativeMpdConverter().convertMasterPlaylist(mpdContent, port, sessionId, url, clearKey, tracksListener)
@@ -778,8 +778,8 @@ object LocalStreamProxy {
                 rawContentType.contains("x-mpegURL", ignoreCase = true) ||
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                     try {
-                        val s = response.body?.source()
-                        if (s != null && s.request(32)) {
+                        val s = response.body.source()
+                        if (s.request(32)) {
                             val peeked = s.peek().readUtf8(32).trimStart('\uFEFF', ' ', '\t', '\r', '\n')
                             peeked.startsWith("#EXTM3U", ignoreCase = true) || peeked.startsWith("#EXT-X-", ignoreCase = true)
                         } else {
@@ -793,7 +793,7 @@ object LocalStreamProxy {
             if (isM3u8) {
                 try {
                     val m3u8Content = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        response.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
+                        response.body.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) }
                     }
 
                     val finalUrl = response.request.url.toString()
@@ -828,8 +828,8 @@ object LocalStreamProxy {
                                                 for (attempt in 1..2) {
                                                     try {
                                                         val segResp = client.newCall(reqBuilder.build()).await()
-                                                        val segText = segResp.body?.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) } ?: ""
-                                                        segResp.body?.close()
+                                                        val segText = segResp.body.use { it.byteStream().readBoundedBytes(4 * 1024 * 1024).toString(Charsets.UTF_8) }
+                                                        segResp.body.close()
                                                         if (segResp.isSuccessful && segText.isNotBlank()) {
                                                             content = segText
                                                             break
@@ -876,7 +876,7 @@ object LocalStreamProxy {
                 } finally {
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
                         try {
-                            response.body?.close()
+                            response.body.close()
                         } catch (ignored: Exception) {}
                     }
                 }
@@ -895,22 +895,20 @@ object LocalStreamProxy {
                 var detectedTsOffset = 0
                 if (skipBytes == 0L) {
                     try {
-                        val peekSource = response.body?.source()?.peek()
-                        if (peekSource != null) {
-                            val peekBuf = ByteArray(32768)
-                            val n = peekSource.read(peekBuf)
-                            if (n > 188 * 3 && peekBuf[0] != 0x47.toByte()) {
-                                val offset = findTsSyncOffset(peekBuf, n)
-                                if (offset > 0) {
-                                    detectedTsOffset = offset
-                                    AppLogger.i("Proxy:LocalStream", "Stripping $detectedTsOffset bytes of prepended header from segment: $url")
-                                }
+                        val peekSource = response.body.source().peek()
+                        val peekBuf = ByteArray(32768)
+                        val n = peekSource.read(peekBuf)
+                        if (n > 188 * 3 && peekBuf[0] != 0x47.toByte()) {
+                            val offset = findTsSyncOffset(peekBuf, n)
+                            if (offset > 0) {
+                                detectedTsOffset = offset
+                                AppLogger.i("Proxy:LocalStream", "Stripping $detectedTsOffset bytes of prepended header from segment: $url")
                             }
                         }
                     } catch (_: Exception) {}
                 }
 
-                val cl = response.body?.contentLength() ?: -1L
+                val cl = response.body.contentLength()
                 val contentLengthParam = if (skipBytes == 0L && cl >= 0) {
                     if (detectedTsOffset > 0) cl - detectedTsOffset else cl
                 } else {
@@ -944,7 +942,7 @@ object LocalStreamProxy {
                     ) {
                         streamStarted = true
                         var currentResponse: okhttp3.Response? = response
-                        var streamSource = currentResponse?.body?.source() ?: throw Exception("No body")
+                        var streamSource = response.body.source()
 
                         val totalSkip = skipBytes + detectedTsOffset
                         if (totalSkip > 0) {
@@ -1034,9 +1032,9 @@ object LocalStreamProxy {
                                     for (attempt in 1..3) {
                                         try {
                                             currentResponse = client.newCall(resumeBuilder.build()).await()
-                                            if (currentResponse!!.isSuccessful) {
-                                                streamSource = currentResponse!!.body?.source() ?: throw Exception("No body")
-                                                if (currentResponse!!.code == 200 && totalBytesRead > 0) {
+                                            if (currentResponse.isSuccessful) {
+                                                streamSource = currentResponse.body.source()
+                                                if (currentResponse.code == 200 && totalBytesRead > 0) {
                                                     // The CDN ignored our Range request and returned the full file.
                                                     // We MUST manually skip the bytes we've already streamed to MPV!
                                                     withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -1066,7 +1064,7 @@ object LocalStreamProxy {
                                                 val fallbackResp = client.newCall(noRangeBuilder.build()).await()
                                                 if (fallbackResp.isSuccessful) {
                                                     currentResponse = fallbackResp
-                                                    streamSource = fallbackResp.body?.source() ?: throw Exception("No body")
+                                                    streamSource = fallbackResp.body.source()
                                                     if (totalBytesRead > 0) {
                                                         withContext(kotlinx.coroutines.Dispatchers.IO) {
                                                             streamSource.skip(totalBytesRead)
@@ -1076,7 +1074,7 @@ object LocalStreamProxy {
                                                     break
                                                 } else {
                                                     withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                        fallbackResp.body?.close()
+                                                        fallbackResp.body.close()
                                                     }
                                                 }
                                             } catch (_: Exception) {
@@ -1105,7 +1103,7 @@ object LocalStreamProxy {
                     if (!streamStarted) {
                         withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
-                                response.body?.close()
+                                response.body.close()
                             } catch (ignored: Exception) {
                                 com.lagradost.common.logging.AppLogger.w("Proxy:LocalStream", "Failed to close response body on early error: ${ignored.message}", ignored)
                             }
@@ -1164,9 +1162,9 @@ object LocalStreamProxy {
                     headers.forEach { (hKey, hVal) -> reqBuilder.header(hKey, hVal) }
                     val resp = client.newCall(reqBuilder.build()).await()
                     if (resp.isSuccessful) {
-                        val bytes = resp.body?.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
-                        resp.body?.close()
-                        if (bytes != null && bytes.isNotEmpty()) {
+                        val bytes = resp.body.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
+                        resp.body.close()
+                        if (bytes.isNotEmpty()) {
                             val decrypted = StreamDecryptor.decryptMediaSegment(
                                 mediaSegment = bytes,
                                 keyIdHex = kid,
@@ -1177,7 +1175,7 @@ object LocalStreamProxy {
                             cleanupSegmentCache()
                         }
                     } else {
-                        resp.body?.close()
+                        resp.body.close()
                     }
                 } catch (_: Exception) {
                 } finally {

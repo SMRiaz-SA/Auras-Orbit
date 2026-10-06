@@ -92,7 +92,7 @@ fun ExploreCatalogsScreen(
     }
 
     // Scroll to top when catalog, genre, year, or query changes
-    LaunchedEffect(uiState.selectedCatalog, uiState.selectedGenre, uiState.selectedYear) {
+    LaunchedEffect(uiState.selectedCatalog, uiState.selectedGenre, uiState.selectedYear, uiState.searchQuery) {
         gridState.scrollToItem(0)
     }
 
@@ -148,11 +148,20 @@ fun ExploreCatalogsScreen(
                     }
                 }
             } else if (uiState.availableTypes.isEmpty()) {
-                // Empty state if no catalog addon is enabled
-                EmptyCatalogState(
-                    onNavigateToSettings = { onNavigate(Config.Settings) },
-                    onBackToExplore = onBack,
-                )
+                if (uiState.catalogDiscoveryError != null) {
+                    CatalogDiscoveryFailureState(
+                        message = uiState.catalogDiscoveryError!!,
+                        onRetry = { viewModel.onEvent(ExploreUiEvent.RefreshCatalogs) },
+                        onBack = onBack,
+                    )
+                } else {
+                    // Empty state if no catalog addon is enabled
+                    EmptyCatalogState(
+                        onNavigateToSettings = { onNavigate(Config.Settings) },
+                        onBackToExplore = onBack,
+                        onRefresh = { viewModel.onEvent(ExploreUiEvent.RefreshCatalogs) },
+                    )
+                }
             } else {
                 // Row 1: Primary Scope & Search Controls (~34dp)
                 Row(
@@ -237,12 +246,29 @@ fun ExploreCatalogsScreen(
                             query = uiState.searchQuery,
                             onQueryChange = { viewModel.onEvent(ExploreUiEvent.UpdateSearchQuery(it)) },
                             onClear = { viewModel.onEvent(ExploreUiEvent.ClearSearchQuery) },
+                            hint = if (uiState.selectedCatalog?.supportsSearch == true) {
+                                "Search catalog..."
+                            } else {
+                                "Filter loaded..."
+                            },
                         )
 
                         YearDropdown(
                             selectedYear = uiState.selectedYear,
                             onSelectYear = { viewModel.onEvent(ExploreUiEvent.SelectYear(it)) },
                         )
+                        IconButton(
+                            onClick = { viewModel.onEvent(ExploreUiEvent.RefreshCatalogs) },
+                            enabled = !uiState.isInitializing,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh catalogs",
+                                tint = theme.TextPrimary,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
                     }
                 }
 
@@ -369,6 +395,42 @@ fun ExploreCatalogsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                uiState.catalogDiscoveryWarning?.let { warning ->
+                    Text(
+                        text = warning,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.5.sp,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    )
+                }
+
+                if (uiState.catalogLoadError != null && uiState.displayItems.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = uiState.catalogLoadError.orEmpty(),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontSize = 11.5.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { viewModel.onEvent(ExploreUiEvent.RetryCatalogLoad) },
+                                enabled = !uiState.isLoadingMore,
+                            ) {
+                                Text("Retry", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
                 // Media Poster Grid
                 if (uiState.isLoading && uiState.rawItems.isEmpty()) {
                     Box(
@@ -380,6 +442,25 @@ fun ExploreCatalogsScreen(
                             modifier = Modifier.size(34.dp),
                             strokeWidth = 3.dp,
                         )
+                    }
+                } else if (!uiState.isLoading && uiState.catalogLoadError != null && uiState.displayItems.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = uiState.catalogLoadError.orEmpty(),
+                                color = theme.TextMuted,
+                                fontSize = 13.5.sp,
+                            )
+                            Button(onClick = { viewModel.onEvent(ExploreUiEvent.RetryCatalogLoad) }) {
+                                Text("Retry")
+                            }
+                        }
                     }
                 } else if (!uiState.isLoading && uiState.displayItems.isEmpty()) {
                     Box(
@@ -395,18 +476,38 @@ fun ExploreCatalogsScreen(
                                 else -> uiState.selectedExtraArgs[extra.name].isNullOrBlank()
                             }
                         }
-                        val emptyText = if (uiState.allCatalogs.isEmpty()) {
+                        val isLocalSearch = uiState.searchQuery.isNotBlank() && uiState.selectedCatalog?.supportsSearch != true
+                        val emptyText = if (isLocalSearch && uiState.canLoadMore) {
+                            "No loaded titles match yet. Load more pages to continue searching."
+                        } else if (isLocalSearch) {
+                            "No loaded titles match this search."
+                        } else if (uiState.allCatalogs.isEmpty()) {
                             "No catalogs active. Add an addon from Extensions or use Search to browse providers."
                         } else if (missingRequiredExtra != null) {
                             "Choose the required '${missingRequiredExtra.name}' catalog filter to load this catalog."
                         } else {
                             "No titles match the selected filters or search query."
                         }
-                        Text(
-                            text = emptyText,
-                            color = theme.TextMuted,
-                            fontSize = 13.5.sp,
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = emptyText,
+                                color = theme.TextMuted,
+                                fontSize = 13.5.sp,
+                            )
+                            if (isLocalSearch && uiState.canLoadMore) {
+                                if (uiState.isLoadingMore) {
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    OutlinedButton(onClick = { viewModel.onEvent(ExploreUiEvent.LoadMore) }) {
+                                        Text("Load More")
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else {
                     LazyVerticalGrid(
@@ -912,6 +1013,7 @@ private fun ExploreSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
+    hint: String,
 ) {
     val theme = LocalDesktopTheme.current
     Surface(
@@ -937,7 +1039,7 @@ private fun ExploreSearchField(
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (query.isEmpty()) {
                     Text(
-                        text = "Filter titles...",
+                        text = hint,
                         fontSize = 11.5.sp,
                         color = theme.TextMuted.copy(alpha = 0.6f),
                     )
@@ -973,6 +1075,7 @@ private fun ExploreSearchField(
 private fun EmptyCatalogState(
     onNavigateToSettings: () -> Unit,
     onBackToExplore: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val theme = LocalDesktopTheme.current
 
@@ -1019,10 +1122,57 @@ private fun EmptyCatalogState(
                 Text("Manage Add-ons", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
 
+            OutlinedButton(onClick = onRefresh, shape = RoundedCornerShape(8.dp)) {
+                Text("Refresh catalogs", fontSize = 12.sp)
+            }
+
             OutlinedButton(
                 onClick = onBackToExplore,
                 shape = RoundedCornerShape(8.dp),
             ) {
+                Text("Back to Explore", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogDiscoveryFailureState(
+    message: String,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val theme = LocalDesktopTheme.current
+    Box(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(42.dp),
+            )
+            Text(
+                text = "Catalogs Could Not Be Reached",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = theme.TextPrimary,
+            )
+            Text(message, fontSize = 12.5.sp, color = theme.TextMuted)
+            Button(onClick = onRetry, shape = RoundedCornerShape(8.dp)) {
+                Text("Retry")
+            }
+            OutlinedButton(onClick = onBack, shape = RoundedCornerShape(8.dp)) {
                 Text("Back to Explore", fontSize = 12.sp)
             }
         }

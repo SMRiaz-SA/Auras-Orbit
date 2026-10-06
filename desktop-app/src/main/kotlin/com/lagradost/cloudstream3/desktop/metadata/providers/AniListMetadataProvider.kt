@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.addDate
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.metadata.MetadataEnrichmentCallbacks
 import com.lagradost.cloudstream3.desktop.metadata.MetadataEnrichmentContext
@@ -458,6 +459,7 @@ object AniListMetadataProvider : MetadataProvider {
                             rawKey = trailerId,
                             thumbnailUrl = media.trailer.thumbnail ?: "https://img.youtube.com/vi/$trailerId/maxresdefault.jpg",
                             site = "YouTube",
+                            source = "anilist",
                         ),
                     )
                     callbacks.onTrailersLoaded(trailersList)
@@ -478,7 +480,8 @@ object AniListMetadataProvider : MetadataProvider {
                                 this.episode = nextEp.episode
                                 this.season = targetSeason
                                 this.posterUrl = media.bannerImage ?: media.coverImage?.extraLarge
-                                this.description = "||DATE:$dateIso||Upcoming anime simulcast episode."
+                                this.description = "Upcoming anime simulcast episode."
+                                this.addDate(dateIso)
                             }
                             val mutableMap = loaded.episodes.toMutableMap()
                             if (mutableMap.isEmpty()) {

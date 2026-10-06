@@ -3,11 +3,13 @@ package com.lagradost.cloudstream3.desktop.player.skip
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 
 object AniSkipProvider : ISkipProvider {
     override val id: String = "aniskip"
@@ -15,9 +17,10 @@ object AniSkipProvider : ISkipProvider {
 
     private const val ANISKIP_BASE_URL = "https://api.aniskip.com/v2/skip-times"
     private const val JIKAN_SEARCH_URL = "https://api.jikan.moe/v4/anime"
+    private const val MAX_RESPONSE_BYTES = 1024 * 1024
 
     // In-memory cache: Normalized title -> MAL ID
-    private val malIdCache = ConcurrentHashMap<String, Int>()
+    private val malIdCache = BoundedLruCache<String, Int>(512)
 
     private data class AniSkipResponse(
         @JsonProperty("found") val found: Boolean? = null,
@@ -87,7 +90,7 @@ object AniSkipProvider : ISkipProvider {
                         "User-Agent" to "CloudStream-Desktop/1.0",
                     ),
                     timeout = 7000L,
-                ).text
+                ).body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
 
                 val parsed = tryParseJson<AniSkipResponse>(response)
                 AppLogger.i("AniSkipProvider", "AniSkip response for '$malId' EP $ep: found=${parsed?.found}, count=${parsed?.results?.size ?: 0}")
@@ -117,6 +120,8 @@ object AniSkipProvider : ISkipProvider {
                 } else {
                     emptyList()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.i("AniSkipProvider", "Failed to fetch skip intervals: ${e.message}")
                 emptyList()
@@ -149,7 +154,7 @@ object AniSkipProvider : ISkipProvider {
                 headers = mapOf("Content-Type" to "application/json", "Accept" to "application/json"),
                 json = req,
                 timeout = 5000L,
-            ).text
+            ).body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
             val parsed = tryParseJson<AniListSearchResponse>(resp)
             val malId = parsed?.data?.page?.media?.firstOrNull()?.idMal
             if (malId != null && malId > 0) {
@@ -157,6 +162,8 @@ object AniSkipProvider : ISkipProvider {
                 AppLogger.i("AniSkipProvider", "Resolved MAL ID $malId for '$cleanTitle' via AniList")
                 return malId
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.d("AniSkipProvider", "AniList MAL resolution failed: ${e.message}")
         }
@@ -172,7 +179,7 @@ object AniSkipProvider : ISkipProvider {
                     "User-Agent" to "CloudStream-Desktop/1.0",
                 ),
                 timeout = 7000L,
-            ).text
+            ).body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
             val parsed = tryParseJson<JikanSearchResponse>(resp)
             val id = parsed?.data?.firstOrNull()?.malId
             if (id != null && id > 0) {
@@ -180,6 +187,8 @@ object AniSkipProvider : ISkipProvider {
                 AppLogger.i("AniSkipProvider", "Resolved MAL ID $id for '$cleanTitle' via Jikan")
                 return id
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.i("AniSkipProvider", "Jikan MAL resolution failed for '$title': ${e.message}")
         }

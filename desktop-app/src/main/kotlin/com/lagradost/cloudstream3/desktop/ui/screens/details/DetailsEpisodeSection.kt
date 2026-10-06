@@ -55,14 +55,18 @@ fun DetailsEpisodeSection(
     onToggleWatched: (com.lagradost.cloudstream3.Episode, Boolean) -> Unit,
     onToggleSeasonWatched: (List<com.lagradost.cloudstream3.Episode>, Boolean) -> Unit,
     onRemoveEpisodeWatched: (com.lagradost.cloudstream3.Episode) -> Unit,
+    isFollowingSchedule: Boolean = false,
+    onToggleScheduleFollow: () -> Unit = {},
     onToggleEpisodesStackedView: (Boolean) -> Unit,
     onSetEpisodeViewMode: (Int) -> Unit = {},
     selectedSeason: Int? = null,
+    targetEpisode: Int? = null,
     onSeasonChange: ((Int) -> Unit)? = null,
 ) {
     val isEpisodesStackedView = uiState?.isEpisodesStackedView == true
     val coroutineScope = rememberCoroutineScope()
     if (isMovieLike) return
+    val supportsScheduleFollow = data is TvSeriesLoadResponse || data is AnimeLoadResponse
     val hasEpisodes = when (data) {
         is TvSeriesLoadResponse -> data.episodes.isNotEmpty()
         is AnimeLoadResponse -> data.episodes.isNotEmpty()
@@ -114,6 +118,13 @@ fun DetailsEpisodeSection(
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 13.5.sp,
                         lineHeight = 18.sp,
+                    )
+                }
+                if (supportsScheduleFollow) {
+                    FilterChip(
+                        selected = isFollowingSchedule,
+                        onClick = onToggleScheduleFollow,
+                        label = { Text(if (isFollowingSchedule) "Following" else "Follow schedule") },
                     )
                 }
             }
@@ -280,8 +291,13 @@ fun DetailsEpisodeSection(
                         }
                     }
             }
-            val targetEpisodeIndex = remember(preChunkedEpisodes, latestHistory) {
-                if (latestHistory != null && preChunkedEpisodes.isNotEmpty()) {
+            val targetEpisodeIndex = remember(preChunkedEpisodes, latestHistory, targetEpisode) {
+                val explicitTargetIndex = targetEpisode?.let { number ->
+                    preChunkedEpisodes.indexOfFirst { it.episode == number }
+                } ?: -1
+                if (explicitTargetIndex >= 0) {
+                    explicitTargetIndex
+                } else if (latestHistory != null && preChunkedEpisodes.isNotEmpty()) {
                     val isLatestCompleted = latestHistory.duration > 0 &&
                         PlayerLinkHandler.isCompleted(latestHistory.position, latestHistory.duration)
                     val currentIdx = preChunkedEpisodes.indexOfFirst { it.matchesHistory(latestHistory) }
@@ -346,14 +362,35 @@ fun DetailsEpisodeSection(
                     }
                 }
             }
-            val isSeasonWatched = remember(currentSeasonEpisodes, historyLookup) {
+            val watchedMarks = uiState?.episodeWatchMarks?.values.orEmpty()
+            val isSeasonWatched = remember(currentSeasonEpisodes, watchedMarks) {
                 currentSeasonEpisodes.isNotEmpty() && currentSeasonEpisodes.all { ep ->
-                    val hist = historyLookup.find(ep)
-                    hist != null && PlayerLinkHandler.isCompleted(hist.position, hist.duration)
+                    watchedMarks.any { ep.matchesWatchMark(it) }
                 }
             }
 
             Column(modifier = Modifier.fillMaxWidth()) {
+                if (supportsScheduleFollow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = hPadding, end = hPadding, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Release schedule", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (isFollowingSchedule) "Upcoming episodes appear on Home" else "Add this series to your Home schedule",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        FilterChip(
+                            selected = isFollowingSchedule,
+                            onClick = onToggleScheduleFollow,
+                            label = { Text(if (isFollowingSchedule) "Following" else "Follow schedule") },
+                        )
+                    }
+                }
                 if (isCompact) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = hPadding),

@@ -1,10 +1,13 @@
 package com.lagradost.cloudstream3.desktop.repo
 
 import com.fasterxml.jackson.core.type.TypeReference
+import com.lagradost.cloudstream3.desktop.utils.KeyedMutex
 import com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.net.readBoundedBytes
 import com.lagradost.runtime.loader.PluginArchiveFilter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -55,14 +58,14 @@ object DesktopRepositoryManager {
         _syncGeneration.update { it + 1 }
     }
 
-    private val fetchMutexes = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+    private val fetchMutexes = KeyedMutex<String>()
     private val autoUpdateMutex = Mutex()
     private val syncMutex = Mutex()
 
-    private val _failedIconUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    fun isIconFailed(url: String): Boolean = _failedIconUrls.contains(url)
+    private val _failedIconUrls = BoundedLruCache<String, Boolean>(512)
+    fun isIconFailed(url: String): Boolean = _failedIconUrls[url] == true
     fun markIconFailed(url: String) {
-        _failedIconUrls.add(url)
+        _failedIconUrls[url] = true
     }
 
     data class SyncReport(
@@ -96,6 +99,8 @@ object DesktopRepositoryManager {
         ) {
             try {
                 addRepositoryFromInput(testerDefaultRepositoryUrl)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.i("First-run Phisher repository sync deferred: ${e.message}")
             }
@@ -227,7 +232,7 @@ object DesktopRepositoryManager {
     suspend fun addRepositoryFromInput(inputUrl: String): List<Repository>? = withContext(Dispatchers.IO) {
         val trimmed = inputUrl.trim()
         if (trimmed.isEmpty()) return@withContext null
-        val resolvedUrl = PluginNetworkClient.parseRepoUrl(trimmed) ?: trimmed
+        val resolvedUrl = PluginNetworkClient.parseRepoUrl(trimmed) ?: return@withContext null
 
         // Check if the URL resolves to a Mega Repo (JSON array)
         val request = okhttp3.Request.Builder().url(resolvedUrl).build()
@@ -237,6 +242,7 @@ object DesktopRepositoryManager {
                 if (response.isSuccessful) body = response.body.byteStream().readBoundedBytes(8 * 1024 * 1024).toString(Charsets.UTF_8)
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             AppLogger.i("Failed to fetch $resolvedUrl: ${e.message}")
         }
 
@@ -254,6 +260,7 @@ object DesktopRepositoryManager {
                 }
                 return@withContext addedRepos.takeIf { it.isNotEmpty() }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 AppLogger.i("Failed to parse MegaRepo: ${e.message}")
             }
         }
@@ -267,7 +274,7 @@ object DesktopRepositoryManager {
     }
 
     private suspend fun addSingleRepository(url: String): Repository? {
-        val resolvedUrl = PluginNetworkClient.parseRepoUrl(url) ?: url
+        val resolvedUrl = PluginNetworkClient.parseRepoUrl(url) ?: return null
         val manifest = PluginNetworkClient.fetchRepository(resolvedUrl) ?: return null
 
         val directoryKey = PluginFileUtils.repositoryDirectoryCollisionKey(manifest.name)
@@ -288,6 +295,8 @@ object DesktopRepositoryManager {
         manifest.pluginLists.forEach { listUrl ->
             try {
                 getCachedPlugins(listUrl)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e("Failed to pre-fetch plugins for $listUrl", e)
             }
@@ -309,8 +318,7 @@ object DesktopRepositoryManager {
 
     suspend fun getCachedPlugins(listUrl: String): List<SitePlugin> {
         pluginsCache[listUrl]?.let { return it }
-        val mutex = fetchMutexes.computeIfAbsent(listUrl) { Mutex() }
-        val plugins = mutex.withLock {
+        val plugins = fetchMutexes.withLock(listUrl) {
             pluginsCache[listUrl]?.let { return@withLock it }
             val fetched = PluginNetworkClient.fetchPlugins(listUrl) ?: return@withLock emptyList()
             pluginsCache[listUrl] = fetched
@@ -331,7 +339,7 @@ object DesktopRepositoryManager {
         return plugins
     }
 
-    private val manifestCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Map<String, Any>>>()
+    private val manifestCache = BoundedLruCache<String, Pair<Long, Map<String, Any>>>(256)
 
     fun readPluginManifest(jarFile: File): Map<String, Any>? {
         val lastModified = jarFile.lastModified()
@@ -533,10 +541,14 @@ object DesktopRepositoryManager {
                                             }
                                         }
                                         total.addAndGet(plugins.size)
+                                    } catch (e: CancellationException) {
+                                        throw e
                                     } catch (_: Exception) {}
                                 }
                             }.awaitAll()
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                     } finally {
                         val done = completedCounter.incrementAndGet()

@@ -348,8 +348,9 @@ object TvMazeMetadataProvider : MetadataProvider {
                         val existingActorNames = currentActors.map { it.actor.name.lowercase().trim() }.toSet()
 
                         tvmazeCast.forEach { member ->
-                            val actorName = member.person?.name?.trim() ?: return@forEach
-                            val actorImage = member.person?.image?.original ?: member.person?.image?.medium
+                            val person = member.person ?: return@forEach
+                            val actorName = person.name?.trim() ?: return@forEach
+                            val actorImage = person.image?.original ?: person.image?.medium
 
                             if (!existingActorNames.contains(actorName.lowercase())) {
                                 currentActors.add(
@@ -401,9 +402,11 @@ object TvMazeMetadataProvider : MetadataProvider {
                                 if (existingEp.description.isNullOrBlank() && epOverview != null) {
                                     existingEp.description = epOverview
                                 }
-                                if (epAirDate != null && (existingEp.description == null || !existingEp.description!!.contains("||DATE:"))) {
-                                    val clean = (existingEp.description ?: "").replace(Regex("\\|\\|DATE:.*?\\|\\|"), "")
-                                    existingEp.description = "||DATE:$epAirDate||$clean"
+                                if (epAirDate != null) {
+                                    existingEp.addDate(epAirDate)
+                                    existingEp.description = (existingEp.description ?: "")
+                                        .replace(Regex("\\|\\|DATE:.*?\\|\\|"), "")
+                                        .trim()
                                 }
                                 if (existingEp.name.isNullOrBlank() && tvmEp.name != null) {
                                     existingEp.name = tvmEp.name
@@ -438,13 +441,13 @@ object TvMazeMetadataProvider : MetadataProvider {
                                     if (isFuture) {
                                         val epOverview = ep.summary?.let { cleanHtmlSummary(it) }
                                         val epStill = ep.image?.original ?: ep.image?.medium
-                                        val descWithDate = "||DATE:$epAirDate||${epOverview ?: ""}"
                                         val synthetic = dummyApi.newEpisode("unreleased_s${epSeason}_e$epNum") {
                                             this.name = ep.name ?: "Episode $epNum"
                                             this.season = epSeason
                                             this.episode = epNum
                                             this.posterUrl = epStill
-                                            this.description = descWithDate
+                                            this.description = epOverview
+                                            this.addDate(epAirDate)
                                             this.runTime = ep.runtime
                                             this.score = ep.rating?.average?.let { Score.from10(it) }
                                         }

@@ -8,31 +8,42 @@ import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.GetBookmar
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.RemoveBookmark
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.ToggleBookmark
 import com.lagradost.cloudstream3.desktop.domain.category.interactor.SetItemCategory
+import com.lagradost.cloudstream3.desktop.domain.customlists.repository.CustomListsRepository
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.screens.library.contract.LibraryUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.library.contract.LibraryUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.library.contract.LibraryUiState
 import com.lagradost.cloudstream3.desktop.ui.screens.library.contract.SortOption
+import com.lagradost.cloudstream3.desktop.ui.screens.library.transfer.LibraryArchive
+import com.lagradost.cloudstream3.desktop.ui.screens.library.transfer.LibraryArchiveService
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopBookmark
 import com.lagradost.common.storage.DesktopWatchType
 import com.lagradost.runtime.executor.SafePluginInvoker
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 
 class LibraryViewModel(
     private val getBookmarks: GetBookmarks = AppContainerHolder.container.getBookmarks,
     private val toggleBookmark: ToggleBookmark = AppContainerHolder.container.toggleBookmark,
     private val removeBookmark: RemoveBookmark = AppContainerHolder.container.removeBookmark,
     private val setItemCategory: SetItemCategory = AppContainerHolder.container.setItemCategory,
+    private val customListsRepository: CustomListsRepository = AppContainerHolder.container.customListsRepository,
 ) : BaseMviViewModel<LibraryUiState, LibraryUiEvent, LibraryUiEffect>(
     initialState = LibraryUiState(),
 ) {
     private var reLinkSearchJob: Job? = null
+    private val reLinkSearchGeneration = AtomicLong(0L)
+    private var pendingImportArchive: LibraryArchive? = null
+    private var pendingImportProfileId: Int? = null
 
     init {
         viewModelScope.launch {
@@ -49,6 +60,18 @@ class LibraryViewModel(
                         selectedProvider = newSelectedProv,
                         installedProviderNames = installed,
                         providerMap = provMap,
+                    ).applyFilters()
+                }
+            }
+        }
+        viewModelScope.launch {
+            customListsRepository.subscribeActive().collect { snapshot ->
+                updateState {
+                    val selectedList = selectedCustomListId?.takeIf { id -> snapshot.lists.any { it.id == id } }
+                    copy(
+                        customLists = snapshot.lists,
+                        customListItems = snapshot.items,
+                        selectedCustomListId = selectedList,
                     ).applyFilters()
                 }
             }
@@ -72,13 +95,119 @@ class LibraryViewModel(
             is LibraryUiEvent.OnStartReLink -> startReLink(event.bookmark)
             is LibraryUiEvent.OnSelectReLinkMatch -> selectReLinkMatch(event.bookmark, event.provider, event.match)
             is LibraryUiEvent.OnChangeWatchType -> changeWatchType(event.bookmarkId, event.newType)
+            is LibraryUiEvent.OnSelectCustomList -> updateState { copy(selectedCustomListId = event.listId).applyFilters() }
+            is LibraryUiEvent.OnCreateCustomList -> createCustomList(event.name, event.addBookmarkId)
+            is LibraryUiEvent.OnRenameCustomList -> renameCustomList(event.listId, event.name)
+            is LibraryUiEvent.OnDeleteCustomList -> deleteCustomList(event.listId)
+            is LibraryUiEvent.OnPinCustomListToHome -> setPinnedToHome(event.listId, event.pinned)
+            is LibraryUiEvent.OnSetBookmarkInCustomList -> setBookmarkInCustomList(event.listId, event.bookmarkId, event.included)
             is LibraryUiEvent.OnSearchGlobal -> searchGlobal(event.title)
             is LibraryUiEvent.OnDismissRecoveryModal -> dismissRecoveryModal()
+            is LibraryUiEvent.OnExportLibrary -> exportLibrary(event.file, event.profileId)
+            is LibraryUiEvent.OnImportLibraryFileSelected -> loadLibraryArchive(event.file, event.profileId)
+            is LibraryUiEvent.OnConfirmLibraryImport -> confirmLibraryImport()
+            is LibraryUiEvent.OnDismissLibraryImport -> dismissLibraryImport()
         }
     }
 
+    private fun exportLibrary(file: File, profileId: Int) {
+        if (uiState.value.isTransferring) return
+        updateState { copy(isTransferring = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val written = LibraryArchiveService.export(profileId, file)
+                sendEffect(LibraryUiEffect.ShowToast("Library exported to ${written.name}."))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                AppLogger.e("Library archive export failed (${failure::class.simpleName})")
+                sendEffect(LibraryUiEffect.ShowToast("Could not export the library file.", isError = true))
+            } finally {
+                updateState { copy(isTransferring = false) }
+            }
+        }
+    }
+
+    private fun loadLibraryArchive(file: File, profileId: Int) {
+        if (uiState.value.isTransferring) return
+        updateState { copy(isTransferring = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val validated = LibraryArchiveService.read(file)
+                val profile = ProfileManager.profiles.value.firstOrNull { it.id == profileId }
+                    ?: error("The target profile no longer exists")
+                pendingImportArchive = validated.archive
+                pendingImportProfileId = profileId
+                updateState {
+                    copy(
+                        importPreview = validated.preview,
+                        importTargetProfileName = profile.name,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                AppLogger.e("Library archive import validation failed (${failure::class.simpleName})")
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not read the library file.", isError = true))
+            } finally {
+                updateState { copy(isTransferring = false) }
+            }
+        }
+    }
+
+    private fun confirmLibraryImport() {
+        val archive = pendingImportArchive ?: return
+        val profileId = pendingImportProfileId ?: return
+        if (uiState.value.isTransferring) return
+        pendingImportArchive = null
+        pendingImportProfileId = null
+        updateState { copy(importPreview = null, importTargetProfileName = null, isTransferring = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(ProfileManager.profiles.value.any { it.id == profileId }) { "The target profile no longer exists" }
+                val result = LibraryArchiveService.import(archive, profileId)
+                AppContainerHolder.container.bookmarksRepository.refresh(profileId)
+                val message = buildString {
+                    append("Import complete: ${result.bookmarksAdded} titles added")
+                    if (result.bookmarksSkipped > 0) append(", ${result.bookmarksSkipped} existing titles kept")
+                    append("; ${result.historyAdded} progress records added")
+                    if (result.historyUpdated > 0) append(", ${result.historyUpdated} updated")
+                    if (result.historyUnchanged > 0) append(", ${result.historyUnchanged} newer local records kept")
+                    append("; ${result.customListsAdded} lists added")
+                    if (result.customListsMerged > 0) append(", ${result.customListsMerged} merged")
+                    if (result.customListItemsAdded > 0) append(" and ${result.customListItemsAdded} list entries added")
+                    append('.')
+                }
+                sendEffect(LibraryUiEffect.ShowToast(message))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                AppLogger.e("Library archive import failed (${failure::class.simpleName})")
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not import the library file.", isError = true))
+            } finally {
+                updateState { copy(isTransferring = false) }
+            }
+        }
+    }
+
+    private fun dismissLibraryImport() {
+        pendingImportArchive = null
+        pendingImportProfileId = null
+        updateState { copy(importPreview = null, importTargetProfileName = null) }
+    }
+
     private fun LibraryUiState.applyFilters(): LibraryUiState {
-        var result = bookmarks.filter { it.watchType == selectedTab.id }
+        val selectedListId = selectedCustomListId
+        val selectedBookmarkIds = if (selectedListId == null) {
+            null
+        } else {
+            customListItems.asSequence().filter { it.listId == selectedListId }.map { it.bookmarkId }.toSet()
+        }
+        var result = if (selectedBookmarkIds == null) {
+            bookmarks.filter { it.watchType == selectedTab.id }
+        } else {
+            bookmarks.filter { it.id in selectedBookmarkIds }
+        }
 
         if (selectedProvider != null) {
             result = result.filter { it.apiName == selectedProvider }
@@ -100,7 +229,87 @@ class LibraryViewModel(
 
     private fun selectTab(tab: DesktopWatchType) {
         updateState {
-            copy(selectedTab = tab).applyFilters()
+            copy(selectedTab = tab, selectedCustomListId = null).applyFilters()
+        }
+    }
+
+    private fun createCustomList(name: String, addBookmarkId: String? = null) {
+        val profileId = ProfileManager.activeProfileId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val created = customListsRepository.create(name, profileId)
+                if (addBookmarkId != null) {
+                    check(customListsRepository.setBookmark(created.id, addBookmarkId, true, profileId)) {
+                        "The title is no longer in your Library."
+                    }
+                }
+                updateState { copy(selectedCustomListId = created.id).applyFilters() }
+                sendEffect(LibraryUiEffect.ShowToast("Created list ${created.name}."))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not create the list.", isError = true))
+            }
+        }
+    }
+
+    private fun renameCustomList(listId: String, name: String) {
+        val profileId = ProfileManager.activeProfileId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(customListsRepository.rename(listId, name, profileId)) { "Could not rename the list." }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not rename the list.", isError = true))
+            }
+        }
+    }
+
+    private fun deleteCustomList(listId: String) {
+        val profileId = ProfileManager.activeProfileId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(customListsRepository.delete(listId, profileId)) { "Could not delete the list." }
+                updateState {
+                    copy(selectedCustomListId = selectedCustomListId?.takeUnless { it == listId }).applyFilters()
+                }
+                sendEffect(LibraryUiEffect.ShowToast("List deleted. Saved titles remain in your Library."))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not delete the list.", isError = true))
+            }
+        }
+    }
+
+    private fun setBookmarkInCustomList(listId: String, bookmarkId: String, included: Boolean) {
+        val profileId = ProfileManager.activeProfileId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(customListsRepository.setBookmark(listId, bookmarkId, included, profileId)) {
+                    "The title or list is no longer available."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not update the list.", isError = true))
+            }
+        }
+    }
+
+    private fun setPinnedToHome(listId: String, pinned: Boolean) {
+        val profileId = ProfileManager.activeProfileId
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                check(customListsRepository.setPinnedToHome(listId, pinned, profileId)) {
+                    "Could not update the Home shelf."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                sendEffect(LibraryUiEffect.ShowToast(failure.message ?: "Could not update the Home shelf.", isError = true))
+            }
         }
     }
 
@@ -120,6 +329,7 @@ class LibraryViewModel(
     }
 
     private fun startReLink(bookmark: DesktopBookmark) {
+        val generation = reLinkSearchGeneration.incrementAndGet()
         updateState {
             copy(
                 orphanRecoveryBookmark = bookmark,
@@ -142,6 +352,8 @@ class LibraryViewModel(
                         matches.take(3).forEach { resp ->
                             resultsList.add(p to resp)
                         }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
                     } catch (_: Exception) {
                     }
                 }
@@ -149,10 +361,14 @@ class LibraryViewModel(
             jobs.forEach { it.join() }
 
             updateState {
-                copy(
-                    isSearchingMatches = false,
-                    matchedResults = resultsList.toList(),
-                )
+                if (generation == reLinkSearchGeneration.get() && orphanRecoveryBookmark?.id == bookmark.id) {
+                    copy(
+                        isSearchingMatches = false,
+                        matchedResults = resultsList.toList(),
+                    )
+                } else {
+                    this
+                }
             }
         }
     }
@@ -175,6 +391,8 @@ class LibraryViewModel(
                         matchedResults = emptyList(),
                     )
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 AppLogger.e("LibraryViewModel: Failed to save re-linked bookmark: ${e.message}")
             }
@@ -194,6 +412,7 @@ class LibraryViewModel(
     }
 
     private fun dismissRecoveryModal() {
+        reLinkSearchGeneration.incrementAndGet()
         reLinkSearchJob?.cancel()
         updateState {
             copy(

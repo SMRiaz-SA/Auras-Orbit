@@ -28,6 +28,7 @@ import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 
 private val NON_ALPHANUMERIC_REGEX = Regex("[^a-z0-9]")
 private val WHITESPACE_REGEX = Regex("\\s+")
@@ -60,10 +61,14 @@ data class ExploreUiState(
     val selectedYear: String = "All Years",
     val searchQuery: String = "",
     val rawItems: List<ExploreItem> = emptyList(),
+    val catalogItemsFetched: Int = 0,
     val displayItems: List<ExploreItem> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val catalogDiscoveryError: String? = null,
+    val catalogDiscoveryWarning: String? = null,
+    val catalogLoadError: String? = null,
     val selectedItemForMatch: ExploreItem? = null,
     val providerMatches: List<ProviderMatch> = emptyList(),
     val isSearchingProviders: Boolean = false,
@@ -98,11 +103,22 @@ sealed interface ExploreUiEvent : UiEvent {
     data class SelectProviderMatch(val match: ProviderMatch) : ExploreUiEvent
     data object LoadMore : ExploreUiEvent
     data object RefreshCatalogs : ExploreUiEvent
+    data object RetryCatalogLoad : ExploreUiEvent
 }
 
 sealed interface ExploreUiEffect : UiEffect {
     data class OpenDetails(val providerName: String, val url: String, val title: String) : ExploreUiEffect
 }
+
+private data class CatalogDiscoveryOutcome(
+    val catalogs: List<ManifestCatalogDescriptor>,
+    val error: String? = null,
+)
+
+private data class CachedCatalogItems(
+    val items: List<ExploreItem>,
+    val fetchedCount: Int,
+)
 
 class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, ExploreUiEffect>(ExploreUiState()) {
     private val TAG = "ExploreViewModel"
@@ -114,15 +130,20 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private var stremioStreamJob: Job? = null
     private var torrentSearchJob: Job? = null
     private var remoteSearchJob: Job? = null
+    private val catalogRequestGeneration = AtomicLong(0L)
+    private val catalogDiscoveryGeneration = AtomicLong(0L)
+    private val providerSearchGeneration = AtomicLong(0L)
+    private val stremioStreamGeneration = AtomicLong(0L)
+    private val torrentSearchGeneration = AtomicLong(0L)
     private val searchSemaphore = Semaphore(8)
 
     companion object {
         private const val MAX_CACHE_ENTRIES = 30
     }
 
-    private val catalogItemsCache: MutableMap<String, List<ExploreItem>> = Collections.synchronizedMap(
-        object : LinkedHashMap<String, List<ExploreItem>>(MAX_CACHE_ENTRIES, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<ExploreItem>>?): Boolean {
+    private val catalogItemsCache: MutableMap<String, CachedCatalogItems> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, CachedCatalogItems>(MAX_CACHE_ENTRIES, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedCatalogItems>?): Boolean {
                 return size > MAX_CACHE_ENTRIES
             }
         },
@@ -157,7 +178,12 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             is ExploreUiEvent.CloseProviderPicker -> closeProviderPicker()
             is ExploreUiEvent.SelectProviderMatch -> selectProviderMatch(event.match)
             is ExploreUiEvent.LoadMore -> loadMore()
-            is ExploreUiEvent.RefreshCatalogs -> refreshCatalogs()
+            is ExploreUiEvent.RefreshCatalogs -> {
+                ExploreCatalogDiscoverer.clearCache()
+                catalogItemsCache.clear()
+                refreshCatalogs()
+            }
+            is ExploreUiEvent.RetryCatalogLoad -> retryCatalogLoad()
         }
     }
 
@@ -173,15 +199,62 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun refreshCatalogs() {
+        val discoveryGeneration = catalogDiscoveryGeneration.incrementAndGet()
         refreshJob?.cancel()
+        remoteSearchJob?.cancel()
+        remoteSearchJob = null
+        invalidateCatalogRequests()
+        updateState {
+            copy(
+                isInitializing = true,
+                allCatalogs = emptyList(),
+                availableTypes = emptyList(),
+                filteredCatalogs = emptyList(),
+                selectedCatalog = null,
+                selectedExtraArgs = emptyMap(),
+                rawItems = emptyList(),
+                catalogItemsFetched = 0,
+                displayItems = emptyList(),
+                isLoading = false,
+                isLoadingMore = false,
+                canLoadMore = false,
+                catalogDiscoveryError = null,
+                catalogDiscoveryWarning = null,
+                catalogLoadError = null,
+            )
+        }
         refreshJob = viewModelScope.launch(Dispatchers.IO) {
             val enabledAddons: List<ManagedStremioAddon> = StremioAddonManager.addons.value.filter { it.enabled }
-            val discovered = mutableListOf<ManifestCatalogDescriptor>()
-
-            for (addon in enabledAddons) {
-                val cats = ExploreCatalogDiscoverer.getCatalogsForAddon(addon)
-                discovered.addAll(cats)
+            val outcomes = coroutineScope {
+                enabledAddons.map { addon ->
+                    async {
+                        try {
+                            CatalogDiscoveryOutcome(
+                                catalogs = ExploreCatalogDiscoverer.getCatalogsForAddon(addon),
+                            )
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            AppLogger.w(TAG, "Failed to discover catalogs for ${addon.name}: ${e.message}")
+                            CatalogDiscoveryOutcome(catalogs = emptyList(), error = e.message ?: "Request failed")
+                        }
+                    }
+                }.awaitAll()
             }
+            val discovered = outcomes.flatMap { it.catalogs }
+            val failedAddons = outcomes.filter { it.error != null }
+            val discoveryError = if (discovered.isEmpty() && failedAddons.isNotEmpty()) {
+                "Couldn't reach enabled add-on catalogs. Check your connection and retry."
+            } else {
+                null
+            }
+            val discoveryWarning = if (discovered.isNotEmpty() && failedAddons.isNotEmpty()) {
+                "Some enabled add-ons couldn't be reached. Showing catalogs from the add-ons that responded."
+            } else {
+                null
+            }
+
+            if (catalogDiscoveryGeneration.get() != discoveryGeneration) return@launch
 
             val types = discovered.map { it.type.lowercase() }.distinct().sortedBy {
                 when (it) {
@@ -200,32 +273,57 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
             if (discovered.isEmpty()) {
                 updateState {
-                    copy(
-                        isInitializing = false,
-                        allCatalogs = emptyList(),
-                        availableTypes = emptyList(),
-                        filteredCatalogs = emptyList(),
-                        selectedCatalog = null,
-                        selectedExtraArgs = emptyMap(),
-                        rawItems = emptyList(),
-                        displayItems = emptyList(),
-                        isLoading = false,
-                    )
+                    if (catalogDiscoveryGeneration.get() == discoveryGeneration) {
+                        copy(
+                            isInitializing = false,
+                            allCatalogs = emptyList(),
+                            availableTypes = emptyList(),
+                            filteredCatalogs = emptyList(),
+                            selectedCatalog = null,
+                            selectedExtraArgs = emptyMap(),
+                            rawItems = emptyList(),
+                            catalogItemsFetched = 0,
+                            displayItems = emptyList(),
+                            isLoading = false,
+                            isLoadingMore = false,
+                            canLoadMore = false,
+                            catalogDiscoveryError = discoveryError,
+                            catalogDiscoveryWarning = null,
+                            catalogLoadError = null,
+                        )
+                    } else {
+                        this
+                    }
                 }
             } else {
                 updateState {
-                    copy(
-                        allCatalogs = discovered,
-                        availableTypes = types,
-                        selectedType = targetType,
-                        filteredCatalogs = forType,
-                        selectedCatalog = nextCat,
-                        selectedGenre = "All",
-                        selectedExtraArgs = emptyMap(),
-                        selectedYear = "All Years",
-                        searchQuery = "",
-                    )
+                    if (catalogDiscoveryGeneration.get() == discoveryGeneration) {
+                        copy(
+                            isInitializing = false,
+                            allCatalogs = discovered,
+                            availableTypes = types,
+                            selectedType = targetType,
+                            filteredCatalogs = forType,
+                            selectedCatalog = nextCat,
+                            selectedGenre = "All",
+                            selectedExtraArgs = emptyMap(),
+                            selectedYear = "All Years",
+                            searchQuery = "",
+                            rawItems = emptyList(),
+                            catalogItemsFetched = 0,
+                            displayItems = emptyList(),
+                            isLoading = false,
+                            isLoadingMore = false,
+                            canLoadMore = true,
+                            catalogDiscoveryError = null,
+                            catalogDiscoveryWarning = discoveryWarning,
+                            catalogLoadError = null,
+                        )
+                    } else {
+                        this
+                    }
                 }
+                if (catalogDiscoveryGeneration.get() != discoveryGeneration) return@launch
                 loadCurrentCatalog()
             }
         }
@@ -233,6 +331,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     private fun selectType(type: String) {
         if (uiState.value.selectedType == type) return
+        cancelPendingRemoteSearch()
 
         val forType = uiState.value.allCatalogs.filter { it.type.equals(type, ignoreCase = true) }
         val nextCat = forType.firstOrNull()
@@ -258,6 +357,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         ) {
             return
         }
+        cancelPendingRemoteSearch()
 
         updateState {
             copy(
@@ -274,6 +374,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     private fun selectGenre(genre: String) {
         if (uiState.value.selectedGenre == genre) return
+        cancelPendingRemoteSearch()
 
         updateState { copy(selectedGenre = genre) }
         loadCurrentCatalog()
@@ -290,6 +391,11 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun updateSearchQuery(query: String) {
+        val supportsRemoteSearch = uiState.value.selectedCatalog?.supportsSearch == true
+        if (supportsRemoteSearch) {
+            invalidateCatalogRequests()
+            updateState { copy(isLoadingMore = false, catalogLoadError = null) }
+        }
         updateState {
             copy(
                 searchQuery = query,
@@ -297,7 +403,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             )
         }
         remoteSearchJob?.cancel()
-        if (uiState.value.selectedCatalog?.supportsSearch == true) {
+        if (supportsRemoteSearch) {
             remoteSearchJob = viewModelScope.launch {
                 delay(350)
                 loadCurrentCatalog()
@@ -306,10 +412,12 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun applyCatalogExtras(values: Map<String, String>) {
+        cancelPendingRemoteSearch()
         updateState {
             copy(
                 selectedExtraArgs = values.filterValues { it.isNotBlank() },
                 rawItems = emptyList(),
+                catalogItemsFetched = 0,
                 displayItems = emptyList(),
             )
         }
@@ -349,6 +457,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     private fun loadCurrentCatalog(skip: Int = 0) {
         val cat = uiState.value.selectedCatalog ?: return
+        val requestGeneration = invalidateCatalogRequests()
         val state = uiState.value
         val genreArg = if (state.selectedGenre.equals("All", ignoreCase = true)) null else state.selectedGenre
         val queryArg = state.searchQuery.takeIf { cat.supportsSearch && it.isNotBlank() }
@@ -364,14 +473,16 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             }
         }
         if (missingRequired != null) {
-            updateState {
+            updateCatalogState(requestGeneration) {
                 copy(
                     isInitializing = false,
                     isLoading = false,
                     isLoadingMore = false,
                     rawItems = emptyList(),
+                    catalogItemsFetched = 0,
                     displayItems = emptyList(),
                     canLoadMore = false,
+                    catalogLoadError = null,
                 )
             }
             return
@@ -389,24 +500,38 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         // Instant display if already in memory
         if (skip == 0) {
             val cached = catalogItemsCache[cacheKey]
-            if (cached != null && cached.isNotEmpty()) {
-                val filtered = applyFilters(cached, uiState.value.searchQuery, uiState.value.selectedYear)
-                updateState {
+            if (cached != null && cached.items.isNotEmpty()) {
+                val filtered = applyFilters(cached.items, uiState.value.searchQuery, uiState.value.selectedYear)
+                updateCatalogState(requestGeneration) {
                     copy(
                         isInitializing = false,
-                        rawItems = cached,
+                        rawItems = cached.items,
+                        catalogItemsFetched = cached.fetchedCount,
                         displayItems = filtered,
                         isLoading = false,
-                        canLoadMore = cached.size >= 20,
+                        isLoadingMore = false,
+                        canLoadMore = cached.fetchedCount >= 20,
+                        catalogLoadError = null,
                     )
                 }
                 return
             }
         }
 
+        updateCatalogState(requestGeneration) {
+            copy(
+                isInitializing = false,
+                isLoading = true,
+                isLoadingMore = false,
+                rawItems = emptyList(),
+                catalogItemsFetched = 0,
+                displayItems = emptyList(),
+                canLoadMore = true,
+                catalogLoadError = null,
+            )
+        }
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
-            updateState { copy(isLoading = true, canLoadMore = true) }
             try {
                 val fetched = ExploreCatalogClient.fetchCatalogItems(
                     baseUrl = cat.addonBaseUrl,
@@ -420,28 +545,44 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     extraArgs = requestExtras,
                 )
 
+                if (catalogRequestGeneration.get() != requestGeneration) return@launch
+
                 val distinctFetched = fetched.distinctBy { it.id }
                 if (distinctFetched.isNotEmpty()) {
-                    catalogItemsCache[cacheKey] = distinctFetched
+                    catalogItemsCache[cacheKey] = CachedCatalogItems(distinctFetched, fetched.size)
                 }
 
                 val newRaw = if (skip == 0) distinctFetched else (uiState.value.rawItems + distinctFetched).distinctBy { it.id }
                 val filtered = applyFilters(newRaw, uiState.value.searchQuery, uiState.value.selectedYear)
 
-                updateState {
+                updateCatalogState(requestGeneration) {
                     copy(
                         isInitializing = false,
                         rawItems = newRaw,
+                        catalogItemsFetched = skip + fetched.size,
                         displayItems = filtered,
                         isLoading = false,
-                        canLoadMore = distinctFetched.size >= 20,
+                        canLoadMore = fetched.size >= 20,
+                        catalogLoadError = null,
                     )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed loading catalog ${cat.name}: ${e.message}")
-                updateState { copy(isLoading = false, isInitializing = false) }
+                if (catalogRequestGeneration.get() != requestGeneration) return@launch
+                updateCatalogState(requestGeneration) {
+                    copy(
+                        isLoading = false,
+                        isInitializing = false,
+                        isLoadingMore = false,
+                        rawItems = emptyList(),
+                        catalogItemsFetched = 0,
+                        displayItems = emptyList(),
+                        canLoadMore = false,
+                        catalogLoadError = "Could not load ${cat.name}. Check the add-on connection and retry.",
+                    )
+                }
             }
         }
     }
@@ -449,6 +590,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private fun loadMore() {
         val state = uiState.value
         if (state.isLoading || state.isLoadingMore || !state.canLoadMore || state.selectedCatalog == null) return
+        if (loadMoreJob?.isActive == true) return
         if (state.rawItems.isEmpty()) return
 
         val cat = state.selectedCatalog
@@ -457,11 +599,11 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         val requestExtras = state.selectedExtraArgs.filterKeys { key ->
             !key.equals("genre", ignoreCase = true) && !key.equals("search", ignoreCase = true) && !key.equals("skip", ignoreCase = true)
         }
-        val skip = state.rawItems.size
+        val skip = state.catalogItemsFetched
+        val requestGeneration = catalogRequestGeneration.get()
 
-        loadMoreJob?.cancel()
+        updateCatalogState(requestGeneration) { copy(isLoadingMore = true, catalogLoadError = null) }
         loadMoreJob = viewModelScope.launch(Dispatchers.IO) {
-            updateState { copy(isLoadingMore = true) }
             try {
                 val fetched = ExploreCatalogClient.fetchCatalogItems(
                     baseUrl = cat.addonBaseUrl,
@@ -475,18 +617,24 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     extraArgs = requestExtras,
                 )
 
+                if (catalogRequestGeneration.get() != requestGeneration) return@launch
+
                 if (fetched.isEmpty()) {
-                    updateState { copy(isLoadingMore = false, canLoadMore = false) }
+                    updateCatalogState(requestGeneration) {
+                        copy(isLoadingMore = false, canLoadMore = false, catalogLoadError = null)
+                    }
                 } else {
                     val distinctFetched = fetched.distinctBy { it.id }
                     val newRaw = (uiState.value.rawItems + distinctFetched).distinctBy { it.id }
                     val filtered = applyFilters(newRaw, uiState.value.searchQuery, uiState.value.selectedYear)
-                    updateState {
+                    updateCatalogState(requestGeneration) {
                         copy(
                             rawItems = newRaw,
+                            catalogItemsFetched = skip + fetched.size,
                             displayItems = filtered,
                             isLoadingMore = false,
-                            canLoadMore = distinctFetched.size >= 20,
+                            canLoadMore = fetched.size >= 20,
+                            catalogLoadError = null,
                         )
                     }
                 }
@@ -494,9 +642,48 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed loading more items for ${cat.name}: ${e.message}")
-                updateState { copy(isLoadingMore = false) }
+                if (catalogRequestGeneration.get() != requestGeneration) return@launch
+                updateCatalogState(requestGeneration) {
+                    copy(
+                        isLoadingMore = false,
+                        catalogLoadError = "Could not load more titles from ${cat.name}. Retry the request.",
+                    )
+                }
             }
         }
+    }
+
+    private fun retryCatalogLoad() {
+        val state = uiState.value
+        if (state.rawItems.isNotEmpty() && state.canLoadMore) {
+            loadMore()
+        } else {
+            loadCurrentCatalog()
+        }
+    }
+
+    private fun invalidateCatalogRequests(): Long {
+        val generation = catalogRequestGeneration.incrementAndGet()
+        loadJob?.cancel()
+        loadMoreJob?.cancel()
+        loadJob = null
+        loadMoreJob = null
+        return generation
+    }
+
+    private fun updateCatalogState(
+        generation: Long,
+        reducer: ExploreUiState.() -> ExploreUiState,
+    ) {
+        if (catalogRequestGeneration.get() != generation) return
+        updateState {
+            if (catalogRequestGeneration.get() == generation) reducer() else this
+        }
+    }
+
+    private fun cancelPendingRemoteSearch() {
+        remoteSearchJob?.cancel()
+        remoteSearchJob = null
     }
 
     internal fun isTitleRelevant(targetTitle: String, candidateTitle: String): Boolean {
@@ -523,6 +710,8 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun openProviderPicker(item: ExploreItem) {
+        val generation = providerSearchGeneration.incrementAndGet()
+        providerSearchJob?.cancel()
         updateState {
             copy(
                 selectedItemForMatch = item,
@@ -531,7 +720,6 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             )
         }
 
-        providerSearchJob?.cancel()
         providerSearchJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Asynchronously enrich metadata (clear logo, backdrop, etc.)
@@ -549,8 +737,12 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                                 releaseYear = meta.releaseInfo?.takeIf { it.isNotBlank() } ?: current.releaseYear,
                                 genres = if (meta.genres.isNullOrEmpty()) current.genres else meta.genres,
                             )
-                            updateState { copy(selectedItemForMatch = enriched) }
+                            updateProviderSearchState(generation, item) {
+                                copy(selectedItemForMatch = enriched)
+                            }
                         }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
                     } catch (_: Exception) { }
                 }
 
@@ -558,7 +750,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 val activeProviders: List<MainAPI> = com.lagradost.cloudstream3.desktop.repo.ActiveProviderRepository.allRealProviders.value
                     .ifEmpty { APIHolder.allProviders.filter { com.lagradost.cloudstream3.desktop.repo.ActiveProviderRepository.isRealContentProvider(it) } }
                 if (activeProviders.isEmpty()) {
-                    updateState { copy(isSearchingProviders = false) }
+                    updateProviderSearchState(generation, item) { copy(isSearchingProviders = false) }
                     return@launch
                 }
 
@@ -570,6 +762,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                     launch {
                         searchSemaphore.withPermit {
                             try {
+                                if (generation != providerSearchGeneration.get()) return@withPermit
                                 val res = SafePluginInvoker.invokeOrNull(
                                     tag = "Explore:Search:${provider.name}",
                                     timeoutMs = SafePluginInvoker.TIMEOUT_SEARCH_MS,
@@ -578,7 +771,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                                 }
 
                                 val searchItems = res?.items
-                                if (!searchItems.isNullOrEmpty()) {
+                                if (generation == providerSearchGeneration.get() && !searchItems.isNullOrEmpty()) {
                                     val validMatches = mutableListOf<ProviderMatch>()
                                     for (searchRes in searchItems) {
                                         // Strictly filter for title relevance to discard random search noise
@@ -598,9 +791,13 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                                     }
                                     if (validMatches.isNotEmpty()) {
                                         aggregatedMatches.addAll(validMatches)
-                                        updateState { copy(providerMatches = aggregatedMatches.toList()) }
+                                        updateProviderSearchState(generation, item) {
+                                            copy(providerMatches = aggregatedMatches.toList())
+                                        }
                                     }
                                 }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
                             } catch (_: Exception) {
                                 // Ignored per provider failure
                             }
@@ -609,7 +806,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 }
 
                 jobs.joinAll()
-                updateState {
+                updateProviderSearchState(generation, item) {
                     copy(
                         providerMatches = aggregatedMatches.toList(),
                         isSearchingProviders = false,
@@ -619,12 +816,33 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Provider resolution failed: ${e.message}")
-                updateState { copy(isSearchingProviders = false) }
+                updateProviderSearchState(generation, item) { copy(isSearchingProviders = false) }
+            }
+        }
+    }
+
+    private fun updateProviderSearchState(
+        generation: Long,
+        item: ExploreItem,
+        reducer: ExploreUiState.() -> ExploreUiState,
+    ) {
+        if (providerSearchGeneration.get() != generation) return
+        updateState {
+            val selected = selectedItemForMatch
+            if (providerSearchGeneration.get() == generation && selected != null &&
+                selected.id == item.id &&
+                selected.type == item.type &&
+                selected.sourceManifestUrl == item.sourceManifestUrl
+            ) {
+                reducer()
+            } else {
+                this
             }
         }
     }
 
     private fun closeProviderPicker() {
+        providerSearchGeneration.incrementAndGet()
         providerSearchJob?.cancel()
         updateState {
             copy(
@@ -636,6 +854,8 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun openStremioStreams(item: ExploreItem) {
+        val generation = stremioStreamGeneration.incrementAndGet()
+        providerSearchGeneration.incrementAndGet()
         providerSearchJob?.cancel()
         stremioStreamJob?.cancel()
         updateState {
@@ -675,7 +895,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                         .filter { !it.id.isNullOrBlank() }
                         .sortedWith(compareBy<StremioVideo> { it.season ?: Int.MAX_VALUE }.thenBy { it.episode ?: Int.MAX_VALUE })
                     if (videos.isNotEmpty()) {
-                        updateState {
+                        updateStremioState(generation, item) {
                             copy(
                                 stremioVideos = videos,
                                 isLoadingStremioStreams = false,
@@ -683,7 +903,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                             )
                         }
                     } else if (needsVideoIds) {
-                        updateState {
+                        updateStremioState(generation, item) {
                             copy(
                                 isLoadingStremioStreams = false,
                                 stremioStreamMessage = if (meta?.videos.isNullOrEmpty()) {
@@ -694,16 +914,16 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                             )
                         }
                     } else {
-                        queryStremioStreams(item, video = null)
+                        queryStremioStreams(item, video = null, generation = generation)
                     }
                 } else {
-                    queryStremioStreams(item, video = null)
+                    queryStremioStreams(item, video = null, generation = generation)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 AppLogger.w(TAG, "Stremio stream lookup failed for ${item.type}:${item.id}: ${e.message}")
-                updateState {
+                updateStremioState(generation, item) {
                     copy(
                         isLoadingStremioStreams = false,
                         stremioStreamMessage = "The enabled Stremio add-ons could not be queried. Check the add-on connection and try again.",
@@ -715,30 +935,37 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     private fun searchTorrents(rawQuery: String) {
         val query = rawQuery.trim()
+        val generation = torrentSearchGeneration.incrementAndGet()
+        torrentSearchJob?.cancel()
+        torrentSearchJob = null
         if (query.isEmpty()) {
             updateState {
                 copy(
                     torrentSearchQuery = rawQuery,
                     torrentSearchResults = emptyList(),
+                    isSearchingTorrents = false,
                     torrentSearchMessage = "Enter a title to search.",
                 )
             }
             return
         }
 
-        torrentSearchJob?.cancel()
         torrentSearchJob = viewModelScope.launch(Dispatchers.IO) {
             updateState {
-                copy(
-                    torrentSearchQuery = query,
-                    torrentSearchResults = emptyList(),
-                    isSearchingTorrents = true,
-                    torrentSearchMessage = null,
-                )
+                if (generation == torrentSearchGeneration.get()) {
+                    copy(
+                        torrentSearchQuery = query,
+                        torrentSearchResults = emptyList(),
+                        isSearchingTorrents = true,
+                        torrentSearchMessage = null,
+                    )
+                } else {
+                    this
+                }
             }
             try {
                 val results = TorrentSearchClient.search(query)
-                updateState {
+                updateTorrentSearchState(generation, query) {
                     copy(
                         torrentSearchResults = results,
                         isSearchingTorrents = false,
@@ -749,7 +976,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
                 throw e
             } catch (e: Exception) {
                 AppLogger.w(TAG, "Torrent search failed for '$query': ${e.message}")
-                updateState {
+                updateTorrentSearchState(generation, query) {
                     copy(
                         torrentSearchResults = emptyList(),
                         isSearchingTorrents = false,
@@ -763,6 +990,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private fun selectStremioVideo(video: StremioVideo) {
         val item = uiState.value.stremioItem ?: return
         if (video.id.isNullOrBlank()) return
+        val generation = stremioStreamGeneration.incrementAndGet()
         stremioStreamJob?.cancel()
         updateState {
             copy(
@@ -773,14 +1001,26 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             )
         }
         stremioStreamJob = viewModelScope.launch(Dispatchers.IO) {
-            queryStremioStreams(item, video)
+            try {
+                queryStremioStreams(item, video, generation)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                AppLogger.w(TAG, "Stremio stream lookup failed for ${item.type}:${item.id}: ${failure.message}")
+                updateStremioState(generation, item) {
+                    copy(
+                        isLoadingStremioStreams = false,
+                        stremioStreamMessage = "The enabled Stremio add-ons could not be queried. Check the add-on connection and try again.",
+                    )
+                }
+            }
         }
     }
 
-    private suspend fun queryStremioStreams(item: ExploreItem, video: StremioVideo?) {
+    private suspend fun queryStremioStreams(item: ExploreItem, video: StremioVideo?, generation: Long) {
         val requestId = video?.id ?: item.id
         val streams = StremioAddonManager.searchStreamsById(item.type, requestId)
-        updateState {
+        updateStremioState(generation, item) {
             copy(
                 stremioStreams = streams,
                 isLoadingStremioStreams = false,
@@ -793,7 +1033,39 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         }
     }
 
+    private fun updateStremioState(
+        generation: Long,
+        item: ExploreItem,
+        reducer: ExploreUiState.() -> ExploreUiState,
+    ) {
+        if (stremioStreamGeneration.get() != generation) return
+        updateState {
+            val current = stremioItem
+            if (stremioStreamGeneration.get() == generation && current != null &&
+                current.id == item.id &&
+                current.type == item.type &&
+                current.sourceManifestUrl == item.sourceManifestUrl
+            ) {
+                reducer()
+            } else {
+                this
+            }
+        }
+    }
+
+    private fun updateTorrentSearchState(
+        generation: Long,
+        query: String,
+        reducer: ExploreUiState.() -> ExploreUiState,
+    ) {
+        if (torrentSearchGeneration.get() != generation) return
+        updateState {
+            if (torrentSearchGeneration.get() == generation && torrentSearchQuery == query) reducer() else this
+        }
+    }
+
     private fun backToStremioVideos() {
+        stremioStreamGeneration.incrementAndGet()
         stremioStreamJob?.cancel()
         updateState {
             copy(
@@ -806,6 +1078,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun closeStremioStreams() {
+        stremioStreamGeneration.incrementAndGet()
         stremioStreamJob?.cancel()
         updateState {
             copy(

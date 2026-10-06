@@ -77,7 +77,7 @@ class DesktopTorrServerApi(
                     AppLogger.e("TorrServer addTorrent failed: HTTP ${res.code}")
                     return@withContext null
                 }
-                val body = res.body?.string() ?: return@withContext null
+                val body = res.body.string()
                 val root = mapper.readTree(body)
                 val hash = root.get("hash")?.asText()?.takeIf { it.isNotBlank() }
                 AppLogger.d("TorrServer added torrent: $hash")
@@ -103,7 +103,7 @@ class DesktopTorrServerApi(
 
             httpClient.newCall(req).execute().use { res ->
                 if (!res.isSuccessful) return@withContext null
-                val body = res.body?.string() ?: return@withContext null
+                val body = res.body.string()
                 mapper.readValue<TorrServerStats>(body)
             }
         } catch (e: Exception) {

@@ -3,12 +3,14 @@ package com.lagradost.cloudstream3.desktop.player.skip
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import com.lagradost.common.storage.DesktopDataStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 
 object IntroDbProvider : ISkipProvider {
     override val id: String = "introdb"
@@ -16,8 +18,9 @@ object IntroDbProvider : ISkipProvider {
 
     private const val INTRODB_BASE_URL = "https://api.introdb.app"
     private const val DEFAULT_TMDB_API_KEY = "3828864585df9d4f006c09403eb9a888"
+    private const val MAX_RESPONSE_BYTES = 1024 * 1024
 
-    private val imdbIdCache = ConcurrentHashMap<String, String>()
+    private val imdbIdCache = BoundedLruCache<String, String>(512)
 
     private data class IntroDbTimeRange(
         @JsonProperty("start") val start: Any? = null,
@@ -98,8 +101,8 @@ object IntroDbProvider : ISkipProvider {
                     timeout = 6000L,
                 )
 
-                val responseText = response.text
-                AppLogger.i("IntroDbProvider", "IntroDB HTTP ${response.code} response for '$imdbId': $responseText")
+                val responseText = response.body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
+                AppLogger.i("IntroDbProvider", "IntroDB HTTP ${response.code} response for '$imdbId' (${responseText.length} characters)")
 
                 if (response.code != 200 || responseText.isBlank()) {
                     return@withContext emptyList()
@@ -235,6 +238,8 @@ object IntroDbProvider : ISkipProvider {
 
                 AppLogger.i("IntroDbProvider", "IntroDB successfully parsed ${intervals.size} skip intervals for '${query.title}' (IMDb: $imdbId)")
                 intervals
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.i("IntroDbProvider", "IntroDB lookup failed for '${query.title}': ${e.message}")
                 emptyList()
@@ -279,6 +284,8 @@ object IntroDbProvider : ISkipProvider {
                 AppLogger.i("IntroDbProvider", "Resolved IMDb ID $imdbId for show '$clean' via custom Stremio addon")
                 return imdbId
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.d("IntroDbProvider", "Custom Stremio addon IMDb lookup: ${e.message}")
         }
@@ -292,13 +299,14 @@ object IntroDbProvider : ISkipProvider {
                 url = searchUrl,
                 headers = mapOf("Accept" to "application/json", "User-Agent" to "CloudStream-Desktop/1.0"),
                 timeout = 4000L,
-            ).text
+            ).body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
 
             val searchResult = tryParseJson<TmdbSearchResponse>(searchResp)
             val tmdbId = searchResult?.results?.firstOrNull()?.id
             if (tmdbId != null && tmdbId > 0) {
                 val extUrl = "https://api.themoviedb.org/3/tv/$tmdbId/external_ids?api_key=$key"
-                val extResp = app.get(url = extUrl, timeout = 4000L).text
+                val extResp = app.get(url = extUrl, timeout = 4000L)
+                    .body.byteStream().readBoundedBytes(MAX_RESPONSE_BYTES).toString(Charsets.UTF_8)
                 val extResult = tryParseJson<TmdbExternalIds>(extResp)
                 val imdbId = extResult?.imdbId?.takeIf { it.startsWith("tt") }
                 if (!imdbId.isNullOrBlank()) {
@@ -308,6 +316,8 @@ object IntroDbProvider : ISkipProvider {
                 }
             }
             null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.i("IntroDbProvider", "Failed to resolve IMDb ID for '$title': ${e.message}")
             null

@@ -25,16 +25,81 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
+
+private const val MAX_PERSISTED_HERO_CACHE_ENTRIES = 512
+private const val MAX_PERSISTED_HERO_CACHE_KEY_LENGTH = 2048
+private const val HERO_CACHE_KEY_PREFIX = "herometa_"
 
 class HeroRepositoryImpl : HeroRepository {
     private val prefetchingUrls = ConcurrentHashMap.newKeySet<String>()
     private val backgroundSemaphore = Semaphore(3)
+    private val persistedCacheLock = Any()
+    private val persistedCacheEntries = LinkedHashMap<String, Long>()
+    private var persistedCacheInitialized = false
+
+    private fun ensurePersistedCacheBounded() {
+        synchronized(persistedCacheLock) {
+            if (persistedCacheInitialized) return
+
+            val now = System.currentTimeMillis()
+            val allKeys = DesktopDataStore.getAllKeysWithPrefix(HERO_CACHE_KEY_PREFIX)
+            val validEntries = allKeys.mapNotNull { key ->
+                val meta = DesktopDataStore.getKey<HeroMeta>(key)
+                val timestamp = meta?.cachedAtMs
+                if (timestamp == null || timestamp <= 0L || now - timestamp > HERO_CACHE_TTL_MS) {
+                    null
+                } else {
+                    key to timestamp
+                }
+            }
+            val retainedEntries = validEntries.sortedByDescending { it.second }.take(MAX_PERSISTED_HERO_CACHE_ENTRIES)
+            val retainedKeys = retainedEntries.mapTo(HashSet()) { it.first }
+            val removedKeys = allKeys.filterNot(retainedKeys::contains).toSet()
+            if (removedKeys.isNotEmpty()) DesktopDataStore.setKeys(emptyMap(), removedKeys)
+
+            persistedCacheEntries.clear()
+            retainedEntries.forEach { (key, timestamp) -> persistedCacheEntries[key] = timestamp }
+            persistedCacheInitialized = true
+        }
+    }
+
+    private fun storePersistedHeroMeta(cacheKey: String, meta: HeroMeta) {
+        val storageKey = "$HERO_CACHE_KEY_PREFIX$cacheKey"
+        if (storageKey.length > MAX_PERSISTED_HERO_CACHE_KEY_LENGTH) return
+
+        ensurePersistedCacheBounded()
+        synchronized(persistedCacheLock) {
+            val updatedEntries = LinkedHashMap(persistedCacheEntries)
+            updatedEntries[storageKey] = meta.cachedAtMs
+            val removedKeys = buildSet {
+                while (updatedEntries.size > MAX_PERSISTED_HERO_CACHE_ENTRIES) {
+                    val oldestKey = updatedEntries.minByOrNull { it.value }?.key ?: break
+                    updatedEntries.remove(oldestKey)
+                    add(oldestKey)
+                }
+            }
+
+            DesktopDataStore.setKeys(mapOf(storageKey to meta), removedKeys)
+            persistedCacheEntries.clear()
+            persistedCacheEntries.putAll(updatedEntries)
+        }
+    }
+
+    private fun removePersistedHeroMeta(cacheKey: String) {
+        val storageKey = "$HERO_CACHE_KEY_PREFIX$cacheKey"
+        synchronized(persistedCacheLock) {
+            DesktopDataStore.removeKey(storageKey)
+            persistedCacheEntries.remove(storageKey)
+        }
+    }
 
     override fun cleanHeroTitle(title: String): String = TitleUtils.cleanProviderTitle(title).first
 
     override suspend fun prefetchTopHistory(topHistory: List<WatchHistory>, providers: List<MainAPI>) {
         withContext(Dispatchers.IO) {
+            ensurePersistedCacheBounded()
             for (history in topHistory) {
                 val provider = providers.find { it.name == history.apiName }
                 val cacheKey = "${history.apiName}_${history.showUrl}"
@@ -45,6 +110,8 @@ class HeroRepositoryImpl : HeroRepository {
                         if (raw != null) {
                             HybridEnrichmentService.enrich(raw, history.showUrl, fetchCast = false, onScreenshotsLoaded = {})
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         AppLogger.e("HeroRepository", "Failed to prefetch history item", e)
                     } finally {
@@ -59,15 +126,16 @@ class HeroRepositoryImpl : HeroRepository {
         provider: MainAPI?,
         item: SearchResponse,
     ): Flow<HeroUpdate> = callbackFlow {
+        ensurePersistedCacheBounded()
         val cacheKey = "${provider?.name}_${item.url}"
         var existing = HeroCache.get(cacheKey)
         if (existing == null) {
-            val persisted = DesktopDataStore.getKey<HeroMeta>("herometa_$cacheKey")
+            val persisted = DesktopDataStore.getKey<HeroMeta>("$HERO_CACHE_KEY_PREFIX$cacheKey")
             if (persisted != null && (System.currentTimeMillis() - persisted.cachedAtMs) < HERO_CACHE_TTL_MS) {
                 existing = persisted
                 HeroCache.put(cacheKey, existing)
             } else if (persisted != null) {
-                DesktopDataStore.removeKey("herometa_$cacheKey")
+                removePersistedHeroMeta(cacheKey)
             }
         }
 
@@ -128,7 +196,7 @@ class HeroRepositoryImpl : HeroRepository {
                     val meta = HeroMeta(title, backdropUrl, logoUrl, tags, plot, score, dummy.year, dummy.type, dummy.contentRating, dummy.duration, cachedAtMs = System.currentTimeMillis())
                     AppLogger.i("Enrichment", "[HERO] RESULT | title='$title' | backdrop=${backdropUrl != null} | logo=${logoUrl != null} | tags=$tags | score=$score")
                     HeroCache.put(cacheKey, meta)
-                    DesktopDataStore.setKey("herometa_$cacheKey", meta)
+                    storePersistedHeroMeta(cacheKey, meta)
                     trySend(HeroUpdate.Meta(item.url, meta))
 
                     val colorTarget = backdropUrl ?: provider.fixUrlNull(item.posterUrl)

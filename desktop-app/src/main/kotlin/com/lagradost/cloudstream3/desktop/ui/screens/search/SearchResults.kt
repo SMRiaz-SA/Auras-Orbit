@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.desktop.ui.components.CategoryRowWithHeader
 import com.lagradost.cloudstream3.desktop.ui.components.PosterCard
+import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchProviderPagination
 import com.lagradost.cloudstream3.desktop.ui.theme.AppearanceConfig
 
 @Composable
@@ -27,9 +29,11 @@ fun SearchResults(
     isLoadingSearch: Boolean,
     isLoadingMore: Boolean = false,
     canPaginate: Boolean = true,
+    providerPagination: Map<String, SearchProviderPagination> = emptyMap(),
+    failedProviderCount: Int = 0,
     isGlobalSearchEnabled: Boolean = false,
     heroMetaMap: Map<String, com.lagradost.cloudstream3.desktop.repo.HeroMeta> = emptyMap(),
-    onLoadMore: () -> Unit = {},
+    onLoadMore: (String?) -> Unit = {},
     onViewAll: (MainAPI, String, List<SearchResponse>) -> Unit,
     onItemClick: (MainAPI, SearchResponse, String?, Boolean) -> Unit,
 ) {
@@ -41,7 +45,7 @@ fun SearchResults(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading...", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Text("Searching…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
                 }
             }
         } else if (searchResultsGrouped != null) {
@@ -86,7 +90,7 @@ fun SearchResults(
 
                     LaunchedEffect(shouldLoadMore) {
                         if (shouldLoadMore && !isLoadingSearch && !isLoadingMore && canPaginate) {
-                            onLoadMore()
+                            onLoadMore(null)
                         }
                     }
 
@@ -103,6 +107,16 @@ fun SearchResults(
                         verticalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        if (!isGlobalSearchEnabled && failedProviderCount > 0) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text(
+                                    "Couldn't load more results from this provider. Showing available items.",
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
                         items(items.size, key = { index -> items[index].url }) { index ->
                             val item = items[index]
                             val heroMeta = heroMetaMap[item.url]
@@ -147,6 +161,16 @@ fun SearchResults(
                             end = if (isCompact) 6.dp else 20.dp,
                         ),
                     ) {
+                        if (isGlobalSearchEnabled && failedProviderCount > 0) {
+                            item(key = "search-provider-failures") {
+                                Text(
+                                    "$failedProviderCount provider(s) couldn't be searched; results may be incomplete.",
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
                         items(filteredGrouped.size, key = { index -> "${filteredGrouped[index].first.name}::${filteredGrouped[index].first.sourcePlugin ?: ""}" }) { index ->
                             val (provider, items) = filteredGrouped[index]
                             val repoTag = if (provider.name in duplicateRowNames) {
@@ -162,11 +186,32 @@ fun SearchResults(
                             }
 
                             val rowTitle = if (!repoTag.isNullOrBlank()) "${provider.name} ($repoTag)" else provider.name
+                            val providerKey = "${provider.name}::${provider.sourcePlugin ?: ""}"
+                            val pageState = providerPagination[providerKey]
 
                             CategoryRowWithHeader(
                                 title = rowTitle,
                                 itemCount = items.size,
-                                onViewAll = { onViewAll(provider, provider.name, items) },
+                                onViewAll = { onViewAll(provider, rowTitle, items) },
+                                trailingHeaderExtra = if (isGlobalSearchEnabled && pageState?.canPaginate == true) {
+                                    {
+                                        TextButton(
+                                            onClick = { onLoadMore(providerKey) },
+                                            enabled = !pageState.isLoadingMore,
+                                        ) {
+                                            if (pageState.isLoadingMore) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(16.dp),
+                                                    strokeWidth = 2.dp,
+                                                )
+                                            } else {
+                                                Text("More results")
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                                 rowContentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                                 itemSpacing = if (isCompact) 8.dp else 12.dp,
                             ) {

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -83,6 +84,7 @@ private fun extractYouTubeId(url: String): String? {
 fun TrailerPlayerDialog(
     trailer: TrailerData?,
     onDismissRequest: () -> Unit,
+    onOpenYouTube: (String) -> Unit = {},
 ) {
     val show = trailer != null
 
@@ -217,6 +219,10 @@ fun TrailerPlayerDialog(
                     factory = { canvas },
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+
+            TextButton(onClick = { onOpenYouTube(trailer.url) }) {
+                Text("Open on YouTube")
             }
 
             // Floating Helper Hint Below

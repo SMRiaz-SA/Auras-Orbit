@@ -396,9 +396,13 @@ object DesktopDownloadManager {
                     updateTaskStatus(taskId, DownloadStatus.FAILED, e.message)
                 }
             } finally {
-                activeJobs.remove(taskId)
-                recalculateTotalSpeed()
-                dispatchNextTasks()
+                synchronized(this@DesktopDownloadManager) {
+                    cancelledTasks.remove(taskId)
+                    lastDbProgressUpdate.remove(taskId)
+                    activeJobs.remove(taskId)
+                    recalculateTotalSpeed()
+                    dispatchNextTasks()
+                }
             }
         }
 
@@ -412,8 +416,13 @@ object DesktopDownloadManager {
 
     @Synchronized
     fun pause(taskId: String) {
-        cancelledTasks.add(taskId)
-        activeJobs[taskId]?.cancel()
+        val activeJob = activeJobs[taskId]
+        if (activeJob == null) {
+            cancelledTasks.remove(taskId)
+        } else {
+            cancelledTasks.add(taskId)
+            activeJob.cancel()
+        }
         val task = _tasks.value.find { it.id == taskId }
         val downloaded = task?.downloadedBytes ?: 0L
         val total = task?.totalBytes ?: 0L
@@ -447,9 +456,13 @@ object DesktopDownloadManager {
 
     @Synchronized
     private fun cancelAndCleanup(taskId: String): Job {
-        cancelledTasks.add(taskId)
         val activeJob = activeJobs[taskId]
-        activeJob?.cancel()
+        if (activeJob == null) {
+            cancelledTasks.remove(taskId)
+        } else {
+            cancelledTasks.add(taskId)
+            activeJob.cancel()
+        }
         updateTaskStatus(taskId, DownloadStatus.CANCELLED)
         val task = _tasks.value.find { it.id == taskId }
         val cleanupJob = scope.launch(Dispatchers.IO) {
@@ -500,6 +513,8 @@ object DesktopDownloadManager {
             getTaskStagingDir(taskId).deleteRecursively()
         } catch (_: Exception) {}
 
+        cancelledTasks.remove(taskId)
+        lastDbProgressUpdate.remove(taskId)
         try {
             DatabaseFactory.database.cloudstreamDBQueries.deleteDownloadTask(taskId)
             _tasks.update { current -> current.filterNot { it.id == taskId } }
@@ -533,8 +548,13 @@ object DesktopDownloadManager {
     fun pauseAll() {
         val targets = _tasks.value.filter { it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.QUEUED }
         for (t in targets) {
-            cancelledTasks.add(t.id)
-            activeJobs[t.id]?.cancel()
+            val activeJob = activeJobs[t.id]
+            if (activeJob == null) {
+                cancelledTasks.remove(t.id)
+            } else {
+                cancelledTasks.add(t.id)
+                activeJob.cancel()
+            }
             updateTaskStatus(t.id, DownloadStatus.PAUSED)
         }
         scope.launch(Dispatchers.IO) {

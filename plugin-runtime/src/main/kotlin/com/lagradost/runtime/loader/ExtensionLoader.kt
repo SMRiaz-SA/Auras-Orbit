@@ -179,7 +179,7 @@ object ExtensionLoader {
                 }
                 val isCacheValid = secureJar == jarFile || (
                     secureJar.exists() && cacheMatches(secureJar) &&
-                        (pluginClassName == null || checkJarHasClass(secureJar, pluginClassName!!))
+                        (pluginClassName == null || checkJarHasClass(secureJar, pluginClassName))
                     )
 
                 if (!isCacheValid) {
@@ -194,7 +194,7 @@ object ExtensionLoader {
             } else if (hasDexFiles) {
                 val convertedJar = File(jarFile.parentFile, jarFile.nameWithoutExtension + "-jvm.jar")
                 val isCacheValid = convertedJar.exists() && cacheMatches(convertedJar) &&
-                    (pluginClassName == null || checkJarHasClass(convertedJar, pluginClassName!!))
+                    (pluginClassName == null || checkJarHasClass(convertedJar, pluginClassName))
 
                 if (!isCacheValid) {
                     AppLogger.i("[PluginLoader] Transpiling Dalvik DEX -> JVM JAR for ${jarFile.name}...")
@@ -219,15 +219,15 @@ object ExtensionLoader {
             throw IllegalArgumentException("Could not determine pluginClassName from manifest.json and no fallback provided.")
         }
 
-        val finalInternalName = internalNameFromManifest ?: nameFromManifest ?: pluginClassName?.split(".")?.lastOrNull() ?: jarFile.nameWithoutExtension.removeSuffix("-jvm")
+        val finalInternalName = internalNameFromManifest ?: nameFromManifest ?: pluginClassName.split(".").lastOrNull() ?: jarFile.nameWithoutExtension.removeSuffix("-jvm")
 
         AppLogger.i("[PluginLoader] Initializing class $pluginClassName from ${jarToLoad.name}")
 
         AppLogger.i("Validating plugin archive ${jarToLoad.name}...")
         com.lagradost.runtime.security.PluginSecurityVerifier.verifyJar(jarToLoad, finalInternalName)
 
-        val nativeIntercept = nativePluginInterceptor?.invoke(pluginClassName!!)
-        val isolatedIntercept = if (nativeIntercept == null) isolatedPluginFactory?.invoke(jarFile, pluginClassName!!) else null
+        val nativeIntercept = nativePluginInterceptor?.invoke(pluginClassName)
+        val isolatedIntercept = if (nativeIntercept == null) isolatedPluginFactory?.invoke(jarFile, pluginClassName) else null
         var providersBeforePluginLoad: List<com.lagradost.cloudstream3.MainAPI> = emptyList()
         var extractorsBeforePluginLoad: List<com.lagradost.cloudstream3.utils.ExtractorApi> = emptyList()
         val pluginInstance: BasePlugin = if (nativeIntercept != null) {
@@ -674,7 +674,7 @@ object ExtensionLoader {
                                 }
                             }
                             if (apkFileLazy != null) {
-                                xmlString = apkFileLazy!!.transBinaryXml(path) ?: ""
+                                xmlString = apkFileLazy.transBinaryXml(path) ?: ""
                             }
                         }
 

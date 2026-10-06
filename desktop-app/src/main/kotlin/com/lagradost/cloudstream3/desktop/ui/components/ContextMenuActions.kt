@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -265,6 +266,15 @@ internal fun BookmarkContextMenuActions(state: GlobalContextMenuState) {
             }
         }
     }
+
+    ActionMenuItem(
+        text = "Add to Custom Lists...",
+        icon = Icons.AutoMirrored.Filled.List,
+        onClick = {
+            state.dismiss()
+            state.onManageCustomLists?.invoke()
+        },
+    )
 
     if (!isNetworkStream) {
         ActionMenuItem(

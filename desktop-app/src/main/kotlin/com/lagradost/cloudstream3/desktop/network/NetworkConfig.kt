@@ -5,6 +5,7 @@ package com.lagradost.cloudstream3.desktop.network
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.insecureApp
 import com.lagradost.cloudstream3.network.CloudflareKiller
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.nicehttp.ignoreAllSSLErrors
@@ -28,8 +29,8 @@ enum class DohProvider(val title: String, val url: String? = null) {
  * when updateGlobalNetworkClients() is called multiple times.
  */
 class RateLimitInterceptor(private val minDelayMs: Long = 500L) : okhttp3.Interceptor {
-    private val lastRequestTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    private val hostLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    private val lastRequestTimes = BoundedLruCache<String, Long>(512)
+    private val hostLocks = Array(64) { Any() }
 
     private val imageExtensions = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg")
 
@@ -55,11 +56,11 @@ class RateLimitInterceptor(private val minDelayMs: Long = 500L) : okhttp3.Interc
             return chain.proceed(request)
         }
 
-        val lock = hostLocks.getOrPut(host) { Any() }
+        val lock = hostLocks[(hostLower.hashCode() and Int.MAX_VALUE) % hostLocks.size]
 
         synchronized(lock) {
             val now = System.currentTimeMillis()
-            val last = lastRequestTimes[host] ?: 0L
+            val last = lastRequestTimes[hostLower] ?: 0L
             val elapsed = now - last
             if (elapsed < minDelayMs) {
                 try {
@@ -69,7 +70,7 @@ class RateLimitInterceptor(private val minDelayMs: Long = 500L) : okhttp3.Interc
                 }
             }
             // Record time AFTER sleep to calculate from when this request is sent
-            lastRequestTimes[host] = System.currentTimeMillis()
+            lastRequestTimes[hostLower] = System.currentTimeMillis()
         }
 
         return chain.proceed(request)

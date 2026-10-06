@@ -71,7 +71,7 @@ fun ExploreDashboardScreen(
                     )
                     ExploreDestinationCard(
                         title = "Torrent Search",
-                        description = "Find a magnet and play it with Orbit.",
+                        description = "Search Magnetz for a title and play results with Orbit.",
                         icon = Icons.Default.Link,
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigate(Config.TorrentSearch) },
@@ -87,7 +87,7 @@ fun ExploreDashboardScreen(
                     )
                     ExploreDestinationCard(
                         title = "Providers",
-                        description = "Browse the providers available in Orbit.",
+                        description = "Browse StreamPlay provider catalogs available in Orbit.",
                         icon = Icons.Default.Extension,
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigate(Config.ProviderBrowse) },

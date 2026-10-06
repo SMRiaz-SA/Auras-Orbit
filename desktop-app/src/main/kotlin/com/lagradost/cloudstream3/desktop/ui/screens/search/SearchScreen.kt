@@ -26,6 +26,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -68,6 +73,11 @@ fun ComposeSearchScreen(
     val searchHistory = uiState.searchHistory
     var showProviderDropdown by remember { mutableStateOf(false) }
     var isSearchFocused by remember { mutableStateOf(false) }
+    var selectedSuggestionIndex by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(uiState.searchQuery, uiState.searchSuggestions) {
+        selectedSuggestionIndex = -1
+    }
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -135,7 +145,39 @@ fun ComposeSearchScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .focusRequester(focusRequester)
-                                        .onFocusChanged { isSearchFocused = it.isFocused },
+                                        .onFocusChanged { isSearchFocused = it.isFocused }
+                                        .onPreviewKeyEvent { event ->
+                                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && (uiState.showSuggestions || uiState.isLoadingSuggestions)) {
+                                                viewModel.onEvent(SearchUiEvent.OnDismissSuggestions)
+                                                selectedSuggestionIndex = -1
+                                                true
+                                            } else if (event.type != KeyEventType.KeyDown || !uiState.showSuggestions || uiState.searchSuggestions.isEmpty()) {
+                                                false
+                                            } else {
+                                                when (event.key) {
+                                                    Key.DirectionDown -> {
+                                                        selectedSuggestionIndex = (selectedSuggestionIndex + 1)
+                                                            .coerceAtMost(uiState.searchSuggestions.lastIndex)
+                                                        true
+                                                    }
+                                                    Key.DirectionUp -> {
+                                                        selectedSuggestionIndex = (selectedSuggestionIndex - 1).coerceAtLeast(0)
+                                                        true
+                                                    }
+                                                    Key.Enter -> {
+                                                        val selected = uiState.searchSuggestions.getOrNull(selectedSuggestionIndex)
+                                                        if (selected == null) {
+                                                            false
+                                                        } else {
+                                                            viewModel.onEvent(SearchUiEvent.OnSelectSuggestion(selected.title, submitSearch = true))
+                                                            selectedSuggestionIndex = -1
+                                                            true
+                                                        }
+                                                    }
+                                                    else -> false
+                                                }
+                                            }
+                                        },
                                 )
                             }
 
@@ -221,9 +263,11 @@ fun ComposeSearchScreen(
                             showProviderDropdown = false
                         },
                         onSelectProvider = { name, source ->
-                            viewModel.onEvent(SearchUiEvent.OnToggleGlobalSearch(false))
                             viewModel.onEvent(SearchUiEvent.OnProviderSelected(name, source))
                             showProviderDropdown = false
+                        },
+                        onSetProviderTypeFilter = { types ->
+                            viewModel.onEvent(SearchUiEvent.OnSetProviderTypeFilter(types))
                         },
                     )
 
@@ -258,13 +302,17 @@ fun ComposeSearchScreen(
 
                 // ── Floating Search Suggestions Dropdown Overlay ──────────────────────
                 SearchSuggestionsOverlay(
-                    visible = uiState.showSuggestions && uiState.searchSuggestions.isNotEmpty() && uiState.searchQuery.isNotEmpty(),
+                    visible = (uiState.showSuggestions || uiState.isLoadingSuggestions) && uiState.searchQuery.isNotEmpty(),
                     suggestions = uiState.searchSuggestions,
+                    isLoading = uiState.isLoadingSuggestions,
+                    selectedIndex = selectedSuggestionIndex,
                     onSelectSuggestion = { title, submit ->
                         viewModel.onEvent(SearchUiEvent.OnSelectSuggestion(title, submitSearch = submit))
+                        selectedSuggestionIndex = -1
                     },
                     onFillSuggestion = { title ->
                         viewModel.onEvent(SearchUiEvent.OnSelectSuggestion(title, submitSearch = false))
+                        selectedSuggestionIndex = -1
                         try {
                             focusRequester.requestFocus()
                         } catch (_: Exception) {}
@@ -282,14 +330,17 @@ fun ComposeSearchScreen(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                 ) {
-                    if (uiState.showSuggestions) {
+                    if (uiState.showSuggestions || uiState.isLoadingSuggestions) {
                         viewModel.onEvent(SearchUiEvent.OnDismissSuggestions)
+                        selectedSuggestionIndex = -1
                     }
                 },
         ) {
             val hasResults = !searchResultsGrouped.isNullOrEmpty()
-            val showEmptyState = !hasResults && !isLoadingSearch
-            val showHistory = showEmptyState && uiState.searchQuery.isEmpty() && searchHistory.isNotEmpty()
+            val hasQuery = uiState.searchQuery.isNotBlank()
+            val showInitialState = !hasResults && !isLoadingSearch && !hasQuery
+            val showHistory = showInitialState && searchHistory.isNotEmpty()
+            val showNoResults = !hasResults && !isLoadingSearch && hasQuery && !uiState.awaitingSearchSubmission
 
             if (showHistory) {
                 SearchHistoryView(
@@ -305,7 +356,7 @@ fun ComposeSearchScreen(
                         viewModel.onEvent(SearchUiEvent.OnClearSearchHistory)
                     },
                 )
-            } else if (showEmptyState) {
+            } else if (showInitialState) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(top = 56.dp),
                     verticalArrangement = Arrangement.Top,
@@ -335,6 +386,66 @@ fun ComposeSearchScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                 }
+            } else if (uiState.awaitingSearchSubmission) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(top = 56.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Ready to search",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Press Enter to search for “${uiState.searchQuery}”.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    )
+                }
+            } else if (showNoResults) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(top = 56.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        if (uiState.failedProviderKeys.isNotEmpty()) {
+                            "Search couldn't be completed"
+                        } else {
+                            "No results for “${uiState.searchQuery}”"
+                        },
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        if (uiState.failedProviderKeys.isNotEmpty()) {
+                            "${uiState.failedProviderKeys.size} provider(s) couldn't be searched. Try again or choose another provider."
+                        } else {
+                            "Try another title, clear a category filter, or choose a different provider."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    )
+                }
             } else {
                 val resultsList = searchResultsGrouped?.values?.toList()
 
@@ -344,8 +455,10 @@ fun ComposeSearchScreen(
                     isLoadingSearch = isLoadingSearch,
                     isLoadingMore = uiState.isLoadingMore,
                     canPaginate = uiState.canPaginate,
+                    providerPagination = uiState.providerPagination,
+                    failedProviderCount = uiState.failedProviderKeys.size,
                     isGlobalSearchEnabled = isGlobalSearchEnabled,
-                    onLoadMore = { viewModel.onEvent(SearchUiEvent.OnLoadMore) },
+                    onLoadMore = { providerKey -> viewModel.onEvent(SearchUiEvent.OnLoadMore(providerKey)) },
                     onViewAll = { provider, title, items ->
                         CategoryGridCache.put(provider.name, title, items)
                         onNavigate(Config.CategoryGrid(provider.name, title))

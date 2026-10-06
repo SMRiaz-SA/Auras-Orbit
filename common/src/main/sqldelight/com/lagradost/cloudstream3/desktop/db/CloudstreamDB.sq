@@ -39,6 +39,71 @@ selectBookmarkById:
 SELECT * FROM Bookmarks WHERE id = ?;
 
 
+CREATE TABLE IF NOT EXISTS CustomLists (
+    profileId INTEGER NOT NULL,
+    id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    normalizedName TEXT NOT NULL,
+    sortOrder INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    showOnHome INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(profileId, id),
+    UNIQUE(profileId, normalizedName)
+);
+
+insertCustomList:
+INSERT INTO CustomLists(profileId, id, name, normalizedName, sortOrder, createdAt, showOnHome)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateCustomListName:
+UPDATE CustomLists SET name = ?, normalizedName = ? WHERE profileId = ? AND id = ?;
+
+updateCustomListSortOrder:
+UPDATE CustomLists SET sortOrder = ? WHERE profileId = ? AND id = ?;
+
+updateCustomListShowOnHome:
+UPDATE CustomLists SET showOnHome = ? WHERE profileId = ? AND id = ?;
+
+deleteCustomList:
+DELETE FROM CustomLists WHERE profileId = ? AND id = ?;
+
+selectCustomListsByProfile:
+SELECT * FROM CustomLists WHERE profileId = ? ORDER BY sortOrder ASC, createdAt ASC, id ASC;
+
+selectCustomListById:
+SELECT * FROM CustomLists WHERE profileId = ? AND id = ?;
+
+deleteCustomListsByProfile:
+DELETE FROM CustomLists WHERE profileId = ?;
+
+
+CREATE TABLE IF NOT EXISTS CustomListItems (
+    profileId INTEGER NOT NULL,
+    listId TEXT NOT NULL,
+    bookmarkId TEXT NOT NULL,
+    addedAt INTEGER NOT NULL,
+    PRIMARY KEY(profileId, listId, bookmarkId)
+);
+
+insertCustomListItem:
+INSERT OR IGNORE INTO CustomListItems(profileId, listId, bookmarkId, addedAt) VALUES (?, ?, ?, ?);
+
+deleteCustomListItem:
+DELETE FROM CustomListItems WHERE profileId = ? AND listId = ? AND bookmarkId = ?;
+
+deleteCustomListItemsForList:
+DELETE FROM CustomListItems WHERE profileId = ? AND listId = ?;
+
+deleteCustomListItemsForBookmark:
+DELETE FROM CustomListItems WHERE profileId = ? AND bookmarkId = ?;
+
+deleteCustomListItemsByProfile:
+DELETE FROM CustomListItems WHERE profileId = ?;
+
+selectCustomListItemsByProfile:
+SELECT * FROM CustomListItems WHERE profileId = ? ORDER BY addedAt DESC, listId ASC;
+
+
 CREATE TABLE IF NOT EXISTS WatchHistory (
     parentId TEXT NOT NULL,
     episodeId TEXT NOT NULL,
@@ -78,6 +143,89 @@ SELECT * FROM WatchHistory WHERE parentId = ? ORDER BY updateTime DESC;
 
 selectWatchHistoryByEpisode:
 SELECT * FROM WatchHistory WHERE parentId = ? AND episodeId = ? LIMIT 1;
+
+
+CREATE TABLE IF NOT EXISTS FollowedShows (
+    profileId INTEGER NOT NULL,
+    providerName TEXT NOT NULL,
+    showUrl TEXT NOT NULL,
+    showName TEXT NOT NULL,
+    posterUrl TEXT,
+    tmdbId INTEGER,
+    addedAt INTEGER NOT NULL,
+    lastRefreshAt INTEGER NOT NULL DEFAULT 0,
+    lastRefreshError TEXT,
+    PRIMARY KEY(profileId, providerName, showUrl)
+);
+
+upsertFollowedShow:
+INSERT OR REPLACE INTO FollowedShows(profileId, providerName, showUrl, showName, posterUrl, tmdbId, addedAt, lastRefreshAt, lastRefreshError)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAllFollowedShows:
+SELECT * FROM FollowedShows ORDER BY addedAt DESC;
+
+deleteFollowedShow:
+DELETE FROM FollowedShows WHERE profileId = ? AND providerName = ? AND showUrl = ?;
+
+deleteFollowedShowsByProfile:
+DELETE FROM FollowedShows WHERE profileId = ?;
+
+
+CREATE TABLE IF NOT EXISTS EpisodeReleaseCache (
+    tmdbId INTEGER NOT NULL,
+    seasonNumber INTEGER NOT NULL,
+    episodeNumber INTEGER NOT NULL,
+    airDate TEXT NOT NULL,
+    episodeName TEXT,
+    overview TEXT,
+    stillUrl TEXT,
+    fetchedAt INTEGER NOT NULL,
+    PRIMARY KEY(tmdbId, seasonNumber, episodeNumber)
+);
+
+upsertEpisodeRelease:
+INSERT OR REPLACE INTO EpisodeReleaseCache(tmdbId, seasonNumber, episodeNumber, airDate, episodeName, overview, stillUrl, fetchedAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAllEpisodeReleases:
+SELECT * FROM EpisodeReleaseCache ORDER BY airDate ASC;
+
+deleteStaleEpisodeReleases:
+DELETE FROM EpisodeReleaseCache WHERE fetchedAt < ?;
+
+deleteEpisodeReleasesBySeason:
+DELETE FROM EpisodeReleaseCache WHERE tmdbId = ? AND seasonNumber = ?;
+
+
+CREATE TABLE IF NOT EXISTS EpisodeWatchMarks (
+    profileId INTEGER NOT NULL,
+    providerName TEXT NOT NULL,
+    showUrl TEXT NOT NULL,
+    episodeKey TEXT NOT NULL,
+    episodeId TEXT NOT NULL,
+    showName TEXT NOT NULL,
+    seasonNumber INTEGER NOT NULL,
+    episodeNumber INTEGER NOT NULL,
+    watchedAt INTEGER NOT NULL,
+    PRIMARY KEY(profileId, providerName, showUrl, episodeKey)
+);
+
+upsertEpisodeWatchMark:
+INSERT OR REPLACE INTO EpisodeWatchMarks(profileId, providerName, showUrl, episodeKey, episodeId, showName, seasonNumber, episodeNumber, watchedAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAllEpisodeWatchMarks:
+SELECT * FROM EpisodeWatchMarks ORDER BY watchedAt DESC;
+
+deleteEpisodeWatchMark:
+DELETE FROM EpisodeWatchMarks WHERE profileId = ? AND providerName = ? AND showUrl = ? AND episodeKey = ?;
+
+deleteEpisodeWatchMarksByEpisode:
+DELETE FROM EpisodeWatchMarks WHERE profileId = ? AND providerName = ? AND showUrl = ? AND seasonNumber = ? AND episodeNumber = ?;
+
+deleteEpisodeWatchMarksByProfile:
+DELETE FROM EpisodeWatchMarks WHERE profileId = ?;
 
 selectLatestWatchHistoryForShow:
 SELECT * FROM WatchHistory WHERE showUrl = ? ORDER BY updateTime DESC LIMIT 1;

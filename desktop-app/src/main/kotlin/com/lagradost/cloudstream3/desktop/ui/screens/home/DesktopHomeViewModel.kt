@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.desktop.DesktopErrorReporter
 import com.lagradost.cloudstream3.desktop.core.preference.PreferenceKeys
 import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
 import com.lagradost.cloudstream3.desktop.domain.bookmarks.interactor.GetBookmarks
+import com.lagradost.cloudstream3.desktop.domain.customlists.repository.CustomListsRepository
 import com.lagradost.cloudstream3.desktop.domain.hero.repository.HeroRepository
 import com.lagradost.cloudstream3.desktop.domain.hero.repository.HeroRepository.HeroUpdate
 import com.lagradost.cloudstream3.desktop.domain.history.interactor.GetContinueWatching
@@ -15,20 +16,23 @@ import com.lagradost.cloudstream3.desktop.domain.history.interactor.RemoveWatchH
 import com.lagradost.cloudstream3.desktop.domain.providers.repository.ActiveProviderRepository
 import com.lagradost.cloudstream3.desktop.repo.DesktopRepositoryManager
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
+import com.lagradost.cloudstream3.desktop.ui.screens.details.TmdbEpisodeCalendarRepository
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeCategoryUiState
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiState
+import com.lagradost.cloudstream3.desktop.utils.KeyedMutex
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 /**
@@ -42,19 +46,27 @@ class DesktopHomeViewModel(
     private val getContinueWatching: GetContinueWatching = AppContainerHolder.container.getContinueWatching,
     private val removeWatchHistory: RemoveWatchHistory = AppContainerHolder.container.removeWatchHistory,
     private val getBookmarks: GetBookmarks = AppContainerHolder.container.getBookmarks,
+    private val customListsRepository: CustomListsRepository = AppContainerHolder.container.customListsRepository,
     private val activeProviderRepository: ActiveProviderRepository = AppContainerHolder.container.activeProviderRepository,
     private val heroRepository: HeroRepository = AppContainerHolder.container.heroRepository,
 ) : BaseMviViewModel<HomeUiState, HomeUiEvent, HomeUiEffect>(
     initialState = HomeUiState(),
 ) {
-    private val categoryCache = java.util.concurrent.ConcurrentHashMap<String, com.lagradost.cloudstream3.HomePageResponse>()
-    private val categoryMutex = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+    private val upcomingRefreshLock = Any()
+    private var upcomingRefreshJob: Job? = null
+
+    @Volatile
+    private var upcomingRefreshGeneration = 0L
+    private val disabledCatalogWriteLock = Any()
+    private val disabledCatalogWriteJobs = mutableMapOf<String, Job>()
+    private val categoryCache = BoundedLruCache<String, com.lagradost.cloudstream3.HomePageResponse>(64)
+    private val categoryMutex = KeyedMutex<String>()
     private data class CachedDiscoveryResult(
         val items: List<HomeDiscoveryItem>,
         val pageSources: List<HomeDiscoveryPageSource>,
     )
 
-    private val discoveryCache = java.util.concurrent.ConcurrentHashMap<String, CachedDiscoveryResult>()
+    private val discoveryCache = BoundedLruCache<String, CachedDiscoveryResult>(128)
     private val discoveryReloadEpoch = MutableStateFlow(0L)
     private var discoverySignature: String? = null
     private var lastDiscoveryReloadEpoch = -1L
@@ -77,6 +89,14 @@ class DesktopHomeViewModel(
         viewModelScope.launch {
             getBookmarks.subscribeAll().collect { bookmarks ->
                 updateState { copy(bookmarks = bookmarks) }
+            }
+        }
+
+        viewModelScope.launch {
+            customListsRepository.subscribeActive().collect { snapshot ->
+                updateState {
+                    copy(customLists = snapshot.lists, customListItems = snapshot.items)
+                }
             }
         }
 
@@ -132,6 +152,33 @@ class DesktopHomeViewModel(
             }
         }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfile
+                .map { it.id }
+                .distinctUntilChanged()
+                .collectLatest { profileId ->
+                    synchronized(upcomingRefreshLock) {
+                        upcomingRefreshGeneration++
+                        upcomingRefreshJob?.cancel()
+                        upcomingRefreshJob = null
+                    }
+                    updateState {
+                        if (com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId) {
+                            copy(upcomingIsRefreshing = false)
+                        } else {
+                            this
+                        }
+                    }
+                    updateUpcomingFromCache(profileId)
+                    refreshUpcoming(profileId, force = false)
+                }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            DesktopDataStore.episodeTrackingUpdates.collect {
+                updateUpcomingFromCache(com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId)
+            }
+        }
+
         reloadIcons()
     }
 
@@ -160,7 +207,14 @@ class DesktopHomeViewModel(
             is HomeUiEvent.OnClearHistory -> clearHistory()
             is HomeUiEvent.OnRemoveHistoryItem -> removeHistoryItem(event.parentId)
             is HomeUiEvent.OnPrefetchHeroItem -> prefetchHeroItem(event.provider, event.item)
-            is HomeUiEvent.OnProviderRefresh -> reloadProvider()
+            is HomeUiEvent.OnProviderRefresh -> {
+                reloadProvider()
+                refreshUpcoming(com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId, force = false)
+            }
+            is HomeUiEvent.OnRefreshUpcoming -> refreshUpcoming(
+                com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId,
+                force = true,
+            )
             is HomeUiEvent.OnShowHomeManagement -> {
                 updateState { copy(showHomeManagement = event.show) }
             }
@@ -174,9 +228,7 @@ class DesktopHomeViewModel(
                 updateState {
                     copy(disabledCatalogs = disabledCatalogs + (event.providerName to newDisabled))
                 }
-                viewModelScope.launch(Dispatchers.IO) {
-                    DesktopDataStore.setKey(PreferenceKeys.disabledCatalogsKey(event.providerName), newDisabled)
-                }
+                persistDisabledCatalogs(event.providerName, newDisabled)
             }
             is HomeUiEvent.OnLoadCategory -> {
                 loadCategory(event.provider, event.pageData)
@@ -372,7 +424,7 @@ class DesktopHomeViewModel(
     }
 
     private fun loadCategory(provider: MainAPI, pageData: MainPageData) {
-        val cacheKey = "${provider.name}_${pageData.name}"
+        val cacheKey = "${provider.name}_${provider.mainUrl}_${pageData.name}_${pageData.data}"
         val cachedResponse = categoryCache[cacheKey]
         val currentState = uiState.value.categories[cacheKey]
 
@@ -396,8 +448,7 @@ class DesktopHomeViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val mutex = categoryMutex.getOrPut(cacheKey) { kotlinx.coroutines.sync.Mutex() }
-            mutex.withLock {
+            categoryMutex.withLock(cacheKey) {
                 val existing = categoryCache[cacheKey]
                 if (existing != null) {
                     updateState {
@@ -484,9 +535,18 @@ class DesktopHomeViewModel(
         }
     }
 
+    private fun persistDisabledCatalogs(providerName: String, values: Set<String>) {
+        synchronized(disabledCatalogWriteLock) {
+            val previousWrite = disabledCatalogWriteJobs[providerName]
+            disabledCatalogWriteJobs[providerName] = viewModelScope.launch(Dispatchers.IO) {
+                previousWrite?.join()
+                DesktopDataStore.setKey(PreferenceKeys.disabledCatalogsKey(providerName), values)
+            }
+        }
+    }
+
     private fun reloadProvider() {
         categoryCache.clear()
-        categoryMutex.clear()
         discoveryCache.clear()
         discoveryReloadEpoch.update { it + 1L }
         updateState {
@@ -494,6 +554,93 @@ class DesktopHomeViewModel(
                 categories = emptyMap(),
                 refreshEpoch = refreshEpoch + 1L,
             )
+        }
+    }
+
+    private fun updateUpcomingFromCache(profileId: Int) {
+        val followed = DesktopDataStore.getFollowedShows(profileId)
+        val firstError = followed.firstNotNullOfOrNull { it.lastRefreshError }
+        val upcoming = TmdbEpisodeCalendarRepository.getUpcoming(profileId)
+        updateState {
+            if (com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId) {
+                copy(
+                    followedSeriesCount = followed.size,
+                    upcomingEpisodes = upcoming,
+                    upcomingRefreshError = firstError,
+                )
+            } else {
+                this
+            }
+        }
+    }
+
+    private fun refreshUpcoming(profileId: Int, force: Boolean) {
+        if (DesktopDataStore.getFollowedShows(profileId).isEmpty()) {
+            synchronized(upcomingRefreshLock) {
+                if (com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId != profileId) return
+                upcomingRefreshJob?.cancel()
+                upcomingRefreshJob = null
+                upcomingRefreshGeneration++
+            }
+            updateState {
+                if (com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId) {
+                    copy(upcomingIsRefreshing = false)
+                } else {
+                    this
+                }
+            }
+            updateUpcomingFromCache(profileId)
+            return
+        }
+
+        synchronized(upcomingRefreshLock) {
+            if (com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId != profileId) return
+            if (!force && upcomingRefreshJob?.isActive == true) return
+            upcomingRefreshJob?.cancel()
+            val generation = ++upcomingRefreshGeneration
+            updateState { copy(upcomingIsRefreshing = true) }
+            upcomingRefreshJob = viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val refreshError = TmdbEpisodeCalendarRepository.refreshProfile(profileId, force)
+                    if (generation == upcomingRefreshGeneration &&
+                        com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId
+                    ) {
+                        updateUpcomingFromCache(profileId)
+                        updateState {
+                            if (generation == upcomingRefreshGeneration &&
+                                com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId
+                            ) {
+                                copy(
+                                    upcomingIsRefreshing = false,
+                                    upcomingRefreshError = refreshError ?: upcomingRefreshError,
+                                )
+                            } else {
+                                this
+                            }
+                        }
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (generation == upcomingRefreshGeneration &&
+                        com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId
+                    ) {
+                        updateUpcomingFromCache(profileId)
+                        updateState {
+                            if (generation == upcomingRefreshGeneration &&
+                                com.lagradost.cloudstream3.desktop.profile.ProfileManager.activeProfileId == profileId
+                            ) {
+                                copy(
+                                    upcomingIsRefreshing = false,
+                                    upcomingRefreshError = failure.localizedMessage ?: "Could not refresh episode dates",
+                                )
+                            } else {
+                                this
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

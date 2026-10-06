@@ -37,93 +37,40 @@ fun DetailsPlayButton(
     latestHistory: WatchHistory? = null,
     onPlay: (com.lagradost.cloudstream3.Episode) -> Unit,
 ) {
-    val allEpisodes = when (data) {
-        is com.lagradost.cloudstream3.TvSeriesLoadResponse -> data.episodes
-        is com.lagradost.cloudstream3.AnimeLoadResponse -> data.episodes.values.flatten()
-        else -> emptyList()
-    }
-    val sortedEpisodes = allEpisodes.sortedWith(
-        compareBy<com.lagradost.cloudstream3.Episode> { it.season ?: 1 }
-            .thenBy { it.episode ?: 1 },
-    )
-
     val isLatestCompleted = latestHistory != null && latestHistory.duration > 0 &&
         PlayerLinkHandler.isCompleted(latestHistory.position, latestHistory.duration)
 
-    val targetEp = if (latestHistory != null && sortedEpisodes.isNotEmpty()) {
-        if (isLatestCompleted) {
-            val currentIdx = sortedEpisodes.indexOfFirst { it.data == latestHistory.episodeId }
-            if (currentIdx != -1 && currentIdx + 1 < sortedEpisodes.size) {
-                sortedEpisodes[currentIdx + 1]
-            } else {
-                sortedEpisodes.find { it.data == latestHistory.episodeId } ?: sortedEpisodes.firstOrNull()
-            }
-        } else {
-            sortedEpisodes.find { it.data == latestHistory.episodeId } ?: sortedEpisodes.firstOrNull()
-        }
-    } else {
-        sortedEpisodes.firstOrNull()
-    }
+    val targetHistory = latestHistory?.let { mapOf((it.episodeId ?: "") to it) }.orEmpty()
+    val targetEp = DetailsWatchCoordinator.determineAutoPlayTarget(
+        provider = provider,
+        resp = data,
+        watchHistory = targetHistory,
+        targetSeason = latestHistory?.season,
+        targetEpisode = latestHistory?.episode,
+        playNextEpisode = true,
+    )
 
-    val targetActionEp = targetEp ?: when (data) {
-        is com.lagradost.cloudstream3.MovieLoadResponse -> {
-            if (data.dataUrl.isNotBlank()) {
-                provider.newEpisode(data.dataUrl) {
-                    name = data.name
-                    description = data.plot
-                    posterUrl = data.backgroundPosterUrl ?: data.posterUrl
-                }
-            } else {
-                null
-            }
-        }
-        is com.lagradost.cloudstream3.TorrentLoadResponse -> {
-            val torrentUrl = data.torrent ?: data.magnet ?: ""
-            if (torrentUrl.isNotBlank()) {
-                provider.newEpisode(torrentUrl) {
-                    name = data.name
-                    description = data.plot
-                    posterUrl = data.posterUrl
-                }
-            } else {
-                null
-            }
-        }
-        is com.lagradost.cloudstream3.LiveStreamLoadResponse -> {
-            if (data.dataUrl.isNotBlank()) {
-                provider.newEpisode(data.dataUrl) {
-                    name = data.name
-                    description = data.plot
-                    posterUrl = data.backgroundPosterUrl ?: data.posterUrl
-                }
-            } else {
-                null
-            }
-        }
-        else -> null
-    }
-
-    val isUnavailable = targetActionEp == null
+    val isUnavailable = targetEp == null
 
     val buttonLabel = remember(data, latestHistory, targetEp, isLatestCompleted, isUnavailable) {
         if (isUnavailable) {
             "Unavailable on ${provider.name}"
         } else if (latestHistory != null && !isLatestCompleted && latestHistory.position > 0) {
-            if (targetEp?.season == 0 && targetEp.episode != null) {
+            if (targetEp.season == 0 && targetEp.episode != null) {
                 "Resume Special E${targetEp.episode}"
-            } else if (targetEp?.episode != null) {
+            } else if (targetEp.episode != null) {
                 "Resume E${targetEp.episode}"
             } else {
                 "Resume"
             }
         } else {
-            if (targetEp?.season != null && targetEp.episode != null) {
+            if (targetEp.season != null && targetEp.episode != null) {
                 if (targetEp.season == 0) {
                     "Play Special E${targetEp.episode}"
                 } else {
                     "Play S${targetEp.season} E${targetEp.episode}"
                 }
-            } else if (targetEp?.episode != null) {
+            } else if (targetEp.episode != null) {
                 "Play E${targetEp.episode}"
             } else {
                 "Play"
@@ -188,7 +135,7 @@ fun DetailsPlayButton(
                             "No streaming links or episodes were found on ${provider.name} for this title.",
                         )
                     } else {
-                        onPlay(targetActionEp)
+                        onPlay(targetEp)
                     }
                 }
                 .padding(horizontal = if (isNarrow) 24.dp else 40.dp),

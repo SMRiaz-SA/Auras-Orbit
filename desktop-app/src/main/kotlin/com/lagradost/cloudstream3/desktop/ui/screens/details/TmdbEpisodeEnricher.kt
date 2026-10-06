@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import com.lagradost.cloudstream3.addDate
 import com.lagradost.cloudstream3.newEpisode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -76,8 +77,8 @@ internal object TmdbEpisodeEnricher {
                             existingEp.description = epOverview
                         }
                         if (epReleaseDate != null) {
-                            val cleanDesc = (existingEp.description ?: "").replace(Regex("\\|\\|DATE:.*?\\|\\|"), "")
-                            existingEp.description = "||DATE:$epReleaseDate||$cleanDesc"
+                            existingEp.addDate(epReleaseDate)
+                            existingEp.description = (existingEp.description ?: "").replace(Regex("\\|\\|DATE:.*?\\|\\|"), "").trim()
                         }
                         if (epName != null) {
                             val currentName = existingEp.name?.trim() ?: ""
@@ -102,13 +103,13 @@ internal object TmdbEpisodeEnricher {
                     } ?: false
 
                     if (isFuture) {
-                        val descWithDate = "||DATE:$epReleaseDate||${epOverview ?: ""}"
                         val synthetic = dummyApi.newEpisode("unreleased_s${seasonNum}_e$epNum") {
                             this.name = epName ?: "Episode $epNum"
                             this.season = seasonNum
                             this.episode = epNum
                             this.posterUrl = epPoster
-                            this.description = descWithDate
+                            this.description = epOverview
+                            this.addDate(epReleaseDate)
                             this.runTime = epRuntime
                             this.score = epVote?.let { Score.from10(it) }
                         }

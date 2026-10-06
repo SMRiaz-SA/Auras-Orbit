@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.search.components
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +26,8 @@ import com.lagradost.cloudstream3.desktop.ui.screens.search.SearchSuggestionItem
 fun SearchSuggestionsOverlay(
     visible: Boolean,
     suggestions: List<SearchSuggestionItem>,
+    isLoading: Boolean = false,
+    selectedIndex: Int = -1,
     onSelectSuggestion: (title: String, submitSearch: Boolean) -> Unit,
     onFillSuggestion: (title: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -46,10 +50,30 @@ fun SearchSuggestionsOverlay(
             shadowElevation = 16.dp,
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                if (isLoading && suggestions.isEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text(
+                            "Finding suggestions…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 suggestions.forEachIndexed { index, item ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer.copy(
+                                    alpha = if (index == selectedIndex) 0.7f else 0f,
+                                ),
+                            )
                             .clickable {
                                 onSelectSuggestion(item.title, true)
                             }

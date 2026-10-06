@@ -7,6 +7,9 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
 import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopCustomList
+import com.lagradost.common.storage.DesktopCustomListItem
+import com.lagradost.common.storage.EpisodeWatchMark
 import com.lagradost.common.storage.WatchHistory
 
 @Immutable
@@ -42,6 +45,8 @@ data class DetailsUiState(
     val isLoading: Boolean = true,
     val fetchFailed: Boolean = false,
     val watchHistory: Map<String, WatchHistory> = emptyMap(),
+    val episodeWatchMarks: Map<String, EpisodeWatchMark> = emptyMap(),
+    val isFollowingSchedule: Boolean = false,
     val activeLinkData: Triple<MainAPI, String, WatchHistory>? = null,
     val isPanelOpen: Boolean = false,
     val screenshots: List<String>? = null,
@@ -78,6 +83,8 @@ data class DetailsUiState(
     val enrichedTrailers: List<TrailerData> = emptyList(),
     val enrichedTrailerUrl: String? = null,
     val bookmarks: Map<String, DesktopBookmark> = emptyMap(),
+    val customLists: List<DesktopCustomList> = emptyList(),
+    val customListItems: List<DesktopCustomListItem> = emptyList(),
     val autoPlayEnabled: Boolean = true,
     val hasAutoPlayed: Boolean = false,
     val isInitialized: Boolean = false,

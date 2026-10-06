@@ -13,7 +13,7 @@ sealed class SearchUiEvent : UiEvent {
     data object OnClearCategories : SearchUiEvent()
     data class OnRemoveSearchHistoryItem(val query: String) : SearchUiEvent()
     object OnClearSearchHistory : SearchUiEvent()
-    data object OnLoadMore : SearchUiEvent()
+    data class OnLoadMore(val providerKey: String? = null) : SearchUiEvent()
     data class OnSelectSuggestion(val query: String, val submitSearch: Boolean = true) : SearchUiEvent()
     data object OnDismissSuggestions : SearchUiEvent()
     data class OnSetProviderTypeFilter(val types: Set<TvType>) : SearchUiEvent()

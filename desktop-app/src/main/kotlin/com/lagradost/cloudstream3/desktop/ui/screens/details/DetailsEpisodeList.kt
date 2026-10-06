@@ -16,18 +16,26 @@ internal val EPISODE_E_PREFIX_REGEX = Regex("""^(?i)(E[0-9]+[\s\-:]*)+""")
 internal val EPISODE_WORD_PREFIX_REGEX = Regex("""^(?i)(Episode[\s]*[0-9]+[\s\-:]*)+""")
 
 private const val MAX_RELEASE_STATUS_CACHE_SIZE = 500
-private val releaseStatusCache = object : java.util.LinkedHashMap<String, EpisodeReleaseStatus>(128, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EpisodeReleaseStatus>?): Boolean {
+private data class ParsedEpisodeReleaseDate(
+    val instant: java.time.Instant? = null,
+    val dateOnly: java.time.LocalDate? = null,
+)
+
+private val releaseDateCache = object : java.util.LinkedHashMap<Pair<String, String>, ParsedEpisodeReleaseDate>(128, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, String>, ParsedEpisodeReleaseDate>?): Boolean {
         return size > MAX_RELEASE_STATUS_CACHE_SIZE
     }
 }
-private val releaseStatusLock = Any()
+private val releaseDateCacheLock = Any()
 
 fun parseEpisodeReleaseStatus(ep: Episode, providerName: String? = null): EpisodeReleaseStatus {
     val isSynthetic = ep.data.startsWith("unreleased_") || ep.data.startsWith("synthetic_") || ep.data.isBlank()
     val rawDesc = ep.description ?: ""
-    val dateMatch = EPISODE_DATE_REGEX.find(rawDesc)
-    val rawDate = dateMatch?.groupValues?.get(1)?.trim()
+    val rawDate = ep.date?.let {
+        runCatching {
+            java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+        }.getOrNull()
+    } ?: EPISODE_DATE_REGEX.find(rawDesc)?.groupValues?.get(1)?.trim()
 
     val baseStatus = if (rawDate.isNullOrBlank()) {
         EpisodeReleaseStatus(
@@ -39,11 +47,7 @@ fun parseEpisodeReleaseStatus(ep: Episode, providerName: String? = null): Episod
             daysUntilRelease = null,
         )
     } else {
-        synchronized(releaseStatusLock) {
-            releaseStatusCache.getOrPut(rawDate) {
-                computeEpisodeReleaseStatus(rawDate)
-            }
-        }
+        computeEpisodeReleaseStatus(rawDate, java.time.Instant.now(), java.time.ZoneId.systemDefault())
     }
 
     val isMissing = isSynthetic && !baseStatus.isUnreleased
@@ -60,49 +64,27 @@ fun parseEpisodeReleaseStatus(ep: Episode, providerName: String? = null): Episod
 }
 
 private val OUTPUT_DATE_FORMATTER = java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy", java.util.Locale.US)
-    .withZone(java.time.ZoneOffset.UTC)
 
-private val ISO_DATE_FORMATTERS = listOf(
-    java.time.format.DateTimeFormatter.ISO_DATE_TIME.withZone(java.time.ZoneOffset.UTC) to false,
-    java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(java.time.ZoneOffset.UTC) to false,
-    java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(java.time.ZoneOffset.UTC) to false,
-    java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(java.time.ZoneOffset.UTC) to true,
-)
-
-private fun computeEpisodeReleaseStatus(rawDate: String): EpisodeReleaseStatus {
-    var releaseEpochMs: Long? = null
-    var formattedOut: String? = null
-
-    for ((formatter, isDateOnly) in ISO_DATE_FORMATTERS) {
-        try {
-            val temporal = formatter.parseBest(rawDate, java.time.Instant::from, java.time.LocalDate::from)
-            val instant = when (temporal) {
-                is java.time.Instant -> temporal
-                is java.time.LocalDate -> temporal.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
-                else -> null
-            }
-            if (instant != null) {
-                formattedOut = OUTPUT_DATE_FORMATTER.format(instant)
-                releaseEpochMs = if (isDateOnly) {
-                    instant.toEpochMilli() + 86_400_000L
-                } else {
-                    instant.toEpochMilli()
-                }
-                break
-            }
-        } catch (_: Exception) {
-        }
+internal fun computeEpisodeReleaseStatus(
+    rawDate: String,
+    now: java.time.Instant,
+    localZone: java.time.ZoneId,
+): EpisodeReleaseStatus {
+    val cacheKey = rawDate to localZone.id
+    val parsed = synchronized(releaseDateCacheLock) {
+        releaseDateCache.getOrPut(cacheKey) { parseEpisodeReleaseDate(rawDate, localZone) }
     }
-
-    val now = System.currentTimeMillis()
-    val rEpoch = releaseEpochMs
-    val isFuture = rEpoch != null && rEpoch > now
-    val daysUntil = if (rEpoch != null && rEpoch > now) {
-        val diffMs = rEpoch - now
-        maxOf(1L, diffMs / 86_400_000L)
-    } else {
-        null
+    val localToday = now.atZone(localZone).toLocalDate()
+    val displayDate = parsed.instant?.atZone(localZone)?.toLocalDate() ?: parsed.dateOnly
+    val formattedOut = displayDate?.let(OUTPUT_DATE_FORMATTER::format)
+    val isFuture = when {
+        parsed.instant != null -> parsed.instant.isAfter(now)
+        parsed.dateOnly != null -> parsed.dateOnly.isAfter(localToday)
+        else -> false
     }
+    val daysUntil = displayDate?.let { java.time.temporal.ChronoUnit.DAYS.between(localToday, it) }
+        ?.takeIf { isFuture }
+        ?.coerceAtLeast(1L)
 
     val badgeText = when {
         !isFuture -> null
@@ -119,4 +101,17 @@ private fun computeEpisodeReleaseStatus(rawDate: String): EpisodeReleaseStatus {
         statusBadgeText = badgeText,
         daysUntilRelease = daysUntil,
     )
+}
+
+private fun parseEpisodeReleaseDate(rawDate: String, localZone: java.time.ZoneId): ParsedEpisodeReleaseDate {
+    val instant = runCatching {
+        java.time.Instant.parse(rawDate)
+    }.getOrNull() ?: runCatching {
+        java.time.OffsetDateTime.parse(rawDate).toInstant()
+    }.getOrNull() ?: runCatching {
+        java.time.LocalDateTime.parse(rawDate).atZone(localZone).toInstant()
+    }.getOrNull()
+    if (instant != null) return ParsedEpisodeReleaseDate(instant = instant)
+
+    return ParsedEpisodeReleaseDate(dateOnly = runCatching { java.time.LocalDate.parse(rawDate.take(10)) }.getOrNull())
 }

@@ -158,12 +158,13 @@ fun HomeHeroCarousel(
                 ?: return@AnimatedContent
             val posterUrl = provider?.fixUrlNull(item.posterUrl)
             val meta = heroMetaMap[item.url]
-            val ambientBg = meta?.backdropUrl ?: posterUrl
+            val backdropUrl = meta?.backdropUrl?.takeIf { it.isNotBlank() }
+            val ambientBg = backdropUrl ?: posterUrl
 
             Box(modifier = Modifier.fillMaxSize()) {
                 HeroBackdropLayer(
                     ambientBg = ambientBg,
-                    isBackdropNull = meta?.backdropUrl == null,
+                    isBackdropNull = meta != null && backdropUrl == null,
                     isLightMode = isLightMode,
                 )
 

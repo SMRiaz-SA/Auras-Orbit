@@ -2,6 +2,9 @@ package com.lagradost.cloudstream3.desktop.metadata.stremio
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.metadata.MetadataConfig
 import com.lagradost.cloudstream3.desktop.stremio.ManagedStremioAddon
@@ -10,14 +13,18 @@ import com.lagradost.cloudstream3.desktop.stremio.StremioCatalogDescriptor
 import com.lagradost.cloudstream3.desktop.stremio.StremioManifestParser
 import com.lagradost.cloudstream3.desktop.stremio.StremioTransport
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 
 object StremioAddonClient {
     private const val TAG = "StremioAddonClient"
+    private const val MAX_ADDON_RESPONSE_BYTES = 8 * 1024 * 1024
+    private val mapper = jacksonObjectMapper()
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class StremioManifest(
@@ -54,6 +61,18 @@ object StremioAddonClient {
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    data class StremioTrailer(
+        @JsonProperty("source") val source: String? = null,
+        @JsonProperty("ytId") val ytId: String? = null,
+        @JsonProperty("url") val url: String? = null,
+        @JsonProperty("type") val type: String? = null,
+        @JsonProperty("name") val name: String? = null,
+        @JsonProperty("title") val title: String? = null,
+        @JsonProperty("description") val description: String? = null,
+        @JsonProperty("thumbnail") val thumbnail: String? = null,
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     data class StremioMetaItem(
         @JsonProperty("id") val id: String? = null,
         @JsonProperty("type") val type: String? = null,
@@ -66,6 +85,7 @@ object StremioAddonClient {
         @JsonProperty("releaseInfo") val releaseInfo: String? = null,
         @JsonProperty("genres") val genres: List<String>? = null,
         @JsonProperty("videos") val videos: List<StremioVideo>? = null,
+        @JsonProperty("trailers") val trailers: List<StremioTrailer>? = null,
         @JsonProperty("moviedb_id") val moviedbId: Int? = null,
     )
 
@@ -93,7 +113,7 @@ object StremioAddonClient {
                 return@withContext Result.failure(Exception("HTTP ${response.code} received from manifest"))
             }
 
-            val manifest = response.parsedSafe<StremioManifest>()
+            val manifest = parseBoundedJson<StremioManifest>(response.body.byteStream())
                 ?: return@withContext Result.failure(Exception("Invalid manifest JSON format"))
 
             if (manifest.id.isNullOrBlank() && manifest.name.isNullOrBlank()) {
@@ -101,6 +121,8 @@ object StremioAddonClient {
             }
 
             Result.success(manifest)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -125,11 +147,13 @@ object StremioAddonClient {
                     headers = mapOf("Accept" to "application/json", "User-Agent" to "CloudStream-Desktop/1.0"),
                     timeout = 4000L,
                 )
-                val parsed = response.parsedSafe<StremioCatalogResponse>()
+                val parsed = parseBoundedJson<StremioCatalogResponse>(response.body.byteStream())
                 parsed?.metas.orEmpty().forEach { meta ->
                     val key = meta.id?.takeIf { it.isNotBlank() } ?: "${meta.type}:${meta.name}"
                     results.putIfAbsent(key, meta)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.d(TAG, "Search failed for '$query' on ${catalog.id}: ${e.message}")
             }
@@ -158,7 +182,7 @@ object StremioAddonClient {
                     headers = mapOf("Accept" to "application/json", "User-Agent" to "CloudStream-Desktop/1.0"),
                     timeout = 4000L,
                 )
-                val meta = response.parsedSafe<StremioMetaResponse>()?.meta
+                val meta = parseBoundedJson<StremioMetaResponse>(response.body.byteStream())?.meta
                 if (meta != null) return@withContext meta
             } catch (e: CancellationException) {
                 throw e
@@ -198,7 +222,7 @@ object StremioAddonClient {
                         headers = mapOf("Accept" to "application/json", "User-Agent" to "CloudStream-Desktop/1.0"),
                         timeout = 4000L,
                     )
-                    response.parsedSafe<StremioMetaResponse>()?.meta
+                    parseBoundedJson<StremioMetaResponse>(response.body.byteStream())?.meta
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -243,12 +267,17 @@ object StremioAddonClient {
         }
 
         return manifests.flatMap { (manifestUrl, addon) ->
-            val catalogs = addon?.catalogs?.takeIf { it.isNotEmpty() } ?: runCatching {
+            val catalogs = addon?.catalogs?.takeIf { it.isNotEmpty() } ?: try {
                 val normalizedUrl = normalizeManifestUrl(manifestUrl)
-                val manifestJson = app.get(normalizedUrl, timeout = 5000L).text
+                val response = app.get(normalizedUrl, timeout = 5000L)
+                val manifestJson = response.body.byteStream().use { stream ->
+                    stream.readBoundedBytes(MAX_ADDON_RESPONSE_BYTES).toString(Charsets.UTF_8)
+                }
                 StremioManifestParser.parse(normalizedUrl, manifestJson).catalogs
-            }.getOrElse { error ->
-                AppLogger.d(TAG, "Unable to read search catalogs from $manifestUrl: ${error.message}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLogger.d(TAG, "Unable to read search catalogs from $manifestUrl: ${e.message}")
                 emptyList()
             }
 
@@ -256,6 +285,15 @@ object StremioAddonClient {
                 catalog.type.equals(type, ignoreCase = true) &&
                     catalog.extra.any { it.name.equals("search", ignoreCase = true) }
             }.map { manifestUrl to it }
+        }
+    }
+
+    private inline fun <reified T> parseBoundedJson(input: InputStream): T? {
+        val bytes = input.use { stream -> stream.readBoundedBytes(MAX_ADDON_RESPONSE_BYTES) }
+        return try {
+            mapper.readValue<T>(bytes)
+        } catch (_: JsonProcessingException) {
+            null
         }
     }
 }

@@ -3,9 +3,9 @@ package com.lagradost.cloudstream3.desktop.repo
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.storage.WatchHistory
 import kotlinx.coroutines.flow.Flow
-import java.util.concurrent.ConcurrentHashMap
 import com.lagradost.cloudstream3.desktop.domain.hero.repository.HeroRepository as DomainHeroRepository
 
 data class HeroMeta(
@@ -25,7 +25,7 @@ data class HeroMeta(
 internal const val HERO_CACHE_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
 
 object HeroCache {
-    private val cache = ConcurrentHashMap<String, HeroMeta>()
+    private val cache = BoundedLruCache<String, HeroMeta>(512)
     fun get(key: String): HeroMeta? = cache[key]
     fun put(key: String, meta: HeroMeta) {
         cache[key] = meta

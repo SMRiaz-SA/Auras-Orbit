@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.lagradost.common.net.readBoundedBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,10 @@ internal class ReleaseChecker(
     private val includePrereleases: () -> Boolean,
     private val currentVersion: () -> String,
 ) {
+    private companion object {
+        const val MAX_RELEASE_RESPONSE_BYTES = 8 * 1024 * 1024
+    }
+
     private val mapper = jacksonObjectMapper()
     private val mutex = Mutex()
     private val _latestRelease = MutableStateFlow<GitHubRelease?>(null)
@@ -53,7 +58,10 @@ internal class ReleaseChecker(
                     .header("Accept", "application/vnd.github+json").build()
                 client.newCall(request).execute().use { response ->
                     check(response.isSuccessful) { "Release service returned HTTP ${response.code}" }
-                    val releases = mapper.readValue<List<GitHubRelease>>(response.body.string())
+                    val responseBytes = response.body.byteStream().use { stream ->
+                        stream.readBoundedBytes(MAX_RELEASE_RESPONSE_BYTES)
+                    }
+                    val releases = mapper.readValue<List<GitHubRelease>>(responseBytes)
                     val latest = selectRelease(releases, includePrereleases())
                     _latestRelease.value = latest?.takeIf { compareVersions(it.tag_name.removePrefix("v"), currentVersion()) > 0 }
                 }

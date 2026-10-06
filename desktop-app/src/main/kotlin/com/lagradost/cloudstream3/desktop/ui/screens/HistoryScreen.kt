@@ -137,6 +137,26 @@ fun ComposeHistoryScreen(
                 ) {
                     items(historyList, key = { it.parentId }) { history ->
                         val provider = providerMap[history.parentId]
+                        val openHistory: (Boolean) -> Unit = { autoPlay ->
+                            if (provider != null) {
+                                onNavigate(
+                                    Config.Details(
+                                        providerName = provider.name,
+                                        url = history.showUrl,
+                                        preloadedName = history.showName,
+                                        preloadedPoster = history.posterUrl,
+                                        preloadedBg = null,
+                                        autoPlay = autoPlay,
+                                        targetSeason = history.season,
+                                        targetEpisodeId = history.episodeId,
+                                        targetEpisode = history.episode,
+                                        playNextEpisode = autoPlay && history.duration == 0L && history.position == 0L,
+                                    ),
+                                )
+                            } else {
+                                com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
+                            }
+                        }
                         WatchHistoryCard(
                             history = history,
                             provider = provider,
@@ -150,42 +170,9 @@ fun ComposeHistoryScreen(
                             onRemove = {
                                 viewModel.onEvent(HistoryUiEvent.RemoveItem(history.parentId))
                             },
-                            onClick = {
-                                if (provider != null) {
-                                    onNavigate(
-                                        Config.Details(
-                                            providerName = provider.name,
-                                            url = history.showUrl,
-                                            preloadedName = history.showName,
-                                            preloadedPoster = history.posterUrl,
-                                            preloadedBg = null,
-                                            autoPlay = false,
-                                            targetSeason = history.season,
-                                            targetEpisodeId = history.episodeId,
-                                        ),
-                                    )
-                                } else {
-                                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
-                                }
-                            },
-                            onPlayClick = {
-                                if (provider != null) {
-                                    onNavigate(
-                                        Config.Details(
-                                            providerName = provider.name,
-                                            url = history.showUrl,
-                                            preloadedName = history.showName,
-                                            preloadedPoster = history.posterUrl,
-                                            preloadedBg = null,
-                                            autoPlay = true,
-                                            targetSeason = history.season,
-                                            targetEpisodeId = history.episodeId,
-                                        ),
-                                    )
-                                } else {
-                                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
-                                }
-                            },
+                            onClick = { openHistory(false) },
+                            onPlayClick = { openHistory(true) },
+                            onPrimaryClick = { openHistory(true) },
                         )
                     }
                 }

@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,6 +43,7 @@ import com.lagradost.cloudstream3.desktop.ui.screens.categoryGridItemKey
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.home.contract.HomeUiState
 import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopCustomList
 import com.lagradost.common.storage.WatchHistory
 
 @Composable
@@ -86,6 +88,50 @@ fun HomeLibraryRow(
             }
         } else {
             items(sortedBookmarks.take(30), key = { "${it.apiName}:${it.url}" }) { bookmark ->
+                val response = remember(bookmark) { BookmarkSearchResponse(bookmark) }
+                PosterCard(
+                    item = response,
+                    provider = providersByName[bookmark.apiName],
+                    onClick = { onOpenBookmark(bookmark, false) },
+                    onPlayClick = { onOpenBookmark(bookmark, true) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomePinnedCustomListRows(
+    lists: List<DesktopCustomList>,
+    memberships: List<com.lagradost.common.storage.DesktopCustomListItem>,
+    bookmarks: List<DesktopBookmark>,
+    providersByName: Map<String, MainAPI>,
+    onViewAll: () -> Unit,
+    onOpenBookmark: (DesktopBookmark, Boolean) -> Unit,
+) {
+    val bookmarksById = remember(bookmarks) { bookmarks.associateBy(DesktopBookmark::id) }
+    val shelves = remember(lists, memberships, bookmarksById) {
+        lists.asSequence()
+            .filter(DesktopCustomList::showOnHome)
+            .mapNotNull { list ->
+                val entries = memberships.asSequence()
+                    .filter { it.listId == list.id }
+                    .mapNotNull { bookmarksById[it.bookmarkId] }
+                    .toList()
+                entries.takeIf { it.isNotEmpty() }?.let { list to it }
+            }
+            .toList()
+    }
+
+    shelves.forEach { (list, entries) ->
+        CategoryRowWithHeader(
+            title = list.name,
+            itemCount = entries.size,
+            onViewAll = onViewAll,
+            rowContentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            headerPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp),
+        ) {
+            items(entries.take(30), key = DesktopBookmark::id) { bookmark ->
                 val response = remember(bookmark) { BookmarkSearchResponse(bookmark) }
                 PosterCard(
                     item = response,
@@ -150,6 +196,9 @@ fun HomeDashboardRows(
     uiState: HomeUiState,
     viewModel: DesktopHomeViewModel,
     showContinueWatching: Boolean,
+    sectionOrder: List<HomeFeedSectionKey> = HomeFeedSectionKey.defaultOrder,
+    disabledSections: Set<HomeFeedSectionKey> = emptySet(),
+    renderContinueWatching: Boolean = true,
     onNavigate: (Config) -> Unit,
 ) {
     val safeArea = com.lagradost.cloudstream3.desktop.ui.LocalSafeArea.current
@@ -161,85 +210,42 @@ fun HomeDashboardRows(
             .associateBy(MainAPI::name)
     }
     val bookmarks = remember(uiState.bookmarks) { uiState.bookmarks.values.sortedByDescending(DesktopBookmark::dateAdded) }
-
-    if (showContinueWatching && uiState.historyList.isNotEmpty()) {
-        HomeHistoryRow(
-            historyList = uiState.historyList,
-            providers = uiState.providers,
-            onClearHistory = { viewModel.onEvent(HomeUiEvent.OnClearHistory) },
-            onRemoveHistoryItem = { viewModel.onEvent(HomeUiEvent.OnRemoveHistoryItem(it)) },
-            onViewAllClick = { onNavigate(Config.History) },
-            onItemClick = { provider, history ->
-                onNavigate(
-                    Config.Details(
-                        provider.name,
-                        history.showUrl,
-                        history.showName,
-                        history.posterUrl,
-                        null,
-                        autoPlay = false,
-                        targetSeason = history.season,
-                        targetEpisodeId = history.episodeId,
-                    ),
-                )
-            },
-            onPlayClick = { provider, history ->
-                onNavigate(
-                    Config.Details(
-                        provider.name,
-                        history.showUrl,
-                        history.showName,
-                        history.posterUrl,
-                        null,
-                        autoPlay = true,
-                        targetSeason = history.season,
-                        targetEpisodeId = history.episodeId,
-                    ),
-                )
-            },
+    val recommendations = remember(
+        uiState.popularDiscovery.items,
+        uiState.recentDiscovery.items,
+        uiState.historyList,
+        uiState.bookmarks,
+    ) {
+        recommendHomeItems(
+            candidates = mergeHomeDiscoveryItems(uiState.recentDiscovery.items + uiState.popularDiscovery.items),
+            seedTitles = uiState.historyList.map(WatchHistory::showName) + bookmarks.map(DesktopBookmark::name),
         )
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = safeStart, end = safeEnd),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        HomeLibraryRow(
-            bookmarks = bookmarks,
-            providersByName = providersByName,
-            onViewAll = { onNavigate(Config.Library) },
-            onBrowse = { onNavigate(Config.Explore) },
-            onOpenBookmark = { bookmark, autoPlay ->
-                if (bookmark.apiName == com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME) {
-                    com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamBookmark(bookmark)
-                } else {
-                    onNavigate(
-                        Config.Details(
-                            bookmark.apiName,
-                            bookmark.url,
-                            bookmark.name,
-                            bookmark.posterUrl,
-                            null,
-                            autoPlay,
-                        ),
-                    )
-                }
-            },
-        )
+        val openBookmark: (DesktopBookmark, Boolean) -> Unit = { bookmark, autoPlay ->
+            if (bookmark.apiName == com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.NETWORK_STREAM_API_NAME) {
+                com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamBookmark(bookmark)
+            } else {
+                onNavigate(
+                    Config.Details(
+                        bookmark.apiName,
+                        bookmark.url,
+                        bookmark.name,
+                        bookmark.posterUrl,
+                        null,
+                        autoPlay,
+                    ),
+                )
+            }
+        }
 
-        HomeDiscoveryRows(
-            recent = uiState.recentDiscovery,
-            popular = uiState.popularDiscovery,
-            history = uiState.historyList,
-            bookmarks = bookmarks,
-            providersByName = providersByName,
-            onRetry = { viewModel.onEvent(HomeUiEvent.OnRetryDiscovery(it)) },
-            onViewAll = { title, homeItems, homeSources ->
-                val primaryProviderName = homeItems.firstOrNull()?.providerName ?: return@HomeDiscoveryRows
-                val primaryProvider = providersByName[primaryProviderName]
-                    ?: APIHolder.getApiFromNameNull(primaryProviderName)
-                    ?: return@HomeDiscoveryRows
+        val onViewDiscovery: (String, List<HomeDiscoveryItem>, List<HomeDiscoveryPageSource>) -> Unit = { title, homeItems, homeSources ->
+            val primaryProviderName = homeItems.firstOrNull()?.providerName
+            val primaryProvider = primaryProviderName?.let { providersByName[it] ?: APIHolder.getApiFromNameNull(it) }
+            if (primaryProvider != null) {
                 val itemProviders = buildMap {
                     homeItems.forEach { homeItem ->
                         val itemProvider = providersByName[homeItem.providerName]
@@ -266,21 +272,135 @@ fun HomeDashboardRows(
                     sources = pageSources,
                 )
                 onNavigate(Config.CategoryGrid(primaryProvider.name, title))
-            },
-            onOpenItem = { homeItem, autoPlay ->
-                onNavigate(
-                    Config.Details(
-                        homeItem.providerName,
-                        homeItem.response.url,
-                        homeItem.response.name,
-                        homeItem.response.posterUrl,
-                        null,
-                        autoPlay,
-                    ),
+            }
+        }
+        val onOpenDiscoveryItem: (HomeDiscoveryItem, Boolean) -> Unit = { homeItem, autoPlay ->
+            onNavigate(
+                Config.Details(
+                    homeItem.providerName,
+                    homeItem.response.url,
+                    homeItem.response.name,
+                    homeItem.response.posterUrl,
+                    null,
+                    autoPlay,
+                ),
+            )
+        }
+
+        sectionOrder.forEach { section ->
+            if (section in disabledSections) return@forEach
+            when (section) {
+                HomeFeedSectionKey.CONTINUE_WATCHING -> if (renderContinueWatching && showContinueWatching && uiState.historyList.isNotEmpty()) {
+                    HomeContinueWatchingRow(uiState, viewModel, onNavigate)
+                }
+                HomeFeedSectionKey.UPCOMING_EPISODES -> HomeUpcomingEpisodesRow(
+                    followedSeriesCount = uiState.followedSeriesCount,
+                    episodes = uiState.upcomingEpisodes,
+                    isRefreshing = uiState.upcomingIsRefreshing,
+                    refreshError = uiState.upcomingRefreshError,
+                    onRefresh = { viewModel.onEvent(HomeUiEvent.OnRefreshUpcoming) },
+                    onOpenEpisode = { episode ->
+                        onNavigate(
+                            Config.Details(
+                                providerName = episode.providerName,
+                                url = episode.showUrl,
+                                preloadedName = episode.showName,
+                                preloadedPoster = episode.posterUrl,
+                                autoPlay = false,
+                                targetSeason = episode.seasonNumber,
+                                targetEpisode = episode.episodeNumber,
+                            ),
+                        )
+                    },
                 )
-            },
+                HomeFeedSectionKey.LIBRARY -> Box(Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd)) {
+                    HomeLibraryRow(
+                        bookmarks = bookmarks,
+                        providersByName = providersByName,
+                        onViewAll = { onNavigate(Config.Library) },
+                        onBrowse = { onNavigate(Config.Explore) },
+                        onOpenBookmark = openBookmark,
+                    )
+                }
+                HomeFeedSectionKey.CUSTOM_LISTS -> Box(Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd)) {
+                    HomePinnedCustomListRows(
+                        lists = uiState.customLists,
+                        memberships = uiState.customListItems,
+                        bookmarks = bookmarks,
+                        providersByName = providersByName,
+                        onViewAll = { onNavigate(Config.Library) },
+                        onOpenBookmark = openBookmark,
+                    )
+                }
+                HomeFeedSectionKey.RECENTLY_UPDATED -> Box(Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd)) {
+                    HomeDiscoveryRow(
+                        title = "Recently Added / Updated",
+                        state = uiState.recentDiscovery,
+                        providersByName = providersByName,
+                        onRetry = { viewModel.onEvent(HomeUiEvent.OnRetryDiscovery(HomeDiscoveryKind.RECENT)) },
+                        onViewAll = { onViewDiscovery("Recently Added / Updated", uiState.recentDiscovery.items, uiState.recentDiscovery.pageSources) },
+                        onOpenItem = onOpenDiscoveryItem,
+                    )
+                }
+                HomeFeedSectionKey.RECOMMENDED -> if (recommendations.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd)) {
+                        HomeDiscoveryRow(
+                            title = "Recommended for You",
+                            state = HomeDiscoverySectionState(hasLoaded = true, items = recommendations),
+                            providersByName = providersByName,
+                            onRetry = {},
+                            onViewAll = { onViewDiscovery("Recommended for You", recommendations, emptyList()) },
+                            onOpenItem = onOpenDiscoveryItem,
+                        )
+                    }
+                }
+                HomeFeedSectionKey.TRENDING -> Box(Modifier.fillMaxWidth().padding(start = safeStart, end = safeEnd)) {
+                    HomeDiscoveryRow(
+                        title = "Trending / Popular",
+                        state = uiState.popularDiscovery,
+                        providersByName = providersByName,
+                        onRetry = { viewModel.onEvent(HomeUiEvent.OnRetryDiscovery(HomeDiscoveryKind.POPULAR)) },
+                        onViewAll = { onViewDiscovery("Trending / Popular", uiState.popularDiscovery.items, uiState.popularDiscovery.pageSources) },
+                        onOpenItem = onOpenDiscoveryItem,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeContinueWatchingRow(
+    uiState: HomeUiState,
+    viewModel: DesktopHomeViewModel,
+    onNavigate: (Config) -> Unit,
+) {
+    val openHistory: (MainAPI, WatchHistory, Boolean) -> Unit = { provider, history, autoPlay ->
+        onNavigate(
+            Config.Details(
+                providerName = provider.name,
+                url = history.showUrl,
+                preloadedName = history.showName,
+                preloadedPoster = history.posterUrl,
+                autoPlay = autoPlay,
+                targetSeason = history.season,
+                targetEpisodeId = history.episodeId,
+                targetEpisode = history.episode,
+                playNextEpisode = autoPlay && history.duration == 0L && history.position == 0L,
+            ),
         )
     }
+
+    HomeHistoryRow(
+        historyList = uiState.historyList,
+        providers = uiState.providers,
+        onClearHistory = { viewModel.onEvent(HomeUiEvent.OnClearHistory) },
+        onRemoveHistoryItem = { viewModel.onEvent(HomeUiEvent.OnRemoveHistoryItem(it)) },
+        onViewAllClick = { onNavigate(Config.History) },
+        onItemClick = { provider, history -> openHistory(provider, history, false) },
+        onPlayClick = { provider, history -> openHistory(provider, history, true) },
+        onPrimaryItemClick = { provider, history -> openHistory(provider, history, true) },
+    )
 }
 
 @Composable

@@ -42,6 +42,9 @@ fun ComposeHomeScreen(
     val homeVerticalSpacingDp by AppearanceConfig.homeVerticalSpacingDp.collectAsState()
     val heroEnabled by AppearanceConfig.heroEnabled.collectAsState()
     val showContinueWatching by AppearanceConfig.showContinueWatching.collectAsState()
+    val homeFeedSectionOrder by AppearanceConfig.homeFeedSectionOrder.collectAsState()
+    val homeFeedDisabledSections by AppearanceConfig.homeFeedDisabledSections.collectAsState()
+    val homeContinueWatchingPosition by AppearanceConfig.homeContinueWatchingPosition.collectAsState()
 
     DisposableEffect(viewModel) {
         val unregister = com.lagradost.cloudstream3.desktop.ui.GlobalRefreshHandler.register {
@@ -151,12 +154,24 @@ fun ComposeHomeScreen(
                                     }
                                 },
                                 outerPadding = horizontalPad,
+                                beforeHeroContent = {
+                                    if (isFirstPage && showContinueWatching &&
+                                        homeContinueWatchingPosition == com.lagradost.cloudstream3.desktop.ui.screens.home.HomeContinueWatchingPosition.ABOVE_HERO &&
+                                        com.lagradost.cloudstream3.desktop.ui.screens.home.HomeFeedSectionKey.CONTINUE_WATCHING !in homeFeedDisabledSections &&
+                                        historyList.isNotEmpty()
+                                    ) {
+                                        HomeContinueWatchingRow(uiState, viewModel, onNavigate)
+                                    }
+                                },
                                 afterHeroContent = {
                                     if (isFirstPage) {
                                         HomeDashboardRows(
                                             uiState = uiState,
                                             viewModel = viewModel,
                                             showContinueWatching = showContinueWatching,
+                                            sectionOrder = homeFeedSectionOrder,
+                                            disabledSections = homeFeedDisabledSections,
+                                            renderContinueWatching = homeContinueWatchingPosition != com.lagradost.cloudstream3.desktop.ui.screens.home.HomeContinueWatchingPosition.ABOVE_HERO,
                                             onNavigate = onNavigate,
                                         )
                                     }
@@ -270,6 +285,8 @@ fun ComposeHomeScreen(
                             uiState = uiState,
                             viewModel = viewModel,
                             showContinueWatching = showContinueWatching,
+                            sectionOrder = homeFeedSectionOrder,
+                            disabledSections = homeFeedDisabledSections,
                             onNavigate = onNavigate,
                         )
                     }

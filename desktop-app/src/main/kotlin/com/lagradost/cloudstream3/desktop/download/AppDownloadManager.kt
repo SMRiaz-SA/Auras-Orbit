@@ -104,7 +104,7 @@ object AppDownloadManager {
         val request = Request.Builder().url(apiUrl).header("Accept", "application/vnd.github+json").build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IllegalStateException("Could not verify release asset: HTTP ${response.code}")
-            val body = response.body ?: throw IllegalStateException("Empty release metadata")
+            val body = response.body
             val assets = mapper.readTree(body.string()).path("assets")
             val asset = assets.firstOrNull { it.path("name").asText() == segments[5] }
                 ?: throw IllegalStateException("Release asset not found in GitHub metadata")
@@ -158,7 +158,7 @@ object AppDownloadManager {
                     if (!response.isSuccessful) {
                         throw IllegalStateException("HTTP ${response.code} ${response.message}")
                     }
-                    val body = response.body ?: throw IllegalStateException("Empty response body")
+                    val body = response.body
                     val contentLength = body.contentLength()
 
                     updateTask(id) { it.copy(totalBytes = contentLength) }

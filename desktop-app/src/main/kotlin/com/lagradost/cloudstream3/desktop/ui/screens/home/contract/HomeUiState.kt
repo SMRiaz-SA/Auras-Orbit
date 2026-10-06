@@ -5,8 +5,11 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.DesktopErrorReporter
 import com.lagradost.cloudstream3.desktop.repo.HeroMeta
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
+import com.lagradost.cloudstream3.desktop.ui.screens.details.UpcomingEpisode
 import com.lagradost.cloudstream3.desktop.ui.screens.home.HomeDiscoverySectionState
 import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopCustomList
+import com.lagradost.common.storage.DesktopCustomListItem
 import com.lagradost.common.storage.WatchHistory
 
 @Immutable
@@ -26,11 +29,17 @@ data class HomeUiState(
     val mergedPluginIcons: Map<String, String> = emptyMap(),
     val heroMetaMap: Map<String, HeroMeta> = emptyMap(),
     val bookmarks: Map<String, DesktopBookmark> = emptyMap(),
+    val customLists: List<DesktopCustomList> = emptyList(),
+    val customListItems: List<DesktopCustomListItem> = emptyList(),
     val disabledCatalogs: Map<String, Set<String>> = emptyMap(),
     val showHomeManagement: Boolean = false,
     val categories: Map<String, HomeCategoryUiState> = emptyMap(),
     val recentDiscovery: HomeDiscoverySectionState = HomeDiscoverySectionState(),
     val popularDiscovery: HomeDiscoverySectionState = HomeDiscoverySectionState(),
+    val followedSeriesCount: Int = 0,
+    val upcomingEpisodes: List<UpcomingEpisode> = emptyList(),
+    val upcomingIsRefreshing: Boolean = false,
+    val upcomingRefreshError: String? = null,
     val refreshEpoch: Long = 0L,
 ) : UiState {
     val activeProviders: List<String>

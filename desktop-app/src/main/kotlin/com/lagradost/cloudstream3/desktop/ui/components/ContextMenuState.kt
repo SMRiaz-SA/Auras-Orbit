@@ -47,6 +47,7 @@ object GlobalContextMenuState {
     var onDetailsClick: (() -> Unit)? by mutableStateOf(null)
     var onPlayClick: (() -> Unit)? by mutableStateOf(null)
     var onChangeCategory: ((DesktopWatchType) -> Unit)? by mutableStateOf(null)
+    var onManageCustomLists: (() -> Unit)? by mutableStateOf(null)
     var onReLink: (() -> Unit)? by mutableStateOf(null)
     var onSearchOtherProviders: (() -> Unit)? by mutableStateOf(null)
     var onOpenInExplorer: (() -> Unit)? by mutableStateOf(null)
@@ -78,6 +79,7 @@ object GlobalContextMenuState {
         onDetailsClick = null
         onPlayClick = null
         onChangeCategory = null
+        onManageCustomLists = null
         onReLink = null
         onSearchOtherProviders = null
         onOpenInExplorer = null
@@ -113,6 +115,7 @@ object GlobalContextMenuState {
         onPlayClick: (() -> Unit)? = null,
         onRemove: () -> Unit,
         onChangeCategory: (DesktopWatchType) -> Unit,
+        onManageCustomLists: () -> Unit,
         onReLink: () -> Unit,
         onSearchOtherProviders: () -> Unit,
     ) {
@@ -123,6 +126,7 @@ object GlobalContextMenuState {
         this.onPlayClick = onPlayClick
         this.onRemove = onRemove
         this.onChangeCategory = onChangeCategory
+        this.onManageCustomLists = onManageCustomLists
         this.onReLink = onReLink
         this.onSearchOtherProviders = onSearchOtherProviders
         this.menuType = ContextMenuType.BOOKMARK

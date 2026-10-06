@@ -62,6 +62,7 @@ fun WatchHistoryCard(
     onRemove: () -> Unit,
     onClick: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
+    onPrimaryClick: (() -> Unit)? = null,
 ) {
     val style = LocalPosterCardStyle.current
     val posterHoverGlowEnabled = style.hoverGlowEnabled
@@ -104,6 +105,7 @@ fun WatchHistoryCard(
     val currentOnRemove by rememberUpdatedState(onRemove)
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPlayClick by rememberUpdatedState(onPlayClick)
+    val currentOnPrimaryClick by rememberUpdatedState(onPrimaryClick)
 
     val effectiveBadgeMode = providerBadgeDisplayMode
         ?: AppearanceConfig.providerBadgeDisplayMode.collectAsState().value
@@ -166,7 +168,7 @@ fun WatchHistoryCard(
                                         onPlayClick = currentOnPlayClick,
                                     )
                                 } else if (event.button == PointerButton.Primary) {
-                                    currentOnClick()
+                                    (currentOnPrimaryClick ?: currentOnClick).invoke()
                                 }
                             }
                         }
@@ -402,6 +404,7 @@ fun WatchHistoryCardDetailed(
     onRemove: () -> Unit,
     onClick: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
+    onPrimaryClick: (() -> Unit)? = null,
 ) {
     val style = LocalPosterCardStyle.current
     val posterHoverGlowEnabled = style.hoverGlowEnabled
@@ -446,6 +449,7 @@ fun WatchHistoryCardDetailed(
     val currentOnRemove by rememberUpdatedState(onRemove)
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPlayClick by rememberUpdatedState(onPlayClick)
+    val currentOnPrimaryClick by rememberUpdatedState(onPrimaryClick)
 
     val effectiveAutoClean = autoCleanTitles
         ?: CardMetadataConfig.autoCleanTitles.collectAsState().value
@@ -504,7 +508,7 @@ fun WatchHistoryCardDetailed(
                                         onPlayClick = currentOnPlayClick,
                                     )
                                 } else if (event.button == PointerButton.Primary) {
-                                    currentOnClick()
+                                    (currentOnPrimaryClick ?: currentOnClick).invoke()
                                 }
                             }
                         }

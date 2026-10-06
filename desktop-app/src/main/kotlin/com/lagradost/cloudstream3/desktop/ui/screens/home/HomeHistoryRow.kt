@@ -39,6 +39,7 @@ fun HomeHistoryRow(
     onViewAllClick: () -> Unit,
     onItemClick: (MainAPI, WatchHistory) -> Unit,
     onPlayClick: ((MainAPI, WatchHistory) -> Unit)? = null,
+    onPrimaryItemClick: ((MainAPI, WatchHistory) -> Unit)? = null,
 ) {
     var retainedHistory by remember { mutableStateOf(historyList) }
     LaunchedEffect(historyList) {
@@ -98,6 +99,7 @@ fun HomeHistoryRow(
                         null
                     } else {
                         map[history.apiName]
+                            ?: com.lagradost.cloudstream3.APIHolder.getApiFromNameNull(history.apiName)
                     }
                 }
             }
@@ -131,6 +133,13 @@ fun HomeHistoryRow(
                 items(currentList.size, key = { index -> currentList[index].parentId }) { index ->
                     val history = currentList[index]
                     val provider = providerMap[history.parentId]
+                    val onPrimaryCardClick: () -> Unit = {
+                        if (provider != null) {
+                            (onPrimaryItemClick ?: onItemClick).invoke(provider, history)
+                        } else {
+                            com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
+                        }
+                    }
 
                     when (continueWatchingStyle) {
                         com.lagradost.cloudstream3.desktop.ui.theme.ContinueWatchingStyle.PREMIUM -> {
@@ -151,6 +160,7 @@ fun HomeHistoryRow(
                                         com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
+                                onPrimaryClick = onPrimaryCardClick,
                                 onPlayClick = {
                                     if (provider != null) {
                                         if (onPlayClick != null) {
@@ -181,6 +191,7 @@ fun HomeHistoryRow(
                                         com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
+                                onPrimaryClick = onPrimaryCardClick,
                                 onPlayClick = {
                                     if (provider != null) {
                                         if (onPlayClick != null) {
@@ -212,6 +223,7 @@ fun HomeHistoryRow(
                                         com.lagradost.cloudstream3.desktop.ui.GlobalMediaLauncher.playNetworkStreamHistory(history)
                                     }
                                 },
+                                onPrimaryClick = onPrimaryCardClick,
                                 onPlayClick = {
                                     if (provider != null) {
                                         if (onPlayClick != null) {

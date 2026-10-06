@@ -30,6 +30,7 @@ fun HomeCategorySection(
     onPrefetchHeroItem: (MainAPI?, SearchResponse) -> Unit,
     onHeroBackgroundChanged: (String?) -> Unit,
     outerPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    beforeHeroContent: @Composable () -> Unit = {},
     afterHeroContent: @Composable () -> Unit = {},
     isHistoryVisible: Boolean = false,
     onViewAll: (MainAPI, com.lagradost.cloudstream3.MainPageData, String, List<SearchResponse>, Boolean) -> Unit,
@@ -64,7 +65,8 @@ fun HomeCategorySection(
     ) {
         if (isLoading) {
             if (isFirstPage) {
-                HomeHeroCarouselPlaceholder()
+                beforeHeroContent()
+                if (heroEnabled) HomeHeroCarouselPlaceholder()
                 afterHeroContent()
             } else {
                 CategoryRowPlaceholder(
@@ -78,6 +80,8 @@ fun HomeCategorySection(
                 val title = section.name.takeIf { it.isNotBlank() } ?: pageData.name
                 !isHiddenHomeCatalogTitle(title)
             }
+
+            if (isFirstPage) beforeHeroContent()
 
             if (visibleSections.isNotEmpty()) {
                 visibleSections.forEachIndexed { sectionIndex, section ->

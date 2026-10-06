@@ -585,12 +585,14 @@ fun ComposeNativeWebPlayer(
                             playerState?.seekLive()
                         }
                         is PlayerInboundEvent.TogglePlay -> {
-                            val isPaused = playerState?.isPaused?.value ?: false
-                            com.lagradost.common.logging.AppLogger.i("BaseMpvPlayer: Received togglePlay event. isPaused=$isPaused")
-                            if (isPaused) {
-                                playerState?.play()
-                            } else {
-                                playerState?.pause()
+                            playerState?.let { state ->
+                                val isPaused = state.isPaused.value
+                                com.lagradost.common.logging.AppLogger.i("BaseMpvPlayer: Received togglePlay event. isPaused=$isPaused")
+                                if (isPaused) {
+                                    state.play()
+                                } else {
+                                    state.pause()
+                                }
                             }
                         }
                         is PlayerInboundEvent.Play -> {

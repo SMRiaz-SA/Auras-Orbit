@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.ui.screens.details
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.desktop.utils.KeyedMutex
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -68,21 +69,16 @@ object EnrichedDetailsCache {
 }
 
 object DetailsRepository {
-    private val inflightMutexes = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+    private val inflightMutexes = KeyedMutex<String>()
 
     suspend fun fetchRaw(provider: com.lagradost.cloudstream3.MainAPI, url: String, fallbackName: String? = null): LoadResponse? {
         DetailsCache.get(url)?.let { return it }
 
-        val mutex = inflightMutexes.getOrPut(url) { kotlinx.coroutines.sync.Mutex() }
-        mutex.lock()
-        try {
+        return inflightMutexes.withLock(url) {
             // Check cache again after acquiring lock
-            DetailsCache.get(url)?.let { return it }
+            DetailsCache.get(url)?.let { return@withLock it }
 
-            return doFetchRaw(provider, url, fallbackName)
-        } finally {
-            mutex.unlock()
-            inflightMutexes.remove(url, mutex)
+            doFetchRaw(provider, url, fallbackName)
         }
     }
 

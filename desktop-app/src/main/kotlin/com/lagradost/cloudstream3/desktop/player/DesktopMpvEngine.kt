@@ -355,7 +355,7 @@ class DesktopMpvEngine(
                                             val isPremature = lastDur > 0 && lastPos < lastDur * 0.85 && hasExplicitError
                                             if (isPremature) {
                                                 AppLogger.w("DesktopMpvEngine", "Premature EOF at ${lastPos}s of ${lastDur}s: $lastStreamErrorReason")
-                                                onPlaybackError(lastStreamErrorReason ?: "Playback interrupted")
+                                                onPlaybackError(lastStreamErrorReason)
                                             } else if (!hasFiredFinished) {
                                                 hasFiredFinished = true
                                                 AppLogger.i("DesktopMpvEngine", "Stream reached genuine EOF.")
@@ -668,7 +668,7 @@ class DesktopMpvEngine(
 
             subtitles.forEach { sub ->
                 if (sub.url.isNotBlank()) {
-                    val subCommand = "sub-add \"${sub.url}\" auto \"${sub.lang ?: ""}\""
+                    val subCommand = "sub-add \"${sub.url}\" auto \"${sub.lang}\""
                     executeCommand(subCommand)
                 }
             }

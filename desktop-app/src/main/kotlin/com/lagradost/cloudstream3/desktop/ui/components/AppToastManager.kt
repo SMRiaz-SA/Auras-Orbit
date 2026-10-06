@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.ui.components
 
 import com.lagradost.cloudstream3.desktop.utils.appScope
+import com.lagradost.common.collections.BoundedLruCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +31,7 @@ object AppToastManager {
     private val _toasts = MutableStateFlow<List<ToastMessage>>(emptyList())
     val toasts: StateFlow<List<ToastMessage>> = _toasts.asStateFlow()
 
-    private val lastEmittedMessages = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lastEmittedMessages = BoundedLruCache<String, Long>(256)
     private const val DEBOUNCE_WINDOW_MS = 2500L
 
     fun showToast(
@@ -40,11 +41,18 @@ object AppToastManager {
     ) {
         if (text.isBlank()) return
         val now = System.currentTimeMillis()
-        val lastTime = lastEmittedMessages[text] ?: 0L
-        if (now - lastTime < DEBOUNCE_WINDOW_MS) {
+        val shouldEmit = synchronized(lastEmittedMessages) {
+            val lastTime = lastEmittedMessages[text] ?: 0L
+            if (now - lastTime < DEBOUNCE_WINDOW_MS) {
+                false
+            } else {
+                lastEmittedMessages[text] = now
+                true
+            }
+        }
+        if (!shouldEmit) {
             return // Suppress spam of identical messages within window
         }
-        lastEmittedMessages[text] = now
 
         val id = nextId.getAndIncrement()
         val message = ToastMessage(id = id, text = text, type = type, durationMs = durationMs)

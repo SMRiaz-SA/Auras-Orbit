@@ -10,7 +10,9 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.net.readBoundedBytes
 import com.lagradost.common.storage.DesktopDataStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.InputStream
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -29,6 +32,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 object StremioAddonManager {
     private const val TAG = "StremioAddonManager"
     private const val PREF_INSTALLED_ADDONS = "cs_desktop_stremio_installed_addons"
+    private const val MAX_ADDON_RESPONSE_BYTES = 8 * 1024 * 1024
 
     private val mapper = jacksonObjectMapper()
 
@@ -87,7 +91,8 @@ object StremioAddonManager {
 
         try {
             AppLogger.i(TAG, "Fetching addon manifest from $normalizedUrl...")
-            val responseText = app.get(normalizedUrl, timeout = 8000L).text
+            val response = app.get(normalizedUrl, timeout = 8000L)
+            val responseText = readBoundedResponseText(response.body.byteStream())
             val manifest = StremioManifestParser.parse(normalizedUrl, responseText)
 
             val newAddon = ManagedStremioAddon(
@@ -118,6 +123,8 @@ object StremioAddonManager {
 
             AppLogger.i(TAG, "Successfully installed addon: ${newAddon.name} (v${newAddon.version})")
             Result.success(newAddon)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(TAG, "Failed to fetch/parse manifest from $normalizedUrl: ${e.message}", e)
             Result.failure(e)
@@ -155,7 +162,8 @@ object StremioAddonManager {
         appScope.launch(Dispatchers.IO) {
             try {
                 val normalizedUrl = StremioTransport.normalizeManifestUrl(manifestUrl)
-                val responseText = app.get(normalizedUrl, timeout = 6000L).text
+                val response = app.get(normalizedUrl, timeout = 6000L)
+                val responseText = readBoundedResponseText(response.body.byteStream())
                 val manifest = StremioManifestParser.parse(normalizedUrl, responseText)
 
                 val updated = _addons.value.map { addon ->
@@ -186,6 +194,8 @@ object StremioAddonManager {
                 }
                 _addons.value = updated
                 saveAddons()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.e(TAG, "Failed to refresh addon $manifestUrl: ${e.message}", e)
             }
@@ -284,7 +294,8 @@ object StremioAddonManager {
                             id = requestVideoId,
                         )
                         AppLogger.d(TAG, "Querying stream addon '${addon.name}': $streamUrl")
-                        val responseText = app.get(streamUrl, timeout = 4500L).text
+                        val response = app.get(streamUrl, timeout = 4500L)
+                        val responseText = readBoundedResponseText(response.body.byteStream())
                         val parsed = mapper.readValue(responseText, StremioStreamResponse::class.java)
                         val streams = parsed.streams ?: return@withTimeoutOrNull
 
@@ -311,7 +322,7 @@ object StremioAddonManager {
                             }
 
                             if (playable is StremioPlayableStream.External) {
-                                runCatching {
+                                try {
                                     val resolved = loadExtractor(
                                         url = playable.url,
                                         subtitleCallback = {},
@@ -320,7 +331,9 @@ object StremioAddonManager {
                                     if (!resolved) {
                                         AppLogger.d(TAG, "No CloudStream extractor matched external URL from '${addon.name}'")
                                     }
-                                }.onFailure { e ->
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
                                     AppLogger.d(TAG, "No CloudStream extractor resolved external stream URL: ${e.message}")
                                 }
                                 continue
@@ -373,6 +386,8 @@ object StremioAddonManager {
                             }
                             onLink(extractorLink)
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         AppLogger.w(TAG, "Stream query failed for '${addon.name}': ${e.message}")
                     }
@@ -440,7 +455,8 @@ object StremioAddonManager {
                         id = requestVideoId,
                     )
                     AppLogger.d(TAG, "Querying subtitle addon '${addon.name}': $subUrl")
-                    val responseText = app.get(subUrl, timeout = 6000L).text
+                    val response = app.get(subUrl, timeout = 6000L)
+                    val responseText = readBoundedResponseText(response.body.byteStream())
                     val parsed = mapper.readValue(responseText, StremioSubtitleResponse::class.java)
                     val items = parsed.subtitles ?: return@async emptyList()
 
@@ -481,6 +497,8 @@ object StremioAddonManager {
                         )
                     }
                     addonEntities
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     AppLogger.w(TAG, "Subtitle query failed for '${addon.name}': ${e.message}")
                     emptyList()
@@ -501,5 +519,9 @@ object StremioAddonManager {
             ?.firstNotNullOfOrNull { meta -> meta.id?.takeIf { it.startsWith("tt", ignoreCase = true) } }
         if (id != null) AppLogger.d(TAG, "Resolved '$query' -> $id via Stremio catalog search")
         return id
+    }
+
+    private fun readBoundedResponseText(input: InputStream): String = input.use { stream ->
+        stream.readBoundedBytes(MAX_ADDON_RESPONSE_BYTES).toString(Charsets.UTF_8)
     }
 }

@@ -275,7 +275,8 @@ object TmdbEnrichmentService {
                         val ratingsAppend = if (isMovie) ",release_dates" else ",content_ratings"
                         val tmdbLang = com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.tmdbLanguage.value.ifBlank { "en-US" }
                         val tmdbImgLang = com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.tmdbImageLanguage.value.ifBlank { "en,en-US,null" }
-                        val tmdbUrl = "https://api.themoviedb.org/3/$typeStr/$matchId?api_key=$TMDB_API_KEY&append_to_response=images,credits,recommendations,translations,videos,reviews$ratingsAppend$seasonsAppend&language=$tmdbLang&include_image_language=$tmdbImgLang"
+                        val tmdbVideoLanguages = listOf(tmdbLang.substringBefore('-').lowercase(), "en", "null").distinct().joinToString(",")
+                        val tmdbUrl = "https://api.themoviedb.org/3/$typeStr/$matchId?api_key=$TMDB_API_KEY&append_to_response=images,credits,recommendations,translations,videos,reviews$ratingsAppend$seasonsAppend&language=$tmdbLang&include_image_language=$tmdbImgLang&include_video_language=$tmdbVideoLanguages"
 
                         val tmdbData = com.lagradost.cloudstream3.app.get(tmdbUrl).parsedSafe<com.fasterxml.jackson.databind.JsonNode>()
                         if (tmdbData != null) {
@@ -736,11 +737,12 @@ object TmdbEnrichmentService {
                                 videosNode.forEach { v ->
                                     val vId = v.get("id")?.asText() ?: return@forEach
                                     val vKey = v.get("key")?.asText()?.takeIf { it.isNotBlank() && it != "null" } ?: return@forEach
-                                    val vSite = v.get("site")?.asText() ?: "YouTube"
+                                    val vSite = v.get("site")?.asText()?.takeIf { it.isNotBlank() && it != "null" } ?: return@forEach
                                     val vName = v.get("name")?.asText() ?: "Official Trailer"
                                     val vOfficial = v.get("official")?.asBoolean() ?: false
                                     val vPublished = v.get("published_at")?.asText()
                                     val vType = v.get("type")?.asText()?.takeIf { it.isNotBlank() } ?: "Trailer"
+                                    val vLanguage = v.get("iso_639_1")?.asText()?.takeIf { it.isNotBlank() && it != "null" }
 
                                     val vUrl = if (vSite.equals("YouTube", ignoreCase = true)) {
                                         "https://www.youtube.com/watch?v=$vKey"
@@ -764,21 +766,16 @@ object TmdbEnrichmentService {
                                                 isOfficial = vOfficial,
                                                 publishedAt = vPublished,
                                                 type = vType,
+                                                languageCode = vLanguage,
+                                                source = "tmdb",
                                             ),
                                         )
                                     }
                                 }
                                 if (parsedTrailers.isNotEmpty()) {
                                     val maxLimit = com.lagradost.cloudstream3.desktop.metadata.MetadataConfig.maxTrailers.value.coerceIn(3, 50)
-                                    val sortedTrailers = parsedTrailers
-                                        .distinctBy { it.rawKey }
-                                        .distinctBy { it.name.lowercase().trim() }
-                                        .sortedWith(
-                                            compareByDescending<com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerData> { it.isOfficial }
-                                                .thenByDescending { it.type.equals("Trailer", ignoreCase = true) }
-                                                .thenByDescending { it.type.equals("Teaser", ignoreCase = true) },
-                                        )
-                                        .take(maxLimit)
+                                    val sortedTrailers = com.lagradost.cloudstream3.desktop.ui.screens.details.contract.TrailerUtils
+                                        .mergeAndRank(parsedTrailers, tmdbLang, maxLimit)
                                     onTrailersLoaded(sortedTrailers)
                                 }
                             }

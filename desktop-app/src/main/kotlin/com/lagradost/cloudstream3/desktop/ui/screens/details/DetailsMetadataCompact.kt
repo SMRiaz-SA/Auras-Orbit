@@ -55,6 +55,7 @@ internal fun DetailsMetadataCompact(
     val allBookmarks = uiState?.bookmarks ?: emptyMap()
     val currentBookmark = allBookmarks[bookmarkId]
     var isEditingStatus by remember { mutableStateOf(false) }
+    var isEditingLists by remember { mutableStateOf(false) }
 
     val setWatchType: (DesktopWatchType) -> Unit = { type ->
         val newBookmark = DesktopBookmark(
@@ -471,6 +472,13 @@ internal fun DetailsMetadataCompact(
                                 )
                             }
                         }
+                        TextButton(
+                            onClick = {
+                                isEditingStatus = false
+                                isEditingLists = true
+                            },
+                            modifier = Modifier.align(Alignment.End),
+                        ) { Text("Add to custom lists…") }
                     }
                 }
             },
@@ -481,5 +489,22 @@ internal fun DetailsMetadataCompact(
                 }
             },
         )
+
+        if (isEditingLists && currentBookmark != null) {
+            val includedListIds = uiState?.customListItems.orEmpty()
+                .asSequence()
+                .filter { it.bookmarkId == currentBookmark.id }
+                .map { it.listId }
+                .toSet()
+            CustomListAssignmentDialog(
+                bookmark = currentBookmark,
+                lists = uiState?.customLists.orEmpty(),
+                selectedListIds = includedListIds,
+                onToggle = { listId, included ->
+                    onEvent(DetailsUiEvent.OnSetBookmarkInCustomList(listId, currentBookmark.id, included))
+                },
+                onDismiss = { isEditingLists = false },
+            )
+        }
     }
 }

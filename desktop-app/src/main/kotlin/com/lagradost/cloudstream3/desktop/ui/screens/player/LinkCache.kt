@@ -2,7 +2,7 @@ package com.lagradost.cloudstream3.desktop.ui.screens.player
 
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import java.util.concurrent.ConcurrentHashMap
+import java.util.LinkedHashMap
 
 object LinkCache {
     data class CachedLinks(
@@ -11,10 +11,14 @@ object LinkCache {
         val timestamp: Long,
     )
 
-    private val cache = ConcurrentHashMap<String, CachedLinks>()
     private const val CACHE_DURATION_MS = 5 * 60 * 1000L // 5 minutes
     private const val MAX_ENTRIES = 20
+    private val cache = object : LinkedHashMap<String, CachedLinks>(MAX_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedLinks>?): Boolean =
+            size > MAX_ENTRIES
+    }
 
+    @Synchronized
     fun get(episodeId: String): CachedLinks? {
         val entry = cache[episodeId] ?: return null
         if (System.currentTimeMillis() - entry.timestamp > CACHE_DURATION_MS) {
@@ -24,29 +28,21 @@ object LinkCache {
         return entry
     }
 
+    @Synchronized
     fun remove(episodeId: String) {
         cache.remove(episodeId)
     }
 
+    @Synchronized
     fun clearAll() {
         cache.clear()
     }
 
+    @Synchronized
     fun set(episodeId: String, links: List<ExtractorLink>, subtitles: List<SubtitleFile>) {
         val now = System.currentTimeMillis()
 
-        // 1. Prune all expired entries
         cache.entries.removeIf { now - it.value.timestamp > CACHE_DURATION_MS }
-
-        // 2. Enforce maximum capacity bound (evict oldest)
-        if (cache.size >= MAX_ENTRIES) {
-            val oldestKey = cache.minByOrNull { it.value.timestamp }?.key
-            if (oldestKey != null) {
-                cache.remove(oldestKey)
-            }
-        }
-
-        // 3. Store new entry
         cache[episodeId] = CachedLinks(
             links = links,
             subtitles = subtitles,

@@ -75,13 +75,14 @@ fun main() {
                 return numRegex.find(json)?.groupValues?.getOrNull(1) ?: ""
             }
 
-            override fun onPlayerEvent(eventJson: String, value: String) {
-                val type = extractJsonString(value, "type")
+            override fun onPlayerEvent(type: String, value: String) {
+                if (type != "message") return
+                val eventType = extractJsonString(value, "type")
                 val arg = extractJsonValue(value, "value")
 
                 val handle = mpvHandle
                 if (handle != null) {
-                    when (type) {
+                    when (eventType) {
                         "togglePlay" -> {
                             val pauseStr = MpvLibrary.getPropertyString(handle, "pause") ?: "yes"
                             MpvLibrary.INSTANCE.mpv_set_property_string(handle, "pause", if (pauseStr == "yes") "no" else "yes")
@@ -219,17 +220,18 @@ fun main() {
         println("Setting jna.library.path to: ${mpvDir.absolutePath} (exists=${mpvDir.exists()})")
         System.setProperty("jna.library.path", mpvDir.absolutePath)
         val lib = MpvLibrary.INSTANCE
-        mpvHandle = lib.mpv_create()
-        if (mpvHandle != null) {
-            lib.mpv_set_option_string(mpvHandle!!, "wid", containerHwnd.toString())
-            lib.mpv_set_option_string(mpvHandle!!, "vo", "gpu-next")
-            lib.mpv_set_option_string(mpvHandle!!, "gpu-api", "d3d11")
-            lib.mpv_set_option_string(mpvHandle!!, "hwdec", "auto")
-            lib.mpv_set_option_string(mpvHandle!!, "keep-open", "yes")
-            lib.mpv_set_option_string(mpvHandle!!, "pause", "no")
-            lib.mpv_set_option_string(mpvHandle!!, "loop-file", "inf")
-            lib.mpv_initialize(mpvHandle!!)
-            lib.mpv_command_string(mpvHandle!!, "loadfile \"https://media.w3.org/2010/05/sintel/trailer.mp4\"")
+        val handle = lib.mpv_create()
+        mpvHandle = handle
+        if (handle != null) {
+            lib.mpv_set_option_string(handle, "wid", containerHwnd.toString())
+            lib.mpv_set_option_string(handle, "vo", "gpu-next")
+            lib.mpv_set_option_string(handle, "gpu-api", "d3d11")
+            lib.mpv_set_option_string(handle, "hwdec", "auto")
+            lib.mpv_set_option_string(handle, "keep-open", "yes")
+            lib.mpv_set_option_string(handle, "pause", "no")
+            lib.mpv_set_option_string(handle, "loop-file", "inf")
+            lib.mpv_initialize(handle)
+            lib.mpv_command_string(handle, "loadfile \"https://media.w3.org/2010/05/sintel/trailer.mp4\"")
             println("MPV initialized and loading Sintel trailer!")
         } else {
             println("Failed to initialize MPV.")

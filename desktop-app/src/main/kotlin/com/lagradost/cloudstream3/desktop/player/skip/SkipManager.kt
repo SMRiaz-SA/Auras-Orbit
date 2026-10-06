@@ -2,14 +2,15 @@ package com.lagradost.cloudstream3.desktop.player.skip
 
 import com.lagradost.cloudstream3.desktop.player.PlayerConfig
 import com.lagradost.cloudstream3.desktop.ui.screens.player.PlayerState
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.storage.DesktopDataStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.concurrent.ConcurrentHashMap
 
 object SkipManager {
 
-    private val skipCache = ConcurrentHashMap<String, List<SkipInterval>>()
+    private val skipCache = BoundedLruCache<String, List<SkipInterval>>(256)
 
     private val providers: List<ISkipProvider> = listOf(
         AniSkipProvider,
@@ -45,6 +46,8 @@ object SkipManager {
                 com.lagradost.common.logging.AppLogger.i("SkipManager", "Loaded ${aniSkipResults.size} intervals from AniSkip")
                 return@withContext intervals
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             com.lagradost.common.logging.AppLogger.i("SkipManager", "AniSkip lookup error: ${e.message}")
         }
@@ -58,6 +61,8 @@ object SkipManager {
                 com.lagradost.common.logging.AppLogger.i("SkipManager", "Loaded ${introDbResults.size} intervals from IntroDB")
                 return@withContext intervals
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             com.lagradost.common.logging.AppLogger.i("SkipManager", "IntroDB lookup error: ${e.message}")
         }

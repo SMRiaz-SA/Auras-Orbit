@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -30,7 +32,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +55,12 @@ fun ExploreTorrentSearchScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val theme = LocalDesktopTheme.current
+    val canSubmitSearch = !state.isSearchingTorrents && state.torrentSearchQuery.isNotBlank()
+    val submitSearch = {
+        if (canSubmitSearch) {
+            viewModel.onEvent(ExploreUiEvent.SearchTorrents(state.torrentSearchQuery))
+        }
+    }
 
     androidx.compose.foundation.layout.Box(
         modifier = Modifier.fillMaxSize().padding(horizontal = 34.dp, vertical = 24.dp),
@@ -62,7 +76,11 @@ fun ExploreTorrentSearchScreen(
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Torrent Search", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = theme.TextPrimary)
-                    Text("Search an online index; Orbit handles playback.", fontSize = 12.sp, color = theme.TextMuted)
+                    Text(
+                        "Search Magnetz; the title you enter is sent to its index. Orbit handles playback.",
+                        fontSize = 12.sp,
+                        color = theme.TextMuted,
+                    )
                 }
             }
 
@@ -74,13 +92,24 @@ fun ExploreTorrentSearchScreen(
                 OutlinedTextField(
                     value = state.torrentSearchQuery,
                     onValueChange = { viewModel.onEvent(ExploreUiEvent.UpdateTorrentSearchQuery(it)) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onPreviewKeyEvent { event ->
+                            if (event.key == Key.Enter && event.type == KeyEventType.KeyDown) {
+                                submitSearch()
+                                true
+                            } else {
+                                false
+                            }
+                        },
                     singleLine = true,
                     placeholder = { Text("Movie or show title") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
                 )
                 Button(
-                    onClick = { viewModel.onEvent(ExploreUiEvent.SearchTorrents(state.torrentSearchQuery)) },
-                    enabled = !state.isSearchingTorrents && state.torrentSearchQuery.isNotBlank(),
+                    onClick = submitSearch,
+                    enabled = canSubmitSearch,
                     modifier = Modifier.height(54.dp),
                 ) {
                     Text("Search")

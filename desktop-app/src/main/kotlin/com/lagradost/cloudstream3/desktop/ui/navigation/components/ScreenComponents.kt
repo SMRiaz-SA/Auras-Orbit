@@ -129,6 +129,8 @@ class DetailsComponent(
                 preloadedBg = config.preloadedBg,
                 initialSeason = config.targetSeason,
                 targetEpisodeId = config.targetEpisodeId,
+                targetEpisode = config.targetEpisode,
+                playNextEpisode = config.playNextEpisode,
             )
         } else {
             // Dummy or throw, but UI handles api == null
@@ -139,6 +141,8 @@ class DetailsComponent(
                 url = config.url,
                 initialSeason = config.targetSeason,
                 targetEpisodeId = config.targetEpisodeId,
+                targetEpisode = config.targetEpisode,
+                playNextEpisode = config.playNextEpisode,
             )
         }
     }.apply {

@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.actions.VideoClickAction
 import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newSubtitleFile
 import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.utils.DrmExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorApi
@@ -15,6 +16,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.PlayListItem
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newDrmExtractorLink
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.common.storage.PluginSettingsSchemaRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -151,19 +153,18 @@ class WorkerFixturePlugin : Plugin() {
                 )
             }
             if (data != "stream") return false
-            @Suppress("DEPRECATION")
             callback(
-                ExtractorLink(
+                newExtractorLink(
                     source = "Worker Fixture",
                     name = "Fixture stream",
                     url = "$mainUrl/video.mp4",
-                    referer = "",
-                    quality = 1080,
                     type = ExtractorLinkType.VIDEO,
-                ),
+                ) {
+                    referer = ""
+                    quality = 1080
+                },
             )
-            @Suppress("DEPRECATION")
-            subtitleCallback(SubtitleFile("English", "$mainUrl/subtitles.vtt").apply { headers = mapOf("X-Fixture" to "subtitle") })
+            subtitleCallback(newSubtitleFile("English", "$mainUrl/subtitles.vtt") { headers = mapOf("X-Fixture" to "subtitle") })
             if (isCasting) {
                 while (true) {
                     // The host must receive callback events while the child is still executing.
@@ -179,14 +180,15 @@ class WorkerFixturePlugin : Plugin() {
         override val requiresReferer = false
 
         override suspend fun getUrl(url: String, referer: String?): List<ExtractorLink> = listOf(
-            ExtractorLink(
+            newExtractorLink(
                 source = name,
                 name = "Remote extractor result",
                 url = "$url/video.mp4",
-                referer = referer.orEmpty(),
-                quality = 720,
                 type = ExtractorLinkType.VIDEO,
-            ),
+            ) {
+                this.referer = referer.orEmpty()
+                quality = 720
+            },
         )
     }
 }
@@ -202,14 +204,15 @@ class WorkerCrossExtractorPlugin : Plugin() {
         override val requiresReferer = true
 
         override suspend fun getUrl(url: String, referer: String?): List<ExtractorLink> = listOf(
-            ExtractorLink(
+            newExtractorLink(
                 source = name,
                 name = "Cross-worker stream",
                 url = "$url/resolved.m3u8",
-                referer = referer.orEmpty(),
-                quality = 1080,
                 type = ExtractorLinkType.M3U8,
-            ),
+            ) {
+                this.referer = referer.orEmpty()
+                quality = 1080
+            },
         )
 
         override suspend fun getUrl(
@@ -219,7 +222,7 @@ class WorkerCrossExtractorPlugin : Plugin() {
             callback: (ExtractorLink) -> Unit,
         ) {
             callback(getUrl(url, referer).single())
-            subtitleCallback(SubtitleFile("Cross Worker", "$url/subtitles.vtt"))
+            subtitleCallback(newSubtitleFile("Cross Worker", "$url/subtitles.vtt"))
         }
     }
 }

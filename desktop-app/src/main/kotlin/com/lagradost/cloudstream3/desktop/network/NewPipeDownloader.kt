@@ -42,7 +42,7 @@ class NewPipeDownloader private constructor(builder: OkHttpClient.Builder) : Dow
             throw ReCaptchaException("reCaptcha Challenge requested", url)
         }
         val body = response.body
-        val responseBodyToReturn: String = body?.string() ?: ""
+        val responseBodyToReturn: String = body.string()
         val latestUrl = response.request.url.toString()
         return Response(
             response.code,

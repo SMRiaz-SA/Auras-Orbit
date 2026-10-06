@@ -4,7 +4,10 @@ import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
+import com.lagradost.cloudstream3.desktop.ui.screens.library.transfer.LibraryArchivePreview
 import com.lagradost.common.storage.DesktopBookmark
+import com.lagradost.common.storage.DesktopCustomList
+import com.lagradost.common.storage.DesktopCustomListItem
 import com.lagradost.common.storage.DesktopWatchType
 
 enum class SortOption(val title: String) {
@@ -31,4 +34,10 @@ data class LibraryUiState(
     val orphanRecoveryBookmark: DesktopBookmark? = null,
     val isSearchingMatches: Boolean = false,
     val matchedResults: List<Pair<MainAPI, SearchResponse>> = emptyList(),
+    val importPreview: LibraryArchivePreview? = null,
+    val importTargetProfileName: String? = null,
+    val isTransferring: Boolean = false,
+    val customLists: List<DesktopCustomList> = emptyList(),
+    val customListItems: List<DesktopCustomListItem> = emptyList(),
+    val selectedCustomListId: String? = null,
 ) : UiState

@@ -69,7 +69,7 @@ class SettingsViewModelTest {
         entries.forEach { provider ->
             assertTrue(provider.title.isNotBlank(), "Provider title must be non-blank")
             if (provider.url != null) {
-                assertTrue(provider.url!!.isNotBlank(), "Provider URL when present must be non-blank")
+                assertTrue(provider.url.isNotBlank(), "Provider URL when present must be non-blank")
             }
         }
 

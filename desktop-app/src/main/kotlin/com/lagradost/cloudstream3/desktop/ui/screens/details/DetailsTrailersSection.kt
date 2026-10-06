@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,6 +68,8 @@ fun DetailsTrailersSection(
     trailersExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onTrailerClick: (String) -> Unit,
+    onSearchYouTube: () -> Unit,
+    isResolving: Boolean = false,
     modifier: Modifier = Modifier,
     horizontalPadding: androidx.compose.ui.unit.Dp = 24.dp,
 ) {
@@ -75,8 +78,6 @@ fun DetailsTrailersSection(
             .distinctBy { it.rawKey }
             .distinctBy { it.name.lowercase().trim() }
     }
-    if (cleanTrailers.isEmpty()) return
-
     // Group videos by category
     val categoriesMap = remember(cleanTrailers) {
         val map = linkedMapOf<String, MutableList<TrailerData>>()
@@ -181,57 +182,75 @@ fun DetailsTrailersSection(
             }
         }
 
-        AnimatedVisibility(
-            visible = trailersExpanded,
-            enter = fadeIn(tween(200)) + androidx.compose.animation.expandVertically(tween(200)),
-            exit = fadeOut(tween(200)) + androidx.compose.animation.shrinkVertically(tween(200)),
-        ) {
-            Column {
-                // Category Filter Chips
-                if (categoriesMap.size > 1) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = horizontalPadding)
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Individual category chips
-                        categoriesMap.forEach { (catName, list) ->
-                            CategoryFilterChip(
-                                label = "$catName (${list.size})",
-                                isSelected = selectedCategory == catName,
-                                onClick = { selectedCategory = catName },
-                            )
-                        }
-                        // "All" chip at end
-                        CategoryFilterChip(
-                            label = "All (${cleanTrailers.size})",
-                            isSelected = selectedCategory == "All",
-                            onClick = { selectedCategory = "All" },
-                        )
+        if (cleanTrailers.isEmpty()) {
+            if (trailersExpanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = if (isResolving) "Checking available trailer sources…" else "No verified trailer found for this title yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = onSearchYouTube) {
+                        Text("Search YouTube")
                     }
                 }
-
-                LazyRow(
-                    state = scrollState,
-                    contentPadding = PaddingValues(horizontal = horizontalPadding),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectHorizontalDragGestures { change, dragAmount ->
-                                change.consume()
-                                scrollState.dispatchRawDelta(-dragAmount)
+            }
+        } else {
+            AnimatedVisibility(
+                visible = trailersExpanded,
+                enter = fadeIn(tween(200)) + androidx.compose.animation.expandVertically(tween(200)),
+                exit = fadeOut(tween(200)) + androidx.compose.animation.shrinkVertically(tween(200)),
+            ) {
+                Column {
+                    // Category Filter Chips
+                    if (categoriesMap.size > 1) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = horizontalPadding)
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Individual category chips
+                            categoriesMap.forEach { (catName, list) ->
+                                CategoryFilterChip(
+                                    label = "$catName (${list.size})",
+                                    isSelected = selectedCategory == catName,
+                                    onClick = { selectedCategory = catName },
+                                )
                             }
-                        },
-                ) {
-                    items(displayTrailers, key = { it.id }) { trailer ->
-                        TrailerCard(
-                            trailer = trailer,
-                            onClick = { onTrailerClick(trailer.url) },
-                        )
+                            // "All" chip at end
+                            CategoryFilterChip(
+                                label = "All (${cleanTrailers.size})",
+                                isSelected = selectedCategory == "All",
+                                onClick = { selectedCategory = "All" },
+                            )
+                        }
+                    }
+
+                    LazyRow(
+                        state = scrollState,
+                        contentPadding = PaddingValues(horizontal = horizontalPadding),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectHorizontalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    scrollState.dispatchRawDelta(-dragAmount)
+                                }
+                            },
+                    ) {
+                        items(displayTrailers, key = { it.id }) { trailer ->
+                            TrailerCard(
+                                trailer = trailer,
+                                onClick = { onTrailerClick(trailer.url) },
+                            )
+                        }
                     }
                 }
             }

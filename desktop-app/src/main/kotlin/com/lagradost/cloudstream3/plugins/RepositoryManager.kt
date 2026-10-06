@@ -54,7 +54,7 @@ object RepositoryManager {
             name = repo.name,
             description = repo.description,
             manifestVersion = repo.manifestVersion,
-            pluginLists = repo.pluginLists ?: emptyList(),
+            pluginLists = repo.pluginLists,
         ).also {
             AppLogger.i("RepositoryManager Stub: successfully parsed ${it.name}")
         }

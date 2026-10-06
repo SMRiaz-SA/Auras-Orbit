@@ -1,5 +1,7 @@
 package com.lagradost.cloudstream3.desktop.utils
 
+import java.util.LinkedHashMap
+
 object ImageUtils {
     /**
      * Upgrades mobile-downsampled thumbnail URLs (TMDB, IMDb, Amazon) to crisp, high-resolution desktop poster URLs.
@@ -110,16 +112,23 @@ object ImageUtils {
         return resolved
     }
 
-    private val logoDarknessCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private const val MAX_LOGO_DARKNESS_CACHE_ENTRIES = 512
+    private val logoDarknessCache = LinkedHashMap<String, Boolean>(64, 0.75f, true)
+    private val logoDarknessCacheLock = Any()
 
     fun isDarkLogoCached(url: String?): Boolean? {
         if (url.isNullOrBlank()) return null
-        return logoDarknessCache[url]
+        return synchronized(logoDarknessCacheLock) { logoDarknessCache[url] }
     }
 
     fun cacheDarkLogo(url: String?, isDark: Boolean) {
         if (!url.isNullOrBlank()) {
-            logoDarknessCache[url] = isDark
+            synchronized(logoDarknessCacheLock) {
+                logoDarknessCache[url] = isDark
+                while (logoDarknessCache.size > MAX_LOGO_DARKNESS_CACHE_ENTRIES) {
+                    logoDarknessCache.remove(logoDarknessCache.keys.first())
+                }
+            }
         }
     }
 

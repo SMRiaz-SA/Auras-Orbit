@@ -12,6 +12,7 @@ internal object WatchHistoryCoordinator {
     internal suspend fun saveWithOptionalScreenshot(
         history: WatchHistory,
         captureScreenshot: suspend () -> String?,
+        currentHistory: suspend () -> WatchHistory = { history },
         saveHistory: suspend (WatchHistory) -> Unit,
         onScreenshotFailure: (Exception) -> Unit = {},
     ) {
@@ -25,9 +26,10 @@ internal object WatchHistoryCoordinator {
             onScreenshotFailure(failure)
             null
         }
-        if (screenshotUrl != null && screenshotUrl != history.screenshotUrl) {
-            saveHistory(history.copy(screenshotUrl = screenshotUrl))
-        }
+        // Screenshot capture can take long enough for playback to advance. Read the
+        // position again afterwards so the final write cannot restore the older snapshot.
+        val latestHistory = currentHistory()
+        saveHistory(latestHistory.copy(screenshotUrl = screenshotUrl ?: latestHistory.screenshotUrl))
     }
 
     /**
@@ -48,6 +50,10 @@ internal object WatchHistoryCoordinator {
         val percentage = if (currentDurSec > 0) currentPosSec.toFloat() / currentDurSec else 0f
 
         saveProgress.await(history, forceNotify = forceNotify)
+
+        if (percentage >= 0.90f) {
+            DesktopDataStore.markEpisodeWatchedFromHistory(history)
+        }
 
         if (percentage >= 0.90f && hasNextEpisode && nextEpisode != null) {
             val existingNext = DesktopDataStore.getEpisodeWatched(

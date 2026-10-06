@@ -1,6 +1,6 @@
 package com.lagradost.cloudstream3.desktop.ui.badges
 
-import java.util.concurrent.ConcurrentHashMap
+import com.lagradost.common.collections.BoundedLruCache
 
 data class SanitizedCardMeta(
     val displayTitle: String,
@@ -16,8 +16,8 @@ data class SanitizedCardMeta(
  */
 object CardTitleSanitizer {
 
-    private val cache = ConcurrentHashMap<String, SanitizedCardMeta>()
-    private const val MAX_CACHE_SIZE = 1200
+    private val cache = BoundedLruCache<String, SanitizedCardMeta>(1200)
+    private const val MAX_CACHE_KEY_LENGTH = 1024
 
     private val JUNK_START_REGEX = Regex(
         """(?i)\b(720p|1080p|480p|360p|2160p|4k|uhd|hd(?=\b)|hdtc|hdcam|cam|ts|webrip|web-dl|web(?=\b)|bluray|blu-ray|bdrip|brrip|hdrip|dvdrip|dual.audio|multi.audio|hindi.dubbed|hindi.dub|english.dubbed|korean.dubbed|dubbed(?=\b)|aac|ac3|dts|dd5|eac3|atmos|flac|mp3|esubs|esub|subs|multisub|x264|x265|h264|h\.264|hevc|avc|sdr|hdr|dv|line|clean|org)\b""",
@@ -53,7 +53,9 @@ object CardTitleSanitizer {
 
         // Cache key combining raw title and flags
         val cacheKey = "$rawTitle|$pluginHasSub|$pluginHasDub|$pluginQuality|$autoClean|$autoDetectSubDub|$autoDetectQuality"
-        cache[cacheKey]?.let { return it }
+        if (cacheKey.length <= MAX_CACHE_KEY_LENGTH) {
+            cache[cacheKey]?.let { return it }
+        }
 
         val isDualAudio = DUAL_AUDIO_REGEX.containsMatchIn(rawTitle)
         val hasDubDetected = isDualAudio || DUB_REGEX.containsMatchIn(rawTitle)
@@ -147,9 +149,6 @@ object CardTitleSanitizer {
     }
 
     private fun putCache(key: String, value: SanitizedCardMeta) {
-        if (cache.size > MAX_CACHE_SIZE) {
-            cache.clear()
-        }
-        cache[key] = value
+        if (key.length <= MAX_CACHE_KEY_LENGTH) cache[key] = value
     }
 }

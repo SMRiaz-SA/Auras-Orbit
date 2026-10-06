@@ -1,8 +1,8 @@
 package com.lagradost.cloudstream3.desktop.network
 
+import com.lagradost.common.collections.BoundedLruCache
 import com.lagradost.common.logging.AppLogger
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import java.util.concurrent.ConcurrentHashMap
 
 data class SettledEntry(
     val url: String,
@@ -14,8 +14,10 @@ data class SettledEntry(
 object SettledPageCache {
     private const val TAG = "SettledPageCache"
     private const val TTL_MS = 60_000L // 60 seconds TTL
+    private const val MAX_CACHED_HTML_CHARS = 512 * 1024
 
-    private val cache = ConcurrentHashMap<String, SettledEntry>()
+    private val cache = BoundedLruCache<String, SettledEntry>(16)
+    private val cacheLock = Any()
 
     private fun normalizeUrl(url: String): String {
         val httpUrl = url.trim().toHttpUrlOrNull() ?: return url.trim().trimEnd('/')
@@ -29,6 +31,10 @@ object SettledPageCache {
 
     fun put(url: String, html: String, userAgent: String) {
         if (url.isBlank() || html.isBlank()) return
+        if (html.length > MAX_CACHED_HTML_CHARS) {
+            AppLogger.d("$TAG: Skipping oversized settled page for $url (length=${html.length})")
+            return
+        }
 
         // If the HTML looks like the browser's JSON viewer (<pre>{...}</pre>), do not cache it
         if (html.contains("<pre") && (html.contains("{\"") || html.contains("[{"))) {
@@ -38,8 +44,9 @@ object SettledPageCache {
 
         val normalized = normalizeUrl(url)
         AppLogger.d("$TAG: Caching settled HTML for $normalized (length=${html.length})")
-        cache[normalized] = SettledEntry(url = normalized, html = html, userAgent = userAgent)
-        cleanupExpired()
+        synchronized(cacheLock) {
+            cache[normalized] = SettledEntry(url = normalized, html = html, userAgent = userAgent)
+        }
     }
 
     /**
@@ -49,7 +56,7 @@ object SettledPageCache {
      */
     fun consume(url: String): SettledEntry? {
         val normalized = normalizeUrl(url)
-        val entry = cache.remove(normalized) ?: return null
+        val entry = synchronized(cacheLock) { cache.remove(normalized) } ?: return null
         if (System.currentTimeMillis() - entry.timestamp > TTL_MS) {
             AppLogger.d("$TAG: Cache entry EXPIRED for $normalized during consume")
             return null
@@ -60,14 +67,16 @@ object SettledPageCache {
 
     fun get(url: String): SettledEntry? {
         val normalized = normalizeUrl(url)
-        val entry = cache[normalized] ?: run {
-            AppLogger.d("$TAG: Cache MISS for $url (cached keys=${cache.keys().toList()})")
-            return null
-        }
-
-        if (System.currentTimeMillis() - entry.timestamp > TTL_MS) {
-            AppLogger.d("$TAG: Cache EXPIRED for $normalized")
-            cache.remove(entry.url)
+        val entry = synchronized(cacheLock) {
+            val cached = cache[normalized]
+            if (cached != null && System.currentTimeMillis() - cached.timestamp > TTL_MS) {
+                cache.remove(normalized)
+                null
+            } else {
+                cached
+            }
+        } ?: run {
+            AppLogger.d("$TAG: Cache MISS for $url (cached entries=${cache.size()})")
             return null
         }
         AppLogger.d("$TAG: Cache HIT for $url -> matched ${entry.url} (length=${entry.html.length})")
@@ -75,15 +84,10 @@ object SettledPageCache {
     }
 
     fun remove(url: String) {
-        cache.remove(normalizeUrl(url))
+        synchronized(cacheLock) { cache.remove(normalizeUrl(url)) }
     }
 
     fun clear() {
-        cache.clear()
-    }
-
-    private fun cleanupExpired() {
-        val now = System.currentTimeMillis()
-        cache.entries.removeIf { now - it.value.timestamp > TTL_MS }
+        synchronized(cacheLock) { cache.clear() }
     }
 }

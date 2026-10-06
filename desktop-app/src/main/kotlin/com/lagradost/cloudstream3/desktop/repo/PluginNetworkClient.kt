@@ -11,7 +11,10 @@ import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.net.readBoundedBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.Request
+import java.net.ProtocolException
 
 /**
  * Internal network utility for repository and plugin list fetching.
@@ -19,10 +22,13 @@ import okhttp3.Request
  */
 internal object PluginNetworkClient {
 
-    /** OkHttp client that follows redirects. Used for all content fetches. */
+    private data class RepositoryTransportOrigin(val url: String)
+
+    /** OkHttp client that follows safe redirects. Used for all repository content fetches. */
     internal val redirectClient by lazy {
         val builder = com.lagradost.cloudstream3.app.baseClient.newBuilder()
             .followRedirects(true)
+            .followSslRedirects(false)
             .connectTimeout(java.time.Duration.ofSeconds(4))
             .readTimeout(java.time.Duration.ofSeconds(6))
             .callTimeout(java.time.Duration.ofSeconds(15))
@@ -30,6 +36,8 @@ internal object PluginNetworkClient {
         // RateLimitInterceptor queues 20+ concurrent requests to the same host behind a
         // 500ms/host lock, easily blowing the callTimeout before the request is even sent.
         builder.interceptors().removeAll { it is RateLimitInterceptor || it is AutoRetryInterceptor || it is DevNetworkInterceptor }
+        builder.addInterceptor(repositoryTransportOrigin)
+        builder.addNetworkInterceptor(repositoryTransportPolicy)
         builder.build()
     }
 
@@ -37,11 +45,59 @@ internal object PluginNetworkClient {
     private val noRedirectClient by lazy {
         val builder = com.lagradost.cloudstream3.app.baseClient.newBuilder()
             .followRedirects(false)
+            .followSslRedirects(false)
             .connectTimeout(java.time.Duration.ofSeconds(3))
             .readTimeout(java.time.Duration.ofSeconds(4))
         builder.interceptors().removeAll { it is RateLimitInterceptor || it is AutoRetryInterceptor || it is DevNetworkInterceptor }
+        builder.addInterceptor(repositoryTransportOrigin)
+        builder.addNetworkInterceptor(repositoryTransportPolicy)
         builder.build()
     }
+
+    private val repositoryTransportPolicy = Interceptor { chain ->
+        val request = chain.request()
+        val origin = request.tag(RepositoryTransportOrigin::class.java)?.url ?: request.url.toString()
+        if (!isAllowedRepositoryRequest(request.url.toString(), origin)) {
+            throw ProtocolException("Repository and plugin downloads require HTTPS")
+        }
+        chain.proceed(request)
+    }
+
+    private val repositoryTransportOrigin = Interceptor { chain ->
+        val request = chain.request()
+        val taggedRequest = if (request.tag(RepositoryTransportOrigin::class.java) == null) {
+            request.newBuilder()
+                .tag(RepositoryTransportOrigin::class.java, RepositoryTransportOrigin(request.url.toString()))
+                .build()
+        } else {
+            request
+        }
+        chain.proceed(taggedRequest)
+    }
+
+    /** HTTPS is required for remote repositories; loopback HTTP remains available for local development. */
+    internal fun isAllowedRepositoryUrl(url: String): Boolean {
+        val parsed = url.toHttpUrlOrNull() ?: return false
+        return parsed.scheme == "https" ||
+            (parsed.scheme == "http" && parsed.host in LOOPBACK_HOSTS)
+    }
+
+    /** Loopback repositories are a development exception for direct local requests, never remote redirects. */
+    internal fun isAllowedRepositoryRequest(url: String, originalUrl: String): Boolean {
+        val parsed = url.toHttpUrlOrNull() ?: return false
+        val original = originalUrl.toHttpUrlOrNull() ?: return false
+        val targetsLoopback = parsed.host in LOOPBACK_HOSTS
+        val beganOnLoopback = original.host in LOOPBACK_HOSTS
+        return isAllowedRepositoryUrl(url) && (!targetsLoopback || beganOnLoopback)
+    }
+
+    /** Adds the transport guard to injectable download clients as well as the production clients. */
+    internal fun enforceRepositoryTransport(client: okhttp3.OkHttpClient): okhttp3.OkHttpClient =
+        client.newBuilder()
+            .followSslRedirects(false)
+            .addInterceptor(repositoryTransportOrigin)
+            .addNetworkInterceptor(repositoryTransportPolicy)
+            .build()
 
     /** Shared Jackson mapper — lenient, ignores unknown properties. */
     internal val mapper: ObjectMapper = ObjectMapper()
@@ -58,44 +114,52 @@ internal object PluginNetworkClient {
             val request = Request.Builder().url("https://cutt.ly/$fixedUrl").build()
             noRedirectClient.newCall(request).execute().use { response ->
                 val loc = response.header("Location")
-                if (loc != null && !loc.startsWith("https://cutt.ly/404")) {
-                    return@withContext loc
+                val resolvedLocation = loc?.let { response.request.url.resolve(it)?.toString() }
+                if (resolvedLocation != null &&
+                    !resolvedLocation.startsWith("https://cutt.ly/404") &&
+                    isAllowedRepositoryUrl(resolvedLocation)
+                ) {
+                    return@withContext resolvedLocation
                 }
             }
             return@withContext null
         }
         if (fixedUrl.contains(Regex("^(cloudstreamrepo://)|(https://cs\\.repo/\\??)"))) {
-            return@withContext fixedUrl
+            val expanded = fixedUrl
                 .replace(Regex("^(cloudstreamrepo://)|(https://cs\\.repo/\\??)"), "")
                 .let { if (!it.startsWith("http")) "https://$it" else it }
+            return@withContext expanded.takeIf(::isAllowedRepositoryUrl)
         }
-        if (!fixedUrl.matches(Regex("^https?://.*"))) return@withContext null
+        if (!isAllowedRepositoryUrl(fixedUrl)) return@withContext null
         return@withContext fixedUrl
     }
 
     /**
      * Resolves a relative or absolute URL string against a base URL.
-     * Guarantees a fully qualified HTTPS/HTTP URL.
+     * Guarantees a fully qualified HTTPS URL, except for loopback HTTP used in local development.
      */
     fun resolveUrl(baseUrl: String, relativeOrAbsolute: String): String {
         val trimmed = relativeOrAbsolute.trim()
-        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            return trimmed
+        val resolved = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            try {
+                val baseUri = java.net.URI(baseUrl)
+                baseUri.resolve(trimmed).toString()
+            } catch (_: Exception) {
+                val base = baseUrl.substringBeforeLast('/')
+                "$base/${trimmed.removePrefix("./").removePrefix("/")}"
+            }
         }
-        return try {
-            val baseUri = java.net.URI(baseUrl)
-            baseUri.resolve(trimmed).toString()
-        } catch (_: Exception) {
-            val base = baseUrl.substringBeforeLast('/')
-            "$base/${trimmed.removePrefix("./").removePrefix("/")}"
+        require(isAllowedRepositoryRequest(resolved, baseUrl)) {
+            "Repository and plugin URLs must use HTTPS unless the repository itself is local"
         }
+        return resolved
     }
 
     /** Fetches and parses a [Repository] manifest JSON from [url]. Returns null on failure. */
     suspend fun fetchRepository(url: String): Repository? = withContext(Dispatchers.IO) {
-        val finalUrl = parseRepoUrl(url)
-            ?: url.trim().takeIf { it.startsWith("http") }
-            ?: return@withContext null
+        val finalUrl = parseRepoUrl(url) ?: return@withContext null
         val request = Request.Builder().url(finalUrl).build()
         try {
             redirectClient.newCall(request).execute().use { response ->
@@ -153,6 +217,7 @@ internal object PluginNetworkClient {
 
     /** Null means failure; an empty list is a successful empty catalog. */
     suspend fun fetchPlugins(pluginListUrl: String): List<SitePlugin>? = withContext(Dispatchers.IO) {
+        if (!isAllowedRepositoryUrl(pluginListUrl)) return@withContext null
         try {
             val request = Request.Builder().url(pluginListUrl).build()
             redirectClient.newCall(request).execute().use { response ->
@@ -181,4 +246,6 @@ internal object PluginNetworkClient {
             null
         }
     }
+
+    private val LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1", "::1")
 }
