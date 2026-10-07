@@ -41,6 +41,15 @@ internal object PluginNetworkClient {
         builder.build()
     }
 
+    /** Binary plugin archives need longer transfer timeouts than small repository manifests. */
+    internal val pluginDownloadClient by lazy {
+        redirectClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(15))
+            .readTimeout(java.time.Duration.ofSeconds(60))
+            .callTimeout(java.time.Duration.ofMinutes(5))
+            .build()
+    }
+
     /** OkHttp client that does NOT follow redirects. Used for short-link resolution. */
     private val noRedirectClient by lazy {
         val builder = com.lagradost.cloudstream3.app.baseClient.newBuilder()

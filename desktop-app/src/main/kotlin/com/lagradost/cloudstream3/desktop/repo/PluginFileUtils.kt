@@ -143,7 +143,7 @@ internal object PluginFileUtils {
     suspend fun downloadPlugin(repoName: String, plugin: SitePlugin): File? = withContext(Dispatchers.IO) {
         val destFile = pluginFile(repoName, plugin.internalName, ".jar")
         val alternateUrls = alternatePluginUrls(plugin, DesktopRepositoryManager.getAllPlugins())
-        downloadPlugin(plugin, destFile, (listOf(plugin.url) + alternateUrls).distinct(), PluginNetworkClient.redirectClient)
+        downloadPlugin(plugin, destFile, (listOf(plugin.url) + alternateUrls).distinct(), PluginNetworkClient.pluginDownloadClient)
     }
 
     internal suspend fun downloadPlugin(

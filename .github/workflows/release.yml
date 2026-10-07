@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
 
     steps:
@@ -23,8 +23,9 @@ jobs:
       shell: bash
       run: |
         git fetch origin main
-        if ! git branch -r --contains ${{ github.sha }} | grep -q 'origin/main'; then
-          echo "Release tags must point to a commit on main. Aborting release."
+        main_sha="$(git rev-parse FETCH_HEAD)"
+        if [ "$main_sha" != "$GITHUB_SHA" ]; then
+          echo "Release tags must point to the current main commit. Aborting release."
           exit 1
         fi
 
@@ -43,6 +44,10 @@ jobs:
         $version = $env:GITHUB_REF_NAME.Substring(1)
         if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
           throw "Release tag must contain a numeric version after the v prefix: $env:GITHUB_REF_NAME"
+        }
+        $sourceVersionLine = Get-Content .\gradle.properties | Where-Object { $_ -match '^APP_VERSION=' } | Select-Object -First 1
+        if ($null -eq $sourceVersionLine -or ($sourceVersionLine -split '=', 2)[1].Trim() -ne $version) {
+          throw "Release tag $env:GITHUB_REF_NAME does not match APP_VERSION in gradle.properties."
         }
 
     - name: Fetch and verify pinned MPV runtime and notices
@@ -87,6 +92,31 @@ jobs:
         $expectedVersion = $env:GITHUB_REF_NAME.Substring(1)
         .\.github\scripts\verify-distribution.ps1 -ExpectedVersion $expectedVersion
 
+    - name: Set up JDK 17 for Android
+      uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Build and verify Android APK
+      timeout-minutes: 30
+      shell: pwsh
+      run: |
+        $version = $env:GITHUB_REF_NAME.Substring(1)
+        Push-Location android-reference
+        try {
+          .\gradlew.bat :app:assembleStableDebug "-PAPP_VERSION=$version" --no-daemon --console=plain --stacktrace --max-workers=2
+          if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
+        } finally {
+          Pop-Location
+        }
+
+        $apk = "android-reference\app\build\outputs\apk\stable\debug\app-stable-debug.apk"
+        .\.github\scripts\verify-android-apk.ps1 -ExpectedVersion $version -ApkPath $apk
+        $releaseApk = "desktop-app\build\outputs\Auras-Orbit-Android-$version-debug.apk"
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $releaseApk) | Out-Null
+        Copy-Item -LiteralPath $apk -Destination $releaseApk
+
     - name: Install Inno Setup
       run: choco install innosetup --yes
 
@@ -123,5 +153,6 @@ jobs:
         files: |
           desktop-app/build/outputs/Auras-Orbit-Setup.exe
           desktop-app/build/outputs/Auras-Orbit-Portable-*.zip
+          desktop-app/build/outputs/Auras-Orbit-Android-*-debug.apk
         generate_release_notes: true
         prerelease: true

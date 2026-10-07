@@ -10,6 +10,14 @@ import kotlin.test.assertTrue
 
 class PluginFileUtilsTest {
     @Test
+    fun `plugin archive downloads have transfer timeouts separate from repository requests`() {
+        assertEquals(15_000, PluginNetworkClient.redirectClient.callTimeoutMillis)
+        assertEquals(300_000, PluginNetworkClient.pluginDownloadClient.callTimeoutMillis)
+        assertEquals(15_000, PluginNetworkClient.pluginDownloadClient.connectTimeoutMillis)
+        assertEquals(60_000, PluginNetworkClient.pluginDownloadClient.readTimeoutMillis)
+    }
+
+    @Test
     fun `repository and plugin names cannot escape Extensions`() {
         assertEquals("_", PluginFileUtils.safeDirectoryName(".."))
         val repoDir = PluginFileUtils.repositoryDirectory("..")

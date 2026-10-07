@@ -125,8 +125,9 @@ vega-bridge/t e m p _ c o m p o s e _ n a v 2 . t x t
 # Local Kotlin compiler state
 .kotlin/
 
-# Local-only planning docs and developer metadata
+# Local-only planning/design docs and developer metadata
 *PLAN.md
+*DESIGN*.md
 *_EXECUTION.md
 *_DIRECTION.md
 *_INTEGRATIONS.md

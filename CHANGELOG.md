@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0.24 — 2026-10-07
+
+### Added
+
+- Published the Android beta APK alongside the Windows desktop builds, with both apps using the same source version.
+
+### Fixed
+
+- Gave large plugin archive downloads longer transfer timeouts while retaining HTTPS checks, hash validation, size limits, and archive validation.
+
 ## 0.2.0.23 — 2026-10-06
 
 ### Added
