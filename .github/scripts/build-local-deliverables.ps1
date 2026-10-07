@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 # 1. Snapshot the complete tracked and non-ignored working-tree source.
 # 2. Run formatting, compilation, JVM/native tests, and build the release portable distribution.
 # 3. Compile and verify the versioned Windows installer.
-# 4. Create versioned portable and full-source ZIPs, then verify all deliverables.
+# 4. Build the Android APK, create versioned archives, then verify all deliverables.
 # 5. Print exact paths, sizes, and SHA-256 hashes without publishing a release.
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -20,13 +20,45 @@ if ($null -eq $versionLine) { throw 'APP_VERSION was not found in gradle.propert
 $version = ($versionLine -split '=', 2)[1].Trim()
 if ($version -notmatch '^\d+(?:\.\d+){2,3}$') { throw "Invalid APP_VERSION: $version" }
 
+$androidSdkCandidates = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT)
+if ($env:LOCALAPPDATA) {
+    $androidSdkCandidates += Join-Path $env:LOCALAPPDATA 'Android/Sdk'
+}
+$androidSdk = $androidSdkCandidates |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_ -PathType Container) } |
+    Select-Object -First 1
+if ($null -eq $androidSdk) { throw 'Android SDK was not found. Set ANDROID_HOME or ANDROID_SDK_ROOT.' }
+$androidSdk = (Resolve-Path -LiteralPath $androidSdk).Path
+$env:ANDROID_HOME = $androidSdk
+$env:ANDROID_SDK_ROOT = $androidSdk
+
+$androidJavaCandidates = @($env:JAVA_HOME_17_X64, (Join-Path $repoRoot 'build/tools/temurin-17'))
+if (Test-Path -LiteralPath 'C:\Program Files\Eclipse Adoptium') {
+    $androidJavaCandidates += Get-ChildItem -LiteralPath 'C:\Program Files\Eclipse Adoptium' -Directory -Filter 'jdk-17*' | Select-Object -ExpandProperty FullName
+}
+if ($env:LOCALAPPDATA) {
+    $userTemurin = Join-Path $env:LOCALAPPDATA 'Programs/Eclipse Adoptium'
+    if (Test-Path -LiteralPath $userTemurin) {
+        $androidJavaCandidates += Get-ChildItem -LiteralPath $userTemurin -Directory -Filter 'jdk-17*' | Select-Object -ExpandProperty FullName
+    }
+}
+$androidJavaHome = $androidJavaCandidates |
+    Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'bin/java.exe') -PathType Leaf) -and
+            (Get-Content -Raw -LiteralPath (Join-Path $_ 'release')) -match 'JAVA_VERSION="17\.'
+    } |
+    Select-Object -First 1
+if ($null -eq $androidJavaHome) { throw 'Android APK builds require a JDK 17 installation. Set JAVA_HOME_17_X64.' }
+
 $distribution = Join-Path $repoRoot 'desktop-app/build/compose/binaries/main/app/Auras-Orbit'
 $outputDirectory = Join-Path $repoRoot 'desktop-app/build/outputs'
 $portableZip = Join-Path $outputDirectory "Auras-Orbit-Portable-$version.zip"
 $sourceZip = Join-Path $outputDirectory "Auras-Orbit-Source-$version.zip"
+$androidApk = Join-Path $outputDirectory "Auras-Orbit-Android-$version-debug.apk"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
-foreach ($archive in @($portableZip, $sourceZip)) {
+foreach ($archive in @($portableZip, $sourceZip, $androidApk)) {
     if ((Test-Path -LiteralPath $archive -PathType Leaf) -and -not $ForceArchives) {
         throw "Output already exists; move it aside or rerun with -ForceArchives: $archive"
     }
@@ -117,6 +149,29 @@ allprojects {
     Pop-Location
 }
 
+$androidProject = Join-Path $repoRoot 'android-reference'
+$previousJavaHome = $env:JAVA_HOME
+$env:JAVA_HOME = $androidJavaHome
+Push-Location $androidProject
+try {
+    & .\gradlew.bat ':app:assembleStableDebug' "-PAPP_VERSION=$version" '--no-daemon' '--console=plain' '--stacktrace' '--max-workers=2'
+    if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
+} finally {
+    Pop-Location
+    if ([string]::IsNullOrWhiteSpace($previousJavaHome)) {
+        Remove-Item Env:JAVA_HOME -ErrorAction SilentlyContinue
+    } else {
+        $env:JAVA_HOME = $previousJavaHome
+    }
+}
+
+$builtAndroidApk = Join-Path $androidProject 'app/build/outputs/apk/stable/debug/app-stable-debug.apk'
+& (Join-Path $repoRoot '.github/scripts/verify-android-apk.ps1') -ExpectedVersion $version -ApkPath $builtAndroidApk
+if ($ForceArchives -and (Test-Path -LiteralPath $androidApk -PathType Leaf)) {
+    Remove-Item -LiteralPath $androidApk -Force
+}
+Copy-Item -LiteralPath $builtAndroidApk -Destination $androidApk
+
 $isccCandidates = [System.Collections.Generic.List[string]]::new()
 $isccCandidates.Add((Join-Path $repoRoot 'build/tools/innosetup/install/ISCC.exe'))
 if (${env:ProgramFiles(x86)}) {
@@ -200,6 +255,12 @@ try {
     )) {
         if ($sourceEntries -notcontains $requiredSource) { throw "Source ZIP is missing $requiredSource" }
     }
+    $privateMarkdown = @($sourceEntries | Where-Object {
+        $_ -match '(^|/)[^/]*(?:PLAN|DESIGN|EXECUTION|DIRECTION|INTEGRATIONS)[^/]*\.md$'
+    })
+    if ($privateMarkdown.Count -gt 0) {
+        throw "Source ZIP includes local-only planning/design documents: $($privateMarkdown -join ', ')"
+    }
 } finally {
     $sourceArchiveCheck.Dispose()
 }
@@ -221,7 +282,7 @@ Assert-ZipIntegrity $sourceZip
 Assert-ZipIntegrity $portableZip
 
 Write-Host "Portable directory: $distribution"
-foreach ($artifact in @((Join-Path $outputDirectory 'Auras-Orbit-Setup.exe'), $portableZip, $sourceZip)) {
+foreach ($artifact in @((Join-Path $outputDirectory 'Auras-Orbit-Setup.exe'), $portableZip, $sourceZip, $androidApk)) {
     $file = Get-Item -LiteralPath $artifact
     $hash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash
     Write-Host ("Artifact: {0} | {1:N0} bytes | SHA-256 {2}" -f $file.FullName, $file.Length, $hash)
