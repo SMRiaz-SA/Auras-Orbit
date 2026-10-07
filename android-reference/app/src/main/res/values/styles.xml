@@ -107,7 +107,7 @@
         <item name="chipBackgroundColor">@color/chip_color</item>
         <item name="chipStrokeColor">@color/white_transparent_toggle</item>
         <!--        <item name="chipStrokeColor">@color/transparent</item>-->
-        <item name="chipStrokeWidth">2dp</item>
+        <item name="chipStrokeWidth">1dp</item>
         <item name="textColor">@color/chip_color_text</item>
         <item name="android:textColor">@color/chip_color_text</item>
         <item name="checkedIconTint">@color/chip_color_text</item>
@@ -115,7 +115,7 @@
         <item name="chipIconTint">@color/chip_color_text</item>
         <item name="android:fontFamily">@font/google_sans</item>
         <item name="android:tag">@string/tv_no_focus_tag</item>
-        <item name="chipMinTouchTargetSize">0dp</item>
+        <item name="chipMinTouchTargetSize">48dp</item>
         <item name="checkedIconVisible">false</item>
     </style>
 

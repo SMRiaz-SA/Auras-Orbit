@@ -24,32 +24,74 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="18dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="18dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
+                android:src="@drawable/auras_orbit_mark"
+                app:tint="?attr/colorPrimary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/google_sans"
+                android:letterSpacing="0.1"
+                android:text="@string/title_search"
+                android:textColor="?attr/textColor"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/google_sans"
+                android:text="@string/app_name"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
             app:layout_scrollFlags="scroll|enterAlways">
 
             <ImageView
                 android:id="@+id/voice_search"
-                android:layout_width="25dp"
-                android:layout_height="25dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_gravity="end|center_vertical"
-                android:layout_marginStart="10dp"
+                android:layout_marginStart="4dp"
                 android:background="?selectableItemBackgroundBorderless"
-                android:contentDescription="@string/change_providers_img_des"
+                android:contentDescription="@string/voice_search"
+                android:padding="12dp"
                 android:src="@drawable/ic_mic"
                 app:tint="?attr/textColor" />
 
             <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_margin="10dp"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1"
                 android:background="@drawable/search_background"
                 android:visibility="visible">
 
                 <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="30dp"
+                    android:layout_height="40dp"
                     android:layout_gravity="center_vertical"
-                    android:layout_marginEnd="30dp">
+                    android:layout_marginEnd="48dp">
 
                     <androidx.appcompat.widget.SearchView
                         android:id="@+id/main_search"
@@ -96,17 +138,16 @@
 
                 <ImageView
                     android:id="@+id/search_filter"
-                    android:layout_width="25dp"
-                    android:layout_height="25dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:layout_gravity="end|center_vertical"
-
-                    android:layout_margin="10dp"
                     android:background="?selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/change_providers_img_des"
+                    android:contentDescription="@string/search_provider_text_providers"
                     android:nextFocusLeft="@id/main_search"
                     android:nextFocusRight="@id/main_search"
                     android:nextFocusUp="@id/nav_rail_view"
                     android:nextFocusDown="@id/search_autofit_results"
+                    android:padding="12dp"
                     android:src="@drawable/ic_baseline_tune_24"
                     app:tint="?attr/textColor" />
             </FrameLayout>
@@ -165,7 +206,7 @@
         android:id="@+id/search_suggestions_recycler"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="100dp"
+        android:layout_marginTop="0dp"
         android:background="?attr/primaryGrayBackground"
         android:elevation="8dp"
         android:visibility="gone"

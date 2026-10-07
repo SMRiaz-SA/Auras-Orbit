@@ -13,7 +13,6 @@ import com.lagradost.cloudstream4.compose.StateContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.FileNotFoundException
 
 @Immutable
 data class GithubState(
@@ -22,7 +21,7 @@ data class GithubState(
 
 @Immutable
 sealed class GithubUpdateDialogState {
-    data class Error(val error: Throwable) : GithubUpdateDialogState()
+    data class Error(val error: Throwable, val stage: UpdateFailureStage) : GithubUpdateDialogState()
     data class DownloadProgress(val progress: Long, val total: Long?) : GithubUpdateDialogState()
     object Loading : GithubUpdateDialogState()
     object NoUpdateFound : GithubUpdateDialogState()
@@ -31,6 +30,12 @@ sealed class GithubUpdateDialogState {
         val newSha: String?,
         val oldSha: String?,
     ) : GithubUpdateDialogState()
+}
+
+@Immutable
+enum class UpdateFailureStage {
+    Check,
+    Download,
 }
 
 @Immutable
@@ -52,7 +57,6 @@ sealed class GithubAction {
 
 const val APK_USERNAME = "SMRiaz-SA"
 const val APK_REPOSITORY = "Auras-Orbit"
-const val APK_PRERELEASE = "android-pre-release"
 const val APK_CONTENT_TYPE = "application/vnd.android.package-archive"
 
 interface AppUpdater {
@@ -124,7 +128,6 @@ data class DigestPair(
 class GithubViewModel(
     val remoteUserName: String,
     val remoteRepository: String,
-    val remotePrereleaseTag: String,
     val remoteContentType: String,
     val versionName: String,
     val isPrerelease: Boolean,
@@ -176,7 +179,10 @@ class GithubViewModel(
     }
 
     /** Cancel the old update, and catch possible errors from the block and show as a new state */
-    private suspend fun dispatchUpdate(block: /* @Throws */ suspend () -> Unit) {
+    private suspend fun dispatchUpdate(
+        failureStage: UpdateFailureStage,
+        block: /* @Throws */ suspend () -> Unit,
+    ) {
         updateDispatcher.launch {
             try {
                 block()
@@ -187,40 +193,41 @@ class GithubViewModel(
                 }
                 // Otherwise we display the error
                 updateState {
-                    copy(dialog = dialog?.copy(state = GithubUpdateDialogState.Error(t)))
+                    copy(dialog = dialog?.copy(state = GithubUpdateDialogState.Error(t, failureStage)))
                 }
             }
         }
     }
 
-    private suspend fun installUpdate(url: String, digestPair: String?) = dispatchUpdate {
-        updater.update(
-            settings = settings,
-            url = url,
-            digest = DigestPair.parse(digestPair),
-        ) { progress, total ->
-            updateState {
-                copy(
-                    dialog = dialog?.copy(
-                        state = GithubUpdateDialogState.DownloadProgress(
-                            progress = progress,
-                            total = total
+    private suspend fun installUpdate(url: String, digestPair: String?) =
+        dispatchUpdate(UpdateFailureStage.Download) {
+            updater.update(
+                settings = settings,
+                url = url,
+                digest = DigestPair.parse(digestPair),
+            ) { progress, total ->
+                updateState {
+                    copy(
+                        dialog = dialog?.copy(
+                            state = GithubUpdateDialogState.DownloadProgress(
+                                progress = progress,
+                                total = total
+                            )
                         )
                     )
+                }
+            }
+            updateState {
+                copy(
+                    dialog = null
                 )
             }
         }
-        updateState {
-            copy(
-                dialog = null
-            )
-        }
-    }
 
     private suspend fun searchForUpdate(
         prerelease: Boolean,
         fromUser: Boolean,
-    ) = dispatchUpdate {
+    ) = dispatchUpdate(UpdateFailureStage.Check) {
         val baseDialog = GithubDialog(
             isPrerelease = prerelease,
             isFromUser = fromUser,
@@ -231,11 +238,19 @@ class GithubViewModel(
             copy(dialog = baseDialog)
         }
 
-        // If on pre-release check if the sha matches, as we do not look at the version
+        val release = getRelease(prerelease)
+        if (release == null) {
+            updateState {
+                copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
+            }
+            return@dispatchUpdate
+        }
+
+        // Pre-release builds track the commit behind the newest version-tagged pre-release APK.
         var oldSha: String? = null
         var newSha: String? = null
         if (prerelease) {
-            val sha = getSha(remotePrereleaseTag)
+            val sha = getSha(release.tagName)
             oldSha = buildSha.take(7)
             newSha = sha.take(7)
 
@@ -248,10 +263,10 @@ class GithubViewModel(
             }
         }
 
-        val release = getRelease(prerelease)
-
-        // If on stable, only check that the display name matches
-        if (!prerelease && release.displayName == versionName) {
+        // Release tags, rather than asset filenames, are the version source.
+        val releaseVersion = release.tagName.removePrefix("v")
+        val installedVersion = versionName.removeSuffix("-PRE").removePrefix("v")
+        if (!prerelease && releaseVersion == installedVersion) {
             updateState {
                 copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
             }
@@ -285,9 +300,8 @@ class GithubViewModel(
             prerelease = prerelease,
             userName = remoteUserName,
             repository = remoteRepository,
-            prereleaseTag = remotePrereleaseTag,
             contentType = remoteContentType
-        ) ?: throw FileNotFoundException()
+        )
 
     @Throws
     private suspend fun getSha(tag: String) =

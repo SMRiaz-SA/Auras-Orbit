@@ -101,19 +101,32 @@ jobs:
     - name: Build and verify Android APK
       timeout-minutes: 30
       shell: pwsh
+      env:
+        AURAS_RELEASE_KEYSTORE_BASE64: ${{ secrets.AURAS_RELEASE_KEYSTORE_BASE64 }}
+        AURAS_RELEASE_STORE_PASSWORD: ${{ secrets.AURAS_RELEASE_STORE_PASSWORD }}
+        AURAS_RELEASE_KEY_ALIAS: ${{ secrets.AURAS_RELEASE_KEY_ALIAS }}
+        AURAS_RELEASE_KEY_PASSWORD: ${{ secrets.AURAS_RELEASE_KEY_PASSWORD }}
       run: |
         $version = $env:GITHUB_REF_NAME.Substring(1)
+        if ([string]::IsNullOrWhiteSpace($env:AURAS_RELEASE_KEYSTORE_BASE64)) {
+          throw 'The stable Android release signing keystore is not configured.'
+        }
+        $keystorePath = Join-Path $env:RUNNER_TEMP 'auras-orbit-release.p12'
+        $keystoreBytes = [Convert]::FromBase64String($env:AURAS_RELEASE_KEYSTORE_BASE64)
+        [System.IO.File]::WriteAllBytes($keystorePath, $keystoreBytes)
+        [Array]::Clear($keystoreBytes, 0, $keystoreBytes.Length)
+        $env:AURAS_RELEASE_STORE_FILE = $keystorePath
         Push-Location android-reference
         try {
-          .\gradlew.bat :app:assembleStableDebug "-PAPP_VERSION=$version" --no-daemon --console=plain --stacktrace --max-workers=2
+          .\gradlew.bat :app:assembleStableRelease "-PAPP_VERSION=$version" --no-daemon --console=plain --stacktrace --max-workers=2
           if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
         } finally {
           Pop-Location
         }
 
-        $apk = "android-reference\app\build\outputs\apk\stable\debug\app-stable-debug.apk"
+        $apk = "android-reference\app\build\outputs\apk\stable\release\app-stable-release.apk"
         .\.github\scripts\verify-android-apk.ps1 -ExpectedVersion $version -ApkPath $apk
-        $releaseApk = "desktop-app\build\outputs\Auras-Orbit-Android-$version-debug.apk"
+        $releaseApk = "desktop-app\build\outputs\Auras-Orbit.apk"
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $releaseApk) | Out-Null
         Copy-Item -LiteralPath $apk -Destination $releaseApk
 
@@ -147,12 +160,28 @@ jobs:
         $archive = Join-Path $env:GITHUB_WORKSPACE "desktop-app/build/outputs/Auras-Orbit-Portable-$version.zip"
         [System.IO.Compression.ZipFile]::CreateFromDirectory($package, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
+    - name: Remove previous Android APK assets
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        $headers = @{
+          Authorization = "Bearer $env:GITHUB_TOKEN"
+          Accept = 'application/vnd.github+json'
+          'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" -Headers $headers
+        foreach ($asset in @($release.assets | Where-Object { $_.name -match '(?i)\.apk$' })) {
+          Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$($asset.id)" -Headers $headers
+        }
+
     - name: Publish Release
       uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
       with:
         files: |
           desktop-app/build/outputs/Auras-Orbit-Setup.exe
           desktop-app/build/outputs/Auras-Orbit-Portable-*.zip
-          desktop-app/build/outputs/Auras-Orbit-Android-*-debug.apk
+          desktop-app/build/outputs/Auras-Orbit.apk
         generate_release_notes: true
         prerelease: true
+        overwrite_files: true

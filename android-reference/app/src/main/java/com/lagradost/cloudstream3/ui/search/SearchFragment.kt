@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
@@ -19,6 +20,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -150,6 +152,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     override fun onResume() {
         super.onResume()
         searchViewModel.clearSuggestions()
+        reloadRepos()
         afterPluginsLoadedEvent += ::reloadRepos
     }
 
@@ -203,11 +206,17 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 
     private fun reloadRepos(success: Boolean = false) = main {
         searchViewModel.reloadRepos()
-        context?.filterProviderByPreferredMedia()?.let { validAPIs ->
+        if (!DataStoreHelper.hasSearchPreferenceProviders) {
+            // Keep the default provider set in sync when extensions become available.
+            selectedApis = DataStoreHelper.searchPreferenceProviders.toMutableSet()
+        }
+        context?.filterProviderByPreferredMedia(hasHomePageIsRequired = false)?.let { validAPIs ->
+            val chips = binding?.tvtypesChipsScroll?.tvtypesChips
+            val validTypes = validAPIs.flatMap { api -> api.supportedTypes }.distinct()
             bindChips(
-                binding?.tvtypesChipsScroll?.tvtypesChips,
+                chips,
                 selectedSearchTypes,
-                validAPIs.flatMap { api -> api.supportedTypes }.distinct()
+                validTypes
             ) { list ->
                 if (selectedSearchTypes.toSet() != list.toSet()) {
                     DataStoreHelper.searchPreferenceTags = list
@@ -215,6 +224,75 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     selectedSearchTypes.addAll(list)
                     search(binding?.mainSearch?.query?.toString())
                 }
+            }
+
+            if (isLayout(PHONE)) {
+                binding?.let(::prioritizeTorrentSearchChip)
+                if (TvType.Torrent !in validTypes) {
+                    binding?.let(::showTorrentSearchSetupChip)
+                }
+            }
+        }
+    }
+
+    private fun prioritizeTorrentSearchChip(binding: FragmentSearchBinding) {
+        val chips = binding.tvtypesChipsScroll.tvtypesChips
+        val group = chips.homeSelectGroup
+        val torrentChip = chips.homeSelectTorrents
+        val targetIndex = minOf(2, (group.childCount - 1).coerceAtLeast(0))
+        if (group.indexOfChild(torrentChip) != targetIndex) {
+            val params = torrentChip.layoutParams
+            group.removeView(torrentChip)
+            group.addView(torrentChip, targetIndex, params)
+        }
+    }
+
+    private fun showTorrentSearchSetupChip(binding: FragmentSearchBinding) {
+        val torrentChip = binding.tvtypesChipsScroll.tvtypesChips.homeSelectTorrents
+        torrentChip.isVisible = true
+        torrentChip.setOnCheckedChangeListener(null)
+        torrentChip.isChecked = false
+        torrentChip.setOnCheckedChangeListener { chip, checked ->
+            if (checked) {
+                chip.isChecked = false
+                val context = requireContext()
+                val preferredMedia = PreferenceManager.getDefaultSharedPreferences(context)
+                    .getStringSet(context.getString(R.string.prefer_media_type_key), null)
+                val torrentIsPreferred = preferredMedia.isNullOrEmpty() ||
+                    preferredMedia.contains(TvType.Torrent.ordinal.toString())
+                val dialog = AlertDialog.Builder(context)
+                    .setTitle(
+                        if (torrentIsPreferred) R.string.torrent_search_provider_setup_title
+                        else R.string.torrent_search_setup_title
+                    )
+                    .setMessage(
+                        if (torrentIsPreferred) R.string.torrent_search_provider_setup_message
+                        else R.string.torrent_search_setup_message
+                    )
+
+                if (torrentIsPreferred) {
+                    dialog.setPositiveButton(R.string.extensions) { _, _ ->
+                        findNavController().navigate(
+                            R.id.action_navigation_global_to_navigation_settings_extensions
+                        )
+                    }.setNeutralButton(R.string.provider_lang_settings) { _, _ ->
+                        findNavController().navigate(
+                            R.id.action_navigation_global_to_navigation_settings_providers
+                        )
+                    }
+                } else {
+                    dialog.setPositiveButton(R.string.preferred_media_settings) { _, _ ->
+                        findNavController().navigate(
+                            R.id.action_navigation_global_to_navigation_settings_providers
+                        )
+                    }.setNeutralButton(R.string.extensions) { _, _ ->
+                        findNavController().navigate(
+                            R.id.action_navigation_global_to_navigation_settings_extensions
+                        )
+                    }
+                }
+
+                dialog.setNegativeButton(R.string.cancel, null).show()
             }
         }
     }
@@ -251,6 +329,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             searchAutofitResults.adapter = adapter
             searchLoadingBar.alpha = 0f
         }
+        if (isLayout(PHONE)) positionSearchSuggestions(binding)
 
         binding.voiceSearch.setOnClickListener { searchView ->
             searchView?.context?.let { ctx ->
@@ -287,8 +366,11 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             searchView?.context?.let { ctx ->
                 val validAPIs = ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
                 var currentValidApis = listOf<MainAPI>()
-                val currentSelectedApis = if (selectedApis.isEmpty()) validAPIs.map { it.name }
-                    .toMutableSet() else selectedApis
+                val currentSelectedApis = if (selectedApis.isEmpty()) {
+                    validAPIs.map { it.name }.toMutableSet()
+                } else {
+                    selectedApis.toMutableSet()
+                }
 
                 val builder =
                     BottomSheetDialog(ctx)
@@ -306,6 +388,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                 builder.let { dialog ->
                     val previousSelectedApis = selectedApis.toSet()
                     val previousSelectedSearchTypes = selectedSearchTypes.toSet()
+                    val pendingSelectedSearchTypes = selectedSearchTypes.toMutableList()
 
                     val isMultiLang = ctx.getApiProviderLangSettings().let { set ->
                         set.size > 1 || set.contains(AllLanguagesName)
@@ -333,8 +416,6 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     }
 
                     fun updateList(types: List<TvType>) {
-                        DataStoreHelper.searchPreferenceTags = types
-
                         arrayAdapter.clear()
                         currentValidApis = validAPIs.filter { api ->
                             api.supportedTypes.any {
@@ -349,37 +430,21 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                                 )?.plus(" ") ?: ""
                             }${it.name}" else it.name
                         }
+                        arrayAdapter.addAll(names)
+                        arrayAdapter.notifyDataSetChanged()
                         for ((index, api) in currentValidApis.map { it.name }.withIndex()) {
                             listView?.setItemChecked(index, currentSelectedApis.contains(api))
                         }
-
-                        //arrayAdapter.notifyDataSetChanged()
-                        arrayAdapter.addAll(names)
-                        arrayAdapter.notifyDataSetChanged()
                     }
 
                     bindChips(
                         selectMainpageBinding.tvtypesChipsScroll.tvtypesChips,
-                        selectedSearchTypes,
+                        pendingSelectedSearchTypes,
                         validAPIs.flatMap { api -> api.supportedTypes }.distinct()
                     ) { list ->
                         updateList(list)
-
-                        // refresh selected chips in main chips
-                        if (selectedSearchTypes.toSet() != list.toSet()) {
-                            selectedSearchTypes.clear()
-                            selectedSearchTypes.addAll(list)
-                            updateChips(
-                                binding.tvtypesChipsScroll.tvtypesChips,
-                                selectedSearchTypes
-                            )
-
-                        }
-                    }
-
-
-                    cancelBtt?.setOnClickListener {
-                        dialog.dismissSafe()
+                        pendingSelectedSearchTypes.clear()
+                        pendingSelectedSearchTypes.addAll(list)
                     }
 
                     cancelBtt?.setOnClickListener {
@@ -387,22 +452,23 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     }
 
                     applyBtt?.setOnClickListener {
-                        //if (currentApiName != selectedApiName) {
-                        //    currentApiName?.let(callback)
-                        //}
-                        dialog.dismissSafe()
-                    }
-
-                    dialog.setOnDismissListener {
+                        DataStoreHelper.searchPreferenceTags = pendingSelectedSearchTypes
                         DataStoreHelper.searchPreferenceProviders = currentSelectedApis.toList()
-                        selectedApis = currentSelectedApis
+                        selectedSearchTypes.clear()
+                        selectedSearchTypes.addAll(pendingSelectedSearchTypes)
+                        selectedApis = currentSelectedApis.toMutableSet()
+                        updateChips(
+                            binding.tvtypesChipsScroll.tvtypesChips,
+                            selectedSearchTypes
+                        )
+                        dialog.dismissSafe()
 
                         // run search when dialog is close
                         if (previousSelectedApis != selectedApis.toSet() || previousSelectedSearchTypes != selectedSearchTypes.toSet()) {
                             search(binding.mainSearch.query.toString())
                         }
                     }
-                    updateList(selectedSearchTypes.toList())
+                    updateList(pendingSelectedSearchTypes.toList())
                 }
             }
         }
@@ -700,5 +766,32 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         }
 
         searchViewModel.updateHistory()
+    }
+
+    private fun positionSearchSuggestions(binding: FragmentSearchBinding) {
+        val root = binding.searchRoot
+        val chips = binding.tvtypesChipsScroll.root
+        val suggestions = binding.searchSuggestionsRecycler
+
+        val updatePosition = Runnable {
+            val rootLocation = IntArray(2)
+            val chipsLocation = IntArray(2)
+            root.getLocationInWindow(rootLocation)
+            chips.getLocationInWindow(chipsLocation)
+
+            val params = suggestions.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
+            val spacing = (8f * root.resources.displayMetrics.density).toInt()
+            val topMargin = (chipsLocation[1] - rootLocation[1] + chips.height + spacing)
+                .coerceAtLeast(0)
+            if (params.topMargin != topMargin) {
+                params.topMargin = topMargin
+                suggestions.layoutParams = params
+            }
+        }
+
+        chips.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            root.post(updatePosition)
+        }
+        root.doOnLayout { updatePosition.run() }
     }
 }

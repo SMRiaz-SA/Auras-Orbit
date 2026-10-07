@@ -23,7 +23,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lagradost.cloudstream3.mvvm.getStackTracePretty
 import com.lagradost.cloudstream3.ui.settings.APK_CONTENT_TYPE
-import com.lagradost.cloudstream3.ui.settings.APK_PRERELEASE
 import com.lagradost.cloudstream3.ui.settings.APK_REPOSITORY
 import com.lagradost.cloudstream3.ui.settings.APK_USERNAME
 import com.lagradost.cloudstream3.ui.settings.ApkUpdater
@@ -36,6 +35,7 @@ import com.lagradost.cloudstream3.ui.settings.GithubAction.Update
 import com.lagradost.cloudstream3.ui.settings.GithubState
 import com.lagradost.cloudstream3.ui.settings.GithubUpdateDialogState
 import com.lagradost.cloudstream3.ui.settings.GithubViewModel
+import com.lagradost.cloudstream3.ui.settings.UpdateFailureStage
 import com.lagradost.cloudstream3.utils.GitInfo.currentCommitHash
 import com.lagradost.cloudstream4.compose.BlackButton
 import com.lagradost.cloudstream4.compose.Screen
@@ -53,7 +53,6 @@ object MainActivityScreen : Screen {
             GithubViewModel(
                 remoteUserName = APK_USERNAME,
                 remoteRepository = APK_REPOSITORY,
-                remotePrereleaseTag = APK_PRERELEASE,
                 remoteContentType = APK_CONTENT_TYPE,
                 versionName = BuildConfig.VERSION_NAME,
                 isPrerelease = BuildConfig.FLAVOR == "prerelease",
@@ -97,7 +96,13 @@ object MainActivityScreen : Screen {
                 if (!updaterState.dialog.isFromUser) return
 
                 cancelable = true
-                title = stringResource(R.string.download_failed)
+                title = stringResource(
+                    if (state.stage == UpdateFailureStage.Check) {
+                        R.string.update_check_failed
+                    } else {
+                        R.string.download_failed
+                    }
+                )
                 body = { Text(text = state.error.getStackTracePretty()) }
                 confirmButton = {
                     WhiteButton(text = stringResource(R.string.check_for_update), onClick = {

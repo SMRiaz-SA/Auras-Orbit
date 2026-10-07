@@ -89,6 +89,7 @@ import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.plugins.PluginManager.___DO_NOT_CALL_FROM_A_PLUGIN_loadAllOnlinePlugins
 import com.lagradost.cloudstream3.plugins.PluginManager.loadSinglePlugin
+import com.lagradost.cloudstream3.metaproviders.MagnetzTorrentProvider
 import com.lagradost.cloudstream3.receivers.VideoDownloadRestartReceiver
 import com.lagradost.cloudstream3.services.SubscriptionWorkManager
 import com.lagradost.cloudstream3.syncproviders.AccountManager
@@ -154,6 +155,7 @@ import com.lagradost.cloudstream3.utils.DataStore.getKey
 import com.lagradost.cloudstream3.utils.DataStore.setKey
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.accounts
+import com.lagradost.cloudstream3.utils.DataStoreHelper.currentAccount
 import com.lagradost.cloudstream3.utils.DataStoreHelper.migrateResumeWatching
 import com.lagradost.cloudstream3.utils.Event
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
@@ -503,6 +505,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         val isNavVisible = listOf(
             R.id.navigation_home,
             R.id.navigation_catalogs,
+            R.id.navigation_auras_catalogs,
             R.id.navigation_search,
             R.id.navigation_library,
             R.id.navigation_downloads,
@@ -574,7 +577,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
              * highlight the wrong one in UI.
              */
             when (destination.id) {
-                R.id.navigation_catalogs -> {
+                R.id.navigation_catalogs,
+                R.id.navigation_auras_catalogs -> {
                     navRailView.menu.findItem(R.id.navigation_home).isChecked = true
                     navView.menu.findItem(R.id.navigation_home).isChecked = true
                 }
@@ -819,6 +823,22 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         ioSafe {
             pluginsLock.withLock {
                 allProviders.withLock {
+                    // Torrent playback is built in, so expose its first-party search provider
+                    // alongside extensions after each plugin refresh.
+                    if (allProviders.none { it === MagnetzTorrentProvider }) {
+                        allProviders.add(MagnetzTorrentProvider)
+                    }
+                    val magnetzSearchMigrationKey =
+                        "$currentAccount/magnetz_torrent_search_provider_added_v1"
+                    if (getKey<Boolean>(magnetzSearchMigrationKey) != true) {
+                        if (DataStoreHelper.hasSearchPreferenceProviders) {
+                            DataStoreHelper.searchPreferenceProviders =
+                                (DataStoreHelper.searchPreferenceProviders + MagnetzTorrentProvider.name)
+                                    .distinct()
+                        }
+                        setKey(magnetzSearchMigrationKey, true)
+                    }
+
                     // Load cloned sites after plugins have been loaded since clones depend on plugins.
                     try {
                         getKey<Array<SettingsGeneral.CustomSite>>(USER_PROVIDER_API)?.let { list ->
@@ -1207,6 +1227,11 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         setNavigationBarColorCompat(R.attr.primaryGrayBackground)
         updateLocale()
         super.onCreate(savedInstanceState)
+        allProviders.withLock {
+            if (allProviders.none { it === MagnetzTorrentProvider }) {
+                allProviders.add(MagnetzTorrentProvider)
+            }
+        }
         try {
             if (isCastApiAvailable()) {
                 CastContext.getSharedInstance(this) { it.run() }
@@ -1711,10 +1736,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             .build()*/
 
         val rippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.12f))
+        val activeIndicatorColor =
+            ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.22f))
 
         binding?.navView?.apply {
             itemRippleColor = rippleColor
-            itemActiveIndicatorColor = rippleColor
+            itemActiveIndicatorColor = activeIndicatorColor
             setupWithNavController(navController)
             setOnItemSelectedListener { item ->
                 onNavDestinationSelected(
@@ -1728,7 +1755,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         binding?.navRailView?.apply {
             if (isLayout(PHONE)) {
                 itemRippleColor = rippleColor
-                itemActiveIndicatorColor = rippleColor
+                itemActiveIndicatorColor = activeIndicatorColor
             } else {
                 itemSpacing = 12.toPx // expandedItemSpacing does not have an attr
                 itemRippleColor = ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.13f))

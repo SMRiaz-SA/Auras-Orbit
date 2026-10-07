@@ -1633,6 +1633,14 @@ constructor(
     override var posterHeaders: Map<String, String>? = null,
     override var score: Score? = null,
 ) : SearchResponse {
+    /** Magnetz metadata used by the Android search card. */
+    var sizeBytes: Long? = null
+    var humanSize: String? = null
+    var infoHash: String? = null
+    var seeders: Int? = null
+    var leechers: Int? = null
+    var isVerified: Boolean = false
+
     @Suppress("DEPRECATION_ERROR")
     @Deprecated(
         "Use newTorrentSearchResponse",

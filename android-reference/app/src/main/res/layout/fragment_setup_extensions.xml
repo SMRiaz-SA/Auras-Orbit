@@ -10,16 +10,20 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="28dp"
         android:gravity="center"
-        android:text="@string/extensions"
-        android:textSize="18sp" />
+        android:text="@string/setup_catalogs_title"
+        android:textSize="24sp"
+        android:textStyle="bold" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginHorizontal="28dp"
+        android:layout_marginTop="8dp"
         android:gravity="center"
-        android:text="@string/setup_extensions_subtext" />
+        android:text="@string/setup_catalogs_subtext"
+        android:textSize="14sp" />
 
     <LinearLayout
         android:id="@+id/blank_repo_screen"
@@ -31,10 +35,11 @@
         tools:visibility="gone">
 
         <ImageView
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_margin="10dp"
-            android:src="@drawable/ic_baseline_extension_24" />
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_margin="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/auras_orbit_mark" />
 
         <TextView
             android:layout_width="wrap_content"

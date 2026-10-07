@@ -90,6 +90,35 @@ val generateGitHash = tasks.register<GenerateGitHashTask>("generateGitHash") {
     outputDir.set(layout.buildDirectory.dir("generated/git"))
 }
 
+val stableReleaseStoreFile = providers.environmentVariable("AURAS_RELEASE_STORE_FILE").orNull
+val stableReleaseStorePassword = providers.environmentVariable("AURAS_RELEASE_STORE_PASSWORD").orNull
+val stableReleaseKeyAlias = providers.environmentVariable("AURAS_RELEASE_KEY_ALIAS").orNull
+val stableReleaseKeyPassword = providers.environmentVariable("AURAS_RELEASE_KEY_PASSWORD").orNull
+val hasStableReleaseSigning = listOf(
+    stableReleaseStoreFile,
+    stableReleaseStorePassword,
+    stableReleaseKeyAlias,
+    stableReleaseKeyPassword
+).all { !it.isNullOrBlank() }
+
+val verifyStableReleaseSigning = tasks.register("verifyStableReleaseSigning") {
+    doLast {
+        val missing = mapOf(
+            "AURAS_RELEASE_STORE_FILE" to stableReleaseStoreFile,
+            "AURAS_RELEASE_STORE_PASSWORD" to stableReleaseStorePassword,
+            "AURAS_RELEASE_KEY_ALIAS" to stableReleaseKeyAlias,
+            "AURAS_RELEASE_KEY_PASSWORD" to stableReleaseKeyPassword
+        ).filterValues { it.isNullOrBlank() }.keys
+
+        check(missing.isEmpty()) {
+            "stableRelease requires signing configuration. Missing: ${missing.joinToString()}"
+        }
+        check(file(stableReleaseStoreFile!!).isFile) {
+            "AURAS_RELEASE_STORE_FILE does not point to an existing keystore."
+        }
+    }
+}
+
 android {
     @Suppress("UnstableApiUsage")
     testOptions {
@@ -114,6 +143,15 @@ android {
     }
 
     signingConfigs {
+        if (hasStableReleaseSigning) {
+            create("stableRelease") {
+                storeFile = file(stableReleaseStoreFile!!)
+                storePassword = stableReleaseStorePassword
+                keyAlias = stableReleaseKeyAlias
+                keyPassword = stableReleaseKeyPassword
+            }
+        }
+
         // We just use SIGNING_KEY_ALIAS here since it won't change
         // so won't kill the configuration cache.
         if (System.getenv("SIGNING_KEY_ALIAS") != null) {
@@ -176,6 +214,9 @@ android {
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
+            if (hasStableReleaseSigning) {
+                signingConfig = signingConfigs.getByName("stableRelease")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -350,6 +391,10 @@ tasks.register<Copy>("copyJar") {
     include("classes.jar", "library-jvm*.jar")
     // Remove the version
     rename("library-jvm.*.jar", "library-jvm.jar")
+}
+
+tasks.matching { it.name == "packageStableRelease" }.configureEach {
+    dependsOn(verifyStableReleaseSigning)
 }
 
 // Merge the app classes and the library classes into classes.jar
