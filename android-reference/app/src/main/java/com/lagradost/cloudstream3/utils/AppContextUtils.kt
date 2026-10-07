@@ -70,6 +70,7 @@ import com.lagradost.cloudstream3.isMovieType
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.plugins.RepositoryManager
+import com.lagradost.cloudstream3.metaproviders.MagnetzTorrentProvider
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.APP_STRING_RESUME_WATCHING
 import com.lagradost.cloudstream3.syncproviders.providers.Kitsu
 import com.lagradost.cloudstream3.ui.WebviewFragment
@@ -377,7 +378,9 @@ object AppContextUtils {
         val hashSet = HashSet<String>()
         val activeLangs = getApiProviderLangSettings()
         val hasUniversal = activeLangs.contains(AllLanguagesName)
-        hashSet.addAll(apis.filter { hasUniversal || activeLangs.contains(it.lang) }
+        hashSet.addAll(apis.filter {
+            it === MagnetzTorrentProvider || hasUniversal || activeLangs.contains(it.lang)
+        }
             .map { it.name })
         return hashSet
     }
@@ -469,8 +472,10 @@ object AppContextUtils {
         } ?: default
         val langs = this.getApiProviderLangSettings()
         val hasUniversal = langs.contains(AllLanguagesName)
-        val allApis =
-            apis.filter { api -> (hasUniversal || langs.contains(api.lang)) && (api.hasMainPage || !hasHomePageIsRequired) }
+        val allApis = apis.filter { api ->
+            (api === MagnetzTorrentProvider || hasUniversal || langs.contains(api.lang)) &&
+                (api.hasMainPage || !hasHomePageIsRequired)
+        }
         return if (currentPrefMedia.isEmpty()) {
             allApis
         } else {
@@ -559,13 +564,17 @@ object AppContextUtils {
         }
 
         runOnUiThread {
-            AlertDialog.Builder(this).apply {
-                setTitle(repositoryData.name)
-                setMessage(R.string.download_all_plugins_from_repo)
-                setPositiveButton(R.string.open_downloaded_repo) { _, _ ->
-                    openAddedRepo()
-                }
-                setNegativeButton(R.string.dismiss, null)
+            AlertDialog.Builder(this, R.style.AlertDialogCustom).apply {
+                setTitle(R.string.catalog_connected)
+                setMessage(
+                    getString(
+                        R.string.catalog_connected_message,
+                        repositoryData.name,
+                        getString(R.string.download_all_plugins_from_repo),
+                    )
+                )
+                setPositiveButton(R.string.catalog_browse) { _, _ -> openAddedRepo() }
+                setNegativeButton(R.string.catalog_later, null)
                 show().setDefaultFocus()
             }
         }

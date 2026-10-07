@@ -3,6 +3,8 @@ package com.lagradost.cloudstream3.ui.search
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
+import android.text.TextUtils
+import android.text.format.Formatter
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -17,6 +19,7 @@ import com.lagradost.cloudstream3.LiveSearchResponse
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.TorrentSearchResponse
 import com.lagradost.cloudstream3.isMovieType
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
@@ -242,6 +245,27 @@ object SearchResultBuilder {
         }
 
         when (card) {
+            is TorrentSearchResponse -> {
+                val torrentDetails = buildList {
+                    card.humanSize?.takeIf { it.isNotBlank() }?.let(::add)
+                        ?: card.sizeBytes?.takeIf { it > 0L }?.let {
+                            add(Formatter.formatFileSize(itemView.context, it))
+                        }
+                    card.seeders?.let { add("↑$it") }
+                    card.leechers?.let { add("↓$it") }
+                    if (card.isVerified) add("✓")
+                }.joinToString(" · ")
+
+                if (torrentDetails.isNotBlank()) {
+                    episodeText?.apply {
+                        text = torrentDetails
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                        isVisible = true
+                    }
+                }
+            }
+
             is LiveSearchResponse -> {
                 SubtitleHelper.getFlagFromIso(card.lang)?.let { flagEmoji ->
                     textFlag?.apply {

@@ -60,6 +60,7 @@
     <color name="aurasAccent">#A394E1</color>
     <color name="aurasAccentDark">#7869B4</color>
     <color name="aurasAccentBright">#BBAAF4</color>
+    <color name="aurasAccentDeep">#382B52</color>
     <color name="aurasBackground">#17151F</color>
     <color name="aurasSurface">#211F2C</color>
     <color name="aurasSurfaceRaised">#292635</color>

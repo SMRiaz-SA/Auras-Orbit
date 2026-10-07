@@ -18,10 +18,10 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 }
 
 $metadata = Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json
-if ($metadata.variantName -ne 'stableDebug') {
-    throw "Expected the stableDebug Android APK, received '$($metadata.variantName)'."
+if ($metadata.variantName -ne 'stableRelease') {
+    throw "Expected the stableRelease Android APK, received '$($metadata.variantName)'."
 }
-if ($metadata.applicationId -ne 'com.auras.orbit.debug') {
+if ($metadata.applicationId -ne 'com.auras.orbit') {
     throw "Unexpected Android application ID: '$($metadata.applicationId)'."
 }
 $element = @($metadata.elements) |

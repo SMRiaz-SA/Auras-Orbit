@@ -36,6 +36,13 @@
     <string name="download_queue">Download queue</string>
     <string name="title_settings">Settings</string>
     <string name="search_hint">Search…</string>
+    <string name="voice_search">Voice search</string>
+    <string name="torrent_search_setup_title">Enable Torrent search</string>
+    <string name="torrent_search_setup_message">Torrent search is built into Auras. Select Torrents in Settings → Providers → Preferred media, then enable the Torrents chip in Search.</string>
+    <string name="torrent_search_provider_setup_title">Torrent search unavailable</string>
+    <string name="torrent_search_provider_setup_message">Magnetz Torrent Search is built into Auras, so no extension is required. Reopen Search or restart the app if it still does not appear.</string>
+    <string name="auras_catalogs_title">Catalogs</string>
+    <string name="auras_surprise_me">Surprise me</string>
     <string name="search_hint_site" formatted="true">Search %s…</string>
     <string name="speech_recognition_unavailable">Speech recognition is not available</string>
     <string name="begin_speaking">Begin Speaking…</string>
@@ -504,6 +511,22 @@
     <string name="preferred_media_subtext">What do you want to see</string>
     <string name="setup_done">Done</string>
     <string name="extensions">Extensions</string>
+    <string name="catalogs_and_providers">Catalogs &amp; providers</string>
+    <string name="setup_catalogs_title">Connect a catalog</string>
+    <string name="setup_catalogs_subtext">Choose a compatible source now, or connect one later in Settings.</string>
+    <string name="auras_sources_label">AURAS ORBIT · SOURCES</string>
+    <string name="connect_catalog_title">Connect a catalog</string>
+    <string name="connect_catalog_description">Add a compatible catalog to bring its providers into your Orbit.</string>
+    <string name="catalog_name_optional">Catalog name · optional</string>
+    <string name="catalog_address">Catalog address</string>
+    <string name="catalog_name_help">Leave the name blank to use the name published by the catalog.</string>
+    <string name="catalog_connect">Connect catalog</string>
+    <string name="catalog_connected">Catalog connected</string>
+    <string name="catalog_connected_message" formatted="true">%1$s is ready to browse.
+
+%2$s</string>
+    <string name="catalog_browse">Browse catalog</string>
+    <string name="catalog_later">Later</string>
     <string name="add_repository">Add repository</string>
     <string name="repository_name_hint">Repository name (Optional)</string>
     <string name="repository_url_hint">Repository URL or Shortcode</string>
@@ -528,9 +551,7 @@
     <string name="plugins_disabled" formatted="true">Disabled: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Not downloaded: %d</string>
     <string name="plugins_updated" formatted="true">Updated %d plugins</string>
-    <string name="blank_repo_message">Auras Orbit has no providers installed by default. Add providers from repositories.
-\n
-\nJoin our Discord or search online.</string>
+    <string name="blank_repo_message">No catalogs are connected yet. You can continue setup and connect one later in Settings.</string>
     <string name="view_public_repositories_button">View community repositories</string>
     <string name="view_public_repositories_button_short">Public list</string>
     <string name="uppercase_all_subtitles">Uppercase all subtitles</string>
@@ -594,6 +615,7 @@
     <string name="update_notification_downloading">Downloading app update…</string>
     <string name="update_notification_installing">Installing app update…</string>
     <string name="update_notification_failed">Could not install the new version of the app</string>
+    <string name="update_check_failed">Update check failed</string>
     <string name="apk_installer_legacy">Legacy</string>
     <string name="apk_installer_package_installer">PackageInstaller</string>
     <string name="delayed_update_notice">App will be updated upon exit</string>

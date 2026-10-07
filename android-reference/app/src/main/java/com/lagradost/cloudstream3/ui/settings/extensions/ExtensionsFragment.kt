@@ -79,7 +79,7 @@ class ExtensionsFragment : BaseFragment<FragmentExtensionsBinding>(
     }
 
     override fun onBindingCreated(binding: FragmentExtensionsBinding) {
-        setUpToolbar(R.string.extensions)
+        setUpToolbar(R.string.catalogs_and_providers)
         setToolBarScrollFlags()
 
         binding.repoRecyclerView.apply {
@@ -254,78 +254,82 @@ class ExtensionsFragment : BaseFragment<FragmentExtensionsBinding>(
 
         val addRepositoryClick = View.OnClickListener {
             val ctx = context ?: return@OnClickListener
-            val binding = AddRepoInputBinding.inflate(LayoutInflater.from(ctx), null, false)
-            val builder =
-                AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
-                    .setView(binding.root)
-
-            val dialog = builder.create()
+            val addBinding = AddRepoInputBinding.inflate(LayoutInflater.from(ctx), null, false)
+            val dialog = AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
+                .setView(addBinding.root)
+                .create()
             dialog.show()
+
             (activity?.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip?.getItemAt(
                 0
             )?.text?.toString()?.let { copiedText ->
                 if (copiedText.contains(RepoAdapter.SHAREABLE_REPO_SEPARATOR)) {
-                    // text is of format <repository name> : <repository url>
+                    // Preserve the existing shareable format: <repository name> : <repository url>.
                     val (name, url) = copiedText.split(
                         RepoAdapter.SHAREABLE_REPO_SEPARATOR,
                         limit = 2
                     )
-                    binding.repoUrlInput.setText(url.trim())
-                    binding.repoNameInput.setText(name.trim())
+                    addBinding.repoUrlInput.setText(url.trim())
+                    addBinding.repoNameInput.setText(name.trim())
                 } else {
-                    binding.repoUrlInput.setText(copiedText)
+                    addBinding.repoUrlInput.setText(copiedText.trim())
                 }
             }
 
-            binding.applyBtt.setOnClickListener secondListener@{
-                val name = binding.repoNameInput.text?.toString()
-                val urlInput = binding.repoUrlInput.text?.toString()
-                if (urlInput.isNullOrEmpty()) {
+            addBinding.applyBtt.setOnClickListener submitListener@{
+                val name = addBinding.repoNameInput.text?.toString().orEmpty()
+                val address = addBinding.repoUrlInput.text?.toString().orEmpty()
+                if (address.isBlank()) {
                     showToast(R.string.error_invalid_url, Toast.LENGTH_SHORT)
-                    return@secondListener
+                    return@submitListener
                 }
-                binding.applyBtt.showProgress()
+                addBinding.applyBtt.showProgress()
                 ioSafe {
-                    try {
-                        val url = RepositoryManager.parseRepoUrl(urlInput)
+                    val outcome = try {
+                        val url = RepositoryManager.parseRepoUrl(address)
                         if (url.isNullOrBlank()) {
-                            showToast(R.string.error_invalid_data, Toast.LENGTH_SHORT)
-                            return@ioSafe
+                            CatalogAddOutcome.Failed(ctx.getString(R.string.error_invalid_data))
+                        } else {
+                            val repository = RepositoryManager.parseRepository(url)
+                            if (repository == null) {
+                                CatalogAddOutcome.Failed(ctx.getString(R.string.no_repository_found_error))
+                            } else {
+                                val fixedName = name.ifBlank { repository.name }
+                                val newRepo = RepositoryData(repository.iconUrl, fixedName, url)
+                                RepositoryManager.addRepository(newRepo)
+                                extensionViewModel.loadStats()
+                                extensionViewModel.loadRepositories()
+                                val hasPlugins = !RepositoryManager.getRepoPlugins(newRepo).isNullOrEmpty()
+                                CatalogAddOutcome.Added(newRepo, hasPlugins)
+                            }
                         }
-                        val repository = RepositoryManager.parseRepository(url)
-
-                        // Exit if wrong repository
-                        if (repository == null) {
-                            showToast(R.string.no_repository_found_error, Toast.LENGTH_LONG)
-                            return@ioSafe
-                        }
-
-                        val fixedName = if (!name.isNullOrBlank()) name
-                        else repository.name
-                        val newRepo = RepositoryData(repository.iconUrl, fixedName, url)
-                        RepositoryManager.addRepository(newRepo)
-                        extensionViewModel.loadStats()
-                        extensionViewModel.loadRepositories()
-
-                        dialog.dismissSafe(activity) // Only dismiss if the repo was added
-
-                        val plugins = RepositoryManager.getRepoPlugins(newRepo)
-                        if (plugins.isNullOrEmpty()) {
-                            showToast(R.string.no_plugins_found_error, Toast.LENGTH_LONG)
-                            return@ioSafe
-                        }
-
-                        this@ExtensionsFragment.activity?.addRepositoryDialog(
-                            newRepo
+                    } catch (error: Exception) {
+                        CatalogAddOutcome.Failed(
+                            error.localizedMessage ?: ctx.getString(R.string.error_invalid_data)
                         )
-                    } finally {
-                        binding.applyBtt.hideProgress()
+                    }
+                    main {
+                        when (outcome) {
+                            is CatalogAddOutcome.Failed -> {
+                                addBinding.applyBtt.hideProgress()
+                                showToast(outcome.message, Toast.LENGTH_LONG)
+                            }
+                            is CatalogAddOutcome.Added -> {
+                                dialog.dismissSafe(activity)
+                                if (!outcome.hasPlugins) {
+                                    showToast(
+                                        R.string.no_plugins_found_error,
+                                        Toast.LENGTH_LONG,
+                                    )
+                                } else {
+                                        this@ExtensionsFragment.activity?.addRepositoryDialog(outcome.repository)
+                                }
+                            }
+                        }
                     }
                 }
             }
-            binding.cancelBtt.setOnClickListener {
-                dialog.dismissSafe(activity)
-            }
+            addBinding.cancelBtt.setOnClickListener { dialog.dismissSafe(activity) }
         }
 
 
@@ -343,4 +347,9 @@ class ExtensionsFragment : BaseFragment<FragmentExtensionsBinding>(
         }
         reloadRepositories()
     }
+}
+
+private sealed interface CatalogAddOutcome {
+    data class Added(val repository: RepositoryData, val hasPlugins: Boolean) : CatalogAddOutcome
+    data class Failed(val message: String) : CatalogAddOutcome
 }

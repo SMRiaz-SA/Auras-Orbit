@@ -112,12 +112,17 @@ object DataStoreHelper {
         get() {
             val ret = searchPreferenceProvidersStrings
             return ret.ifEmpty {
-                context?.filterProviderByPreferredMedia()?.map { it.name } ?: emptyList()
+                context?.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
+                    ?.map { it.name } ?: emptyList()
             }
         }
         set(value) {
             searchPreferenceProvidersStrings = value
         }
+
+    /** True when a non-empty provider filter is stored; an empty list means use defaults. */
+    val hasSearchPreferenceProviders: Boolean
+        get() = searchPreferenceProvidersStrings.isNotEmpty()
 
     private var searchPreferenceTagsStrings: List<String> by UserPreferenceDelegate(
         "search_pref_tags",
