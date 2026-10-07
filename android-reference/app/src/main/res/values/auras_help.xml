@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auras_help_intro">Find practical instructions for catalogs, playback, your library, downloads, and settings. This guide is stored in the app and works offline.</string>
+
+    <string name="auras_help_section_start">Getting started</string>
+    <string name="auras_help_connect_title">Connect a catalog source</string>
+    <string name="auras_help_connect_summary">Install a provider extension, then choose it as the source for Explore and Catalogs.</string>
+    <string name="auras_help_connect_terms">provider, extension, repository, source, add catalog, install</string>
+    <string-array name="auras_help_connect_steps">
+        <item>Open Settings, then Extensions &amp; Sources.</item>
+        <item>Add a trusted repository if you do not already have one.</item>
+        <item>Open Browse Plugins, choose a repository, and install a provider that supports the media you want.</item>
+        <item>Return to Explore. Use the source control at the top to select the provider, then open Catalogs.</item>
+    </string-array>
+    <string name="auras_help_connect_recovery">If no source appears, check that its provider extension is installed and enabled. Repositories list extensions; adding a repository does not install its providers.</string>
+
+    <string name="auras_help_section_catalogs">Explore and catalogs</string>
+    <string name="auras_help_catalogs_title">Browse Catalogs and use More</string>
+    <string name="auras_help_catalogs_summary">Browse shelves from the selected provider and load the next page into the same shelf.</string>
+    <string name="auras_help_catalogs_terms">more, load more, pagination, next page, catalog list, provider catalog, retry</string>
+    <string-array name="auras_help_catalogs_steps">
+        <item>Open Catalogs from Explore and select the source that provides the shelves you want.</item>
+        <item>Scroll to a shelf and tap More. The next provider page is appended to that same shelf; it does not open a separate drawer.</item>
+        <item>While the request runs, the action shows Loading. Tap Retry if the provider returns an error.</item>
+        <item>Repeat while More is available. The action disappears after the provider confirms there are no more pages.</item>
+    </string-array>
+    <string name="auras_help_catalogs_recovery">A page request needs a working connection and a provider that supports more pages. On an error, the existing titles stay visible and Retry remains available. Changing source clears the old shelves before loading the new source.</string>
+
+    <string name="auras_help_topten_title">Explore Top 10 and Trending shelves</string>
+    <string name="auras_help_topten_summary">Understand the Explore screen\'s ten-title Top 10 presentation and provider-based popular shelves.</string>
+    <string name="auras_help_topten_terms">top ten, top 10, trending, popular, ranking, explore, limit</string>
+    <string-array name="auras_help_topten_steps">
+        <item>Explore may show a Top 10 shelf with at most ten titles. This is the intended Top 10 presentation.</item>
+        <item>Popular or Trending content depends on the connected provider\'s response. Auras does not combine providers into a global ranking.</item>
+        <item>Open Catalogs to browse the provider\'s shelves. Use More there when you want additional pages from a catalog.</item>
+        <item>Use the source control to change which provider supplies Explore and Catalogs content.</item>
+    </string-array>
+    <string name="auras_help_topten_recovery">A provider may not supply a Top 10, Popular, or Trending shelf. If it is missing, choose another provider or browse its Catalogs shelves.</string>
+
+    <string name="auras_help_section_people">People and credits</string>
+    <string name="auras_help_section_about">About and credits</string>
+    <string name="auras_help_people_title">Browse a cast member\'s filmography</string>
+    <string name="auras_help_people_summary">Open a person from a title\'s cast, browse their movie and TV credits, and look up a selected credit in installed providers.</string>
+    <string name="auras_help_people_terms">actor, cast, crew, voice actor, person, filmography, credits, movies, tv</string>
+    <string-array name="auras_help_people_steps">
+        <item>Open a title and select an actor name or portrait in its cast row. The card tap still flips between actor and voice actor portraits.</item>
+        <item>If TMDB finds more than one person with that name, choose the matching person from the candidate list.</item>
+        <item>Use All, Movies, or TV to filter credits. Enter a title or role in the filter field to narrow the list.</item>
+        <item>Select a credit to search installed providers for a matching title. Open a provider result to continue to that title\'s details.</item>
+    </string-array>
+    <string name="auras_help_people_recovery">A person match and filmography require an internet connection and TMDB data. Provider matches depend on installed providers and their search catalogs; a TMDB credit alone is not a playable source.</string>
+
+    <string name="auras_help_tmdb_title">TMDB data and credits</string>
+    <string name="auras_help_tmdb_summary">Person profiles and filmography are supplied by The Movie Database (TMDB).</string>
+    <string name="auras_help_tmdb_terms">tmdb, the movie database, credits, attribution, data source</string>
+    <string-array name="auras_help_tmdb_steps">
+        <item>TMDB supplies cast-person matches, profile details, images, and movie and TV credits shown by the person browser.</item>
+        <item>Provider search results come from installed Auras Orbit providers. TMDB credits do not imply that a title is available to stream.</item>
+        <item>Open themoviedb.org to view its source data and API information.</item>
+    </string-array>
+    <string name="auras_help_tmdb_recovery">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="auras_help_tmdb_attribution">This product uses the TMDB API but is not endorsed or certified by TMDB. TMDB data and images are provided by The Movie Database.</string>
+    <string name="auras_help_tmdb_logo_description">The Movie Database TMDB logo</string>
+
+    <string name="auras_help_search_title">Search for a title</string>
+    <string name="auras_help_search_summary">Search available providers and open a matching result.</string>
+    <string name="auras_help_search_terms">find, lookup, title, show, movie, query, results</string>
+    <string-array name="auras_help_search_steps">
+        <item>Open Search from the navigation bar.</item>
+        <item>Enter a title and submit the search. If provider selection is available, choose which installed providers to search.</item>
+        <item>Review the result name and provider, then open a result to see its details.</item>
+    </string-array>
+    <string name="auras_help_search_recovery">Results depend on installed providers and their catalogs. Check your provider selection, try a shorter search, or browse Explore and Catalogs.</string>
+
+    <string name="auras_help_titleplay_title">Open details and start playback</string>
+    <string name="auras_help_titleplay_summary">Review a title, choose an episode when needed, and start an available stream.</string>
+    <string name="auras_help_titleplay_terms">details, episode, season, play, resume, stream, source, server</string>
+    <string-array name="auras_help_titleplay_steps">
+        <item>Open a title from Search, Explore, Catalogs, or your Library.</item>
+        <item>Review the provider and available details. For a series, select a season and episode.</item>
+        <item>Tap Play or Resume and wait for available sources to load.</item>
+        <item>If one source fails, return to source selection and try another available source or provider.</item>
+    </string-array>
+    <string name="auras_help_titleplay_recovery">A title may have no playable sources from the selected provider. Check the connection, try another source, or open the same title from another provider.</string>
+
+    <string name="auras_help_audio_title">Choose audio and subtitles</string>
+    <string name="auras_help_audio_summary">Select tracks and adjust subtitle presentation using the controls available for the stream.</string>
+    <string name="auras_help_audio_terms">captions, subtitles, language, audio track, synchronization, timing</string>
+    <string-array name="auras_help_audio_steps">
+        <item>Open the player controls while a video is playing.</item>
+        <item>Open Audio or Subtitles and choose a listed track. Track names and languages depend on the stream.</item>
+        <item>Use the offered timing or style controls to adjust subtitles. Reopen the panel to change or turn off a track.</item>
+    </string-array>
+    <string name="auras_help_audio_recovery">If a language is missing, the stream may not contain that track. Try another source. Subtitle search also needs a network connection and matching results.</string>
+
+    <string name="auras_help_library_title">Use Library and watch history</string>
+    <string name="auras_help_library_summary">Save titles, change watch status, and resume from saved playback history.</string>
+    <string name="auras_help_library_terms">bookmark, watchlist, saved, completed, watching, history, continue</string>
+    <string-array name="auras_help_library_steps">
+        <item>Open a title\'s details and use its Library action to save it or choose a watch status.</item>
+        <item>Open Library to find saved titles. Use available tabs, search, and filters to narrow the list.</item>
+        <item>Open Watch History or a Continue Watching item to resume from saved progress.</item>
+        <item>Use Clear All in Watch History only when you intend to remove saved resume progress.</item>
+    </string-array>
+    <string name="auras_help_library_recovery">Library bookmarks and watch history are different. Removing a bookmark does not necessarily clear playback history, and clearing history does not remove bookmarks.</string>
+
+    <string name="auras_help_downloads_title">Manage downloads</string>
+    <string name="auras_help_downloads_summary">Queue supported episodes and manage active or completed downloads.</string>
+    <string name="auras_help_downloads_terms">offline, save, download, queue, storage, delete, local file</string>
+    <string-array name="auras_help_downloads_steps">
+        <item>Open a title and choose an episode with a download action.</item>
+        <item>Choose an offered quality and review the transfer in Downloads.</item>
+        <item>Use the available pause, resume, cancel, or delete actions to manage the item.</item>
+        <item>Open a completed download from Downloads to play it locally.</item>
+    </string-array>
+    <string name="auras_help_downloads_recovery">Downloads depend on the provider and available device storage. If a transfer fails, check the network and free space, then retry from Downloads.</string>
+
+    <string name="auras_help_section_recovery">Settings and recovery</string>
+    <string name="auras_help_settings_title">Find a setting or get help</string>
+    <string name="auras_help_settings_summary">Open app settings, search this manual, and collect useful details for a problem report.</string>
+    <string name="auras_help_settings_terms">preferences, options, manual, support, bug, error, report</string>
+    <string-array name="auras_help_settings_steps">
+        <item>Open Settings from the navigation bar and choose a settings group.</item>
+        <item>Open Help &amp; Manual from Settings or the help icon on Explore and Catalogs.</item>
+        <item>Search by a screen name, task, or related word. This manual works offline.</item>
+        <item>For a problem report, note the app version, screen, steps, expected result, actual result, provider, and visible error.</item>
+    </string-array>
+    <string name="auras_help_settings_recovery">Do not include passwords, tokens, private profile data, or private watch history in a problem report. For accessibility issues, include the device, TalkBack or remote-control action, screen, and control where you became stuck.</string>
+</resources>

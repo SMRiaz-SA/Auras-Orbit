@@ -13,7 +13,8 @@ import kotlinx.serialization.Serializable
  */
 object SearchSuggestionApi {
     private const val TMDB_API_URL = "https://api.themoviedb.org/3/search/multi"
-    private const val TMDB_API_KEY = "e6333b32409e02a4a6eba6fb7ff866bb"
+    // Keep Android's bundled TMDB credential in one place for metadata lookups.
+    internal const val TMDB_API_KEY = "e6333b32409e02a4a6eba6fb7ff866bb"
     
     @Serializable
     data class TmdbSearchResult(

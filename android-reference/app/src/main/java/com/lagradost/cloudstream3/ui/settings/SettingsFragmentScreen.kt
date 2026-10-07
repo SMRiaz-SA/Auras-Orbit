@@ -163,6 +163,13 @@ object SettingsFragmentScreen : Screen {
             icon = R.drawable.extension_24px,
             subtitle = persistentListOf(R.string.add_repository)
         ),
+        SettingsNavigation(
+            title = R.string.auras_help_manual_title,
+            navigation = R.id.global_to_navigation_auras_help,
+            screen = null,
+            icon = R.drawable.question_mark_24,
+            subtitle = persistentListOf(R.string.auras_help_manual_subtitle)
+        ),
     )
 
     @Immutable

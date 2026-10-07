@@ -10,6 +10,7 @@ import android.view.animation.OvershootInterpolator
 import android.view.animation.ScaleAnimation
 import androidx.core.view.isVisible
 import com.lagradost.cloudstream3.ActorData
+import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorRole
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.CastItemBinding
@@ -23,7 +24,8 @@ import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
 
 class ActorAdaptor(
     private var nextFocusUpId: Int? = null,
-    private val focusCallback: (View?) -> Unit = {}
+    private val focusCallback: (View?) -> Unit = {},
+    private val onPersonSelected: (Actor) -> Unit = {},
 ) : NoStateAdapter<ActorData>(diffCallback = BaseDiffCallback(itemSame = { a, b ->
     a.actor.name == b.actor.name
 })) {
@@ -95,6 +97,40 @@ class ActorAdaptor(
                     }
                 }
 
+                val voiceActor = item.voiceActor
+                val frontPerson = if (isInverted && voiceActor != null) voiceActor else item.actor
+                val rearPerson = if (isInverted) item.actor else voiceActor
+                val openFrontPerson = { onPersonSelected(frontPerson) }
+                val openRearPerson = { rearPerson?.let(onPersonSelected) }
+                binding.actorImage.setOnClickListener { openFrontPerson() }
+                binding.actorName.apply {
+                    contentDescription = "Open ${frontPerson.name} filmography"
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { openFrontPerson() }
+                    setOnFocusChangeListener { view, hasFocus -> if (hasFocus) focusCallback(view) }
+                }
+                binding.voiceActorImageHolder.setOnClickListener {
+                    if (item.voiceActor != null) {
+                        inverted[item] = !isInverted
+                        this.onUpdateContent(holder, getItem(position), position)
+                    }
+                }
+                binding.voiceActorName.apply {
+                    if (rearPerson != null) {
+                        contentDescription = "Open ${rearPerson.name} filmography"
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener { openRearPerson() }
+                        setOnFocusChangeListener { view, hasFocus -> if (hasFocus) focusCallback(view) }
+                    } else {
+                        setOnClickListener(null)
+                        setOnFocusChangeListener(null)
+                        isClickable = false
+                        isFocusable = false
+                    }
+                }
+
                 itemView.setOnClickListener {
                     inverted[item] = !isInverted
                     this.onUpdateContent(holder, getItem(position), position)
@@ -118,7 +154,7 @@ class ActorAdaptor(
                 binding.apply {
                     actorImage.loadImage(mainImg)
 
-                    actorName.text = item.actor.name
+                    actorName.text = frontPerson.name
                     item.role?.let {
                         actorExtra.context?.getString(
                             when (it) {
@@ -149,7 +185,7 @@ class ActorAdaptor(
                         voiceActorImageHolder.isVisible = false
                         voiceActorName.isVisible = false
                     } else {
-                        voiceActorName.text = item.voiceActor?.name
+                        voiceActorName.text = rearPerson?.name
                         if (!vaImage.isNullOrEmpty())
                             voiceActorImageHolder.isVisible = true
                         voiceActorImage.loadImage(vaImage)

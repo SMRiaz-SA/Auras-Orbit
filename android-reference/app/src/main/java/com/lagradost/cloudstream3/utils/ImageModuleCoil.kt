@@ -59,6 +59,7 @@ object ImageLoader {
             or image hosting services causes unauthorized exceptions **/
             .components {
                 add(OkHttpNetworkFetcherFactory(callFactory = { buildDefaultClient(context) }))
+                add(coil3.svg.SvgDecoder.Factory())
                 if (isBrokenHardware) {
                     add(BitmapFactoryDecoder.Factory())
                 } // sw decoder

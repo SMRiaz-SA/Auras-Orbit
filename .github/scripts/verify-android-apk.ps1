@@ -18,11 +18,13 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 }
 
 $metadata = Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json
-if ($metadata.variantName -ne 'stableRelease') {
-    throw "Expected the stableRelease Android APK, received '$($metadata.variantName)'."
+$expectedApplicationId = switch ($metadata.variantName) {
+    'stableRelease' { 'com.auras.orbit' }
+    'stableDebug' { 'com.auras.orbit.debug' }
+    default { throw "Expected a stable Android APK, received '$($metadata.variantName)'." }
 }
-if ($metadata.applicationId -ne 'com.auras.orbit') {
-    throw "Unexpected Android application ID: '$($metadata.applicationId)'."
+if ($metadata.applicationId -ne $expectedApplicationId) {
+    throw "Unexpected Android application ID for $($metadata.variantName): '$($metadata.applicationId)'."
 }
 $element = @($metadata.elements) |
     Where-Object { $_.outputFile -eq (Split-Path -Leaf $resolvedApkPath) } |

@@ -68,6 +68,7 @@ class AurasExploreFragment : Fragment() {
                     onOpenCatalogs = { openCatalogs() },
                     onOpenSearch = { openDestination(R.id.navigation_search) },
                     onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
+                    onHelpClick = { openDestination(R.id.navigation_auras_help) },
                     onOpenTitle = { item, index -> openItem(item, index, SEARCH_ACTION_LOAD) },
                     onResumeTitle = { item, index -> openItem(item, index, SEARCH_ACTION_PLAY_FILE) },
                     onExpand = { name -> homeViewModel.expand(name) },
@@ -102,6 +103,8 @@ class AurasExploreFragment : Fragment() {
                                 name = page.name,
                                 items = page.list,
                                 hasNext = expandable.hasNext,
+                                isLoadingMore = expandable.isLoadingMore,
+                                pageError = expandable.pageError,
                             )
                         }
                     },
@@ -178,6 +181,7 @@ private fun AurasExploreScreen(
     onOpenCatalogs: () -> Unit,
     onOpenSearch: () -> Unit,
     onConnectSource: () -> Unit,
+    onHelpClick: () -> Unit,
     onOpenTitle: (SearchResponse, Int) -> Unit,
     onResumeTitle: (SearchResponse, Int) -> Unit,
     onExpand: (String) -> Unit,
@@ -206,6 +210,7 @@ private fun AurasExploreScreen(
                 AurasBrandBar(
                     sourceName = state.sourceName,
                     sourceLabel = if (state.sources.isEmpty()) "Add source" else "Source",
+                    onHelpClick = onHelpClick,
                     onSourceClick = {
                         if (state.sources.isEmpty()) onConnectSource() else onSourceClick()
                     },
