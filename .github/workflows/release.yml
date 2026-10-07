@@ -118,7 +118,7 @@ jobs:
         $env:AURAS_RELEASE_STORE_FILE = $keystorePath
         Push-Location android-reference
         try {
-          .\gradlew.bat :app:assembleStableRelease "-PAPP_VERSION=$version" --no-daemon --console=plain --stacktrace --max-workers=2
+          .\gradlew.bat :app:assembleStableRelease "-PAPP_VERSION=$version" --no-daemon --no-configuration-cache --console=plain --stacktrace --max-workers=2
           if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
         } finally {
           Pop-Location
