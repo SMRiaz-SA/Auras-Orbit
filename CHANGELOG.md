@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0.25 — 2026-10-08
+
+### Added
+
+- Added an Android Help & Manual with guidance for catalogs, person filmographies, and TMDB attribution.
+- Added cast and crew person pages on Android, including movie/TV credit filters and provider lookup for selected titles.
+
+### Fixed
+
+- Made the Catalogs More button load additional pages and capped Explore results at the top 10.
+- Corrected Android poster labels so TV titles are identified as TV rather than Movie.
+- Updated the desktop Help & Manual and TMDB attribution details.
+
 ## 0.2.0.24 — 2026-10-07
 
 ### Added

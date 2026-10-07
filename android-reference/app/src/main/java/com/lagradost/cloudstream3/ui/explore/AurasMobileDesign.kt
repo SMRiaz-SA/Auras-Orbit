@@ -134,6 +134,8 @@ internal data class AurasShelf(
     val name: String,
     val items: List<SearchResponse>,
     val hasNext: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val pageError: String? = null,
 )
 
 internal data class AurasBrowseState(
@@ -150,6 +152,7 @@ internal fun AurasBrandBar(
     sourceName: String?,
     sourceLabel: String,
     onSourceClick: () -> Unit,
+    onHelpClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -202,6 +205,23 @@ internal fun AurasBrandBar(
                 Text("⌄", color = AurasPalette.Accent, fontSize = 16.sp)
             }
         }
+        if (onHelpClick != null) {
+            Surface(
+                onClick = onHelpClick,
+                color = AurasPalette.SurfaceRaised,
+                contentColor = AurasPalette.Text,
+                shape = CircleShape,
+                border = BorderStroke(1.dp, AurasPalette.Stroke),
+            ) {
+                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.Icon(
+                        painter = painterResource(R.drawable.question_mark_24),
+                        contentDescription = androidx.compose.ui.res.stringResource(R.string.auras_help_manual_title),
+                        tint = AurasPalette.Accent,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -226,6 +246,7 @@ internal fun AurasSectionHeading(
     title: String,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    actionEnabled: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -234,7 +255,7 @@ internal fun AurasSectionHeading(
     ) {
         Text(title, color = AurasPalette.Text, style = MaterialTheme.typography.titleLarge)
         if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) {
+            TextButton(onClick = onAction, enabled = actionEnabled) {
                 Text(actionLabel, color = AurasPalette.Accent, style = MaterialTheme.typography.labelMedium)
             }
         }
@@ -350,10 +371,11 @@ internal fun AurasPosterRail(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     progressByUrl: Map<String, Float> = emptyMap(),
+    actionEnabled: Boolean = true,
 ) {
     if (items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AurasSectionHeading(title, actionLabel, onAction)
+        AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
             itemsIndexed(items, key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" }) { index, item ->
                 AurasPosterCard(
@@ -500,13 +522,28 @@ internal fun AurasCatalogShelf(
     onOpen: (SearchResponse, Int) -> Unit,
     onExpand: (() -> Unit)?,
 ) {
-    AurasPosterRail(
-        title = shelf.name,
-        items = shelf.items,
-        onOpen = onOpen,
-        actionLabel = if (shelf.hasNext) "More" else null,
-        onAction = if (shelf.hasNext) onExpand else null,
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        AurasPosterRail(
+            title = shelf.name,
+            items = shelf.items,
+            onOpen = onOpen,
+            actionLabel = when {
+                !shelf.hasNext -> null
+                shelf.isLoadingMore -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_loading_more)
+                shelf.pageError != null -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_retry)
+                else -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_more)
+            },
+            onAction = if (shelf.hasNext) onExpand else null,
+            actionEnabled = !shelf.isLoadingMore,
+        )
+        shelf.pageError?.let { message ->
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.auras_catalog_page_error, message),
+                color = AurasPalette.Ember,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
 }
 
 @Composable

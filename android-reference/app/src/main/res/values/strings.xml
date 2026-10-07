@@ -1,6 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--https://newbedev.com/concatenate-multiple-strings-in-xml--><resources>
     <!-- FORMAT MIGHT TRANSLATE, WILL CAUSE CRASH IF APPLIED WRONG -->
+    <string name="person_filmography_title">Filmography</string>
+    <string name="person_missing_name">This person does not have a name to search.</string>
+    <string name="person_no_matches">No TMDB person matched %1$s.</string>
+    <string name="person_load_failed">Unable to load this person right now.</string>
+    <string name="person_back">Back</string>
+    <string name="person_back_to_filmography">Back to credits</string>
+    <string name="person_choose_match">Choose the person that matches %1$s</string>
+    <string name="person_loading">Loading person and credits…</string>
+    <string name="person_all">All</string>
+    <string name="person_movies">Movies</string>
+    <string name="person_tv">TV</string>
+    <string name="person_filter_credits">Filter credits</string>
+    <string name="person_credit_count">%1$d credits</string>
+    <string name="person_find_on_providers">Select to search installed providers</string>
+    <string name="person_no_credits">No credits match this filter.</string>
+    <string name="person_provider_search_intro">Matching provider results for %1$s</string>
+    <string name="person_searching_providers">Searching installed providers…</string>
+    <string name="person_no_provider_matches">No matching results were found in installed providers.</string>
+    <string name="person_retry">Try again</string>
     <string name="app_dub_sub_episode_text_format" formatted="true">%1$s Ep %2$d</string>
     <string name="cast_format" formatted="true">Cast: %s</string>
     <string name="next_episode_format" formatted="true">Episode %d will be released in</string>
@@ -43,6 +62,20 @@
     <string name="torrent_search_provider_setup_message">Magnetz Torrent Search is built into Auras, so no extension is required. Reopen Search or restart the app if it still does not appear.</string>
     <string name="auras_catalogs_title">Catalogs</string>
     <string name="auras_surprise_me">Surprise me</string>
+    <string name="auras_help_manual_title">Help &amp; Manual</string>
+    <string name="auras_help_manual_subtitle">Search an offline guide to using Auras Orbit.</string>
+    <string name="auras_help_search_hint">Search topics, steps, or related terms</string>
+    <string name="auras_help_no_results">No topics match this search.</string>
+    <string name="auras_help_back_to_explore">Back</string>
+    <string name="auras_help_back_to_topics">Back to topics</string>
+    <string name="auras_help_open_screen">Open related screen</string>
+    <string name="auras_help_steps_heading">Steps</string>
+    <string name="auras_help_recovery_heading">If something goes wrong</string>
+    <string name="auras_help_recovery_title">Common fixes</string>
+    <string name="auras_catalog_more">More</string>
+    <string name="auras_catalog_retry">Retry</string>
+    <string name="auras_catalog_loading_more">Loading…</string>
+    <string name="auras_catalog_page_error">Could not load this catalog page: %1$s</string>
     <string name="search_hint_site" formatted="true">Search %s…</string>
     <string name="speech_recognition_unavailable">Speech recognition is not available</string>
     <string name="begin_speaking">Begin Speaking…</string>

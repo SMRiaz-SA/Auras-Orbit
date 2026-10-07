@@ -77,6 +77,7 @@ annotation = { module = "androidx.annotation:annotation", version.ref = "annotat
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 coil = { module = "io.coil-kt.coil3:coil", version.ref = "coil" }
+coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coil" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 colorpicker = { module = "com.github.recloudstream:color-picker-android", version.ref = "colorpicker" }

@@ -298,6 +298,14 @@
         app:popEnterAnim="@anim/enter_anim"
         app:popExitAnim="@anim/exit_anim" />
 
+    <action
+        android:id="@+id/global_to_navigation_auras_help"
+        app:destination="@id/navigation_auras_help"
+        app:enterAnim="@anim/enter_anim"
+        app:exitAnim="@anim/exit_anim"
+        app:popEnterAnim="@anim/enter_anim"
+        app:popExitAnim="@anim/exit_anim" />
+
     <fragment
         android:id="@+id/navigation_catalogs"
         android:name="com.lagradost.cloudstream3.ui.home.HomeFragment"
@@ -320,6 +328,15 @@
         android:id="@+id/navigation_auras_catalogs"
         android:name="com.lagradost.cloudstream3.ui.explore.AurasCatalogsFragment"
         android:label="@string/auras_catalogs_title"
+        app:enterAnim="@anim/enter_anim"
+        app:exitAnim="@anim/exit_anim"
+        app:popEnterAnim="@anim/enter_anim"
+        app:popExitAnim="@anim/exit_anim" />
+
+    <fragment
+        android:id="@+id/navigation_auras_help"
+        android:name="com.lagradost.cloudstream3.ui.explore.AurasHelpFragment"
+        android:label="@string/auras_help_manual_title"
         app:enterAnim="@anim/enter_anim"
         app:exitAnim="@anim/exit_anim"
         app:popEnterAnim="@anim/enter_anim"
@@ -525,6 +542,19 @@
             app:exitAnim="@anim/exit_anim"
             app:popEnterAnim="@anim/enter_anim"
             app:popExitAnim="@anim/exit_anim" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_person_filmography"
+        android:name="com.lagradost.cloudstream3.ui.result.PersonFilmographyFragment"
+        android:label="@string/person_filmography_title">
+        <argument
+            android:name="personName"
+            app:argType="string" />
+        <argument
+            android:name="personImage"
+            app:argType="string"
+            app:nullable="true" />
     </fragment>
 
     <fragment

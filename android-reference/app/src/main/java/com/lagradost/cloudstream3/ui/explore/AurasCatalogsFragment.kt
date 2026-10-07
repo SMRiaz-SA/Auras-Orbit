@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.observe
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
@@ -40,12 +41,16 @@ import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferredMedia
 import com.lagradost.cloudstream3.utils.DataStoreHelper
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /** Provider-backed catalog browsing with an Auras-owned phone layout. */
 class AurasCatalogsFragment : Fragment() {
     private val homeViewModel: HomeViewModel by activityViewModels()
     private var browseState by mutableStateOf(AurasBrowseState())
     private var sourcePickerVisible by mutableStateOf(false)
+    private val moreLoads = ConcurrentHashMap.newKeySet<Job>()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -63,8 +68,15 @@ class AurasCatalogsFragment : Fragment() {
                     onSourceDismiss = { sourcePickerVisible = false },
                     onSourceSelect = ::selectSource,
                     onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
+                    onHelpClick = { openDestination(R.id.navigation_auras_help) },
                     onOpenTitle = ::openTitle,
-                    onExpand = { name -> homeViewModel.expand(name) },
+                    onExpand = { name ->
+                        val job = viewLifecycleOwner.lifecycleScope.launch {
+                            homeViewModel.expandAndReturn(name)
+                        }
+                        moreLoads.add(job)
+                        job.invokeOnCompletion { moreLoads.remove(job) }
+                    },
                 )
             }
         }
@@ -91,6 +103,8 @@ class AurasCatalogsFragment : Fragment() {
                                 name = page.name,
                                 items = page.list,
                                 hasNext = expandable.hasNext,
+                                isLoadingMore = expandable.isLoadingMore,
+                                pageError = expandable.pageError,
                             )
                         }
                     },
@@ -127,7 +141,12 @@ class AurasCatalogsFragment : Fragment() {
 
     private fun selectSource(option: AurasSourceOption) {
         sourcePickerVisible = false
-        browseState = browseState.copy(sourceName = option.key, loading = true, error = null)
+        browseState = browseState.copy(
+            sourceName = option.key,
+            shelves = emptyList(),
+            loading = true,
+            error = null,
+        )
         homeViewModel.loadAndCancel(option.key, forceReload = true, fromUI = true)
     }
 
@@ -143,6 +162,12 @@ class AurasCatalogsFragment : Fragment() {
             findNavController().navigate(destination)
         }
     }
+
+    override fun onStop() {
+        moreLoads.toList().forEach { it.cancel() }
+        moreLoads.clear()
+        super.onStop()
+    }
 }
 
 @Composable
@@ -154,6 +179,7 @@ private fun AurasCatalogsScreen(
     onSourceDismiss: () -> Unit,
     onSourceSelect: (AurasSourceOption) -> Unit,
     onConnectSource: () -> Unit,
+    onHelpClick: () -> Unit,
     onOpenTitle: (SearchResponse, Int) -> Unit,
     onExpand: (String) -> Unit,
 ) {
@@ -172,6 +198,7 @@ private fun AurasCatalogsScreen(
                     sourceName = state.sourceName,
                     sourceLabel = if (state.sources.isEmpty()) "Add source" else "Change source",
                     onSourceClick = onSourceClick,
+                    onHelpClick = onHelpClick,
                 )
             }
             item {

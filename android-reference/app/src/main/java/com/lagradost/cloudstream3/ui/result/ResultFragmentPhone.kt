@@ -25,6 +25,7 @@ import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.fragment.findNavController
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
 import com.discord.panels.PanelsChildGestureRegionObserver
@@ -527,7 +528,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                 this.orientation = RecyclerView.HORIZONTAL
             }*/
             resultCastItems.setRecycledViewPool(ActorAdaptor.sharedPool)
-            resultCastItems.adapter = ActorAdaptor()
+            resultCastItems.adapter = ActorAdaptor(onPersonSelected = ::openPersonFilmography)
             resultEpisodes.setRecycledViewPool(EpisodeAdapter.sharedPool)
             resultEpisodes.adapter =
                 EpisodeAdapter(
@@ -1426,6 +1427,16 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                 }
             }
         }
+    }
+
+    private fun openPersonFilmography(person: com.lagradost.cloudstream3.Actor) {
+        findNavController().navigate(
+            R.id.navigation_person_filmography,
+            Bundle().apply {
+                putString("personName", person.name)
+                putString("personImage", person.image)
+            },
+        )
     }
 
     private fun resumeAction(

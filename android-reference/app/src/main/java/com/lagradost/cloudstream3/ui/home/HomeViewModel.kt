@@ -18,8 +18,6 @@ import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.Resource
-import com.lagradost.cloudstream3.mvvm.debugAssert
-import com.lagradost.cloudstream3.mvvm.debugWarning
 import com.lagradost.cloudstream3.mvvm.launchSafe
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.plugins.PluginManager
@@ -53,9 +51,12 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper.getViewPos
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.util.EnumSet
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 
 class HomeViewModel : ViewModel() {
     companion object {
@@ -211,17 +212,19 @@ class HomeViewModel : ViewModel() {
 
     private var onGoingLoad: Job? = null
     private var isCurrentlyLoadingName: String? = null
-    private fun loadAndCancel(api: MainAPI) {
+    private fun loadAndCancel(api: MainAPI, generation: Long) {
         //println("loaded ${api.name}")
         onGoingLoad?.cancel()
         isCurrentlyLoadingName = api.name
-        onGoingLoad = load(api)
+        onGoingLoad = load(api, generation)
     }
 
     data class ExpandableHomepageList(
         var list: HomePageList,
         var currentPage: Int,
         var hasNext: Boolean,
+        var isLoadingMore: Boolean = false,
+        var pageError: String? = null,
     )
 
     private val expandable: MutableMap<String, ExpandableHomepageList> = mutableMapOf()
@@ -229,51 +232,74 @@ class HomeViewModel : ViewModel() {
         MutableLiveData<Resource<Map<String, ExpandableHomepageList>>>(Resource.Loading())
     val page: LiveData<Resource<Map<String, ExpandableHomepageList>>> = _page
 
-    val lock: MutableSet<String> = mutableSetOf()
+    private val pageLoadGeneration = AtomicLong(0L)
+    private val lock = ConcurrentHashMap.newKeySet<Pair<Long, String>>()
 
     suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
-        if (lock.contains(name)) return null
-        lock += name
+        val generation = pageLoadGeneration.get()
+        val current = expandable[name] ?: return null
+        if (!current.hasNext) return current
 
-        repo?.apply {
-            waitForHomeDelay()
+        val requestKey = generation to name
+        if (!lock.add(requestKey)) return current
 
-            expandable[name]?.let { current ->
-                debugAssert({ !current.hasNext }) {
-                    "Expand called when not needed"
-                }
+        current.isLoadingMore = true
+        current.pageError = null
+        _page.postValue(Resource.Success(expandable.toMap()))
 
-                val nextPage = current.currentPage + 1
-                val next = getMainPage(nextPage, mainPage.indexOfFirst { it.name == name })
-                if (next is Resource.Success) {
-                    next.value.filterNotNull().forEach { main ->
-                        main.items.forEach { newList ->
-                            val key = newList.name
-                            expandable[key]?.apply {
-                                hasNext = main.hasNext
-                                currentPage = nextPage
-
-                                debugWarning({ newList.list.any { outer -> this.list.list.any { it.url == outer.url } } }) {
-                                    "Expanded contained an item that was previously already in the list\n${list.name} = ${this.list.list}\n${newList.name} = ${newList.list}"
-                                }
-
-                                this.list.list += newList.list
-                                this.list.list.distinctBy { it.url } // just to be sure we are not adding the same shit for some reason
-                            } ?: debugWarning {
-                                "Expanded an item not in main load named $key, current list is ${expandable.keys}"
-                            }
-                        }
-                    }
-                } else {
-                    current.hasNext = false
-                }
+        try {
+            val currentRepo = repo
+            if (currentRepo == null) {
+                current.pageError = "The selected source is not ready. Try again."
+                return current
             }
-            _page.postValue(Resource.Success(expandable))
+
+            currentRepo.waitForHomeDelay()
+            if (generation != pageLoadGeneration.get() || expandable[name] !== current) return null
+
+            val catalogIndex = currentRepo.mainPage.indexOfFirst { it.name == name }
+            if (catalogIndex < 0) {
+                current.pageError = "This catalog is no longer available from the selected source."
+                return current
+            }
+
+            val nextPage = current.currentPage + 1
+            when (val result = currentRepo.getMainPage(nextPage, catalogIndex)) {
+                is Resource.Success -> {
+                    if (generation != pageLoadGeneration.get() || expandable[name] !== current) return null
+
+                    val response = result.value.filterNotNull().firstOrNull { page ->
+                        page.items.any { it.name == name }
+                    }
+                    val nextCatalog = response?.items?.firstOrNull { it.name == name }
+                    if (response == null || nextCatalog == null) {
+                        current.pageError = "The source did not return this catalog page. Try again."
+                    } else {
+                        current.list.list = CopyOnWriteArrayList(
+                            (current.list.list + nextCatalog.list).distinctBy { it.url }
+                        )
+                        current.currentPage = nextPage
+                        current.hasNext = response.hasNext
+                        current.pageError = null
+                    }
+                }
+
+                is Resource.Failure -> current.pageError = result.errorString
+                is Resource.Loading -> current.pageError = "The catalog page could not be loaded. Try again."
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            current.pageError = error.message ?: "The catalog page could not be loaded. Try again."
+        } finally {
+            current.isLoadingMore = false
+            lock.remove(requestKey)
+            if (generation == pageLoadGeneration.get() && expandable[name] === current) {
+                _page.postValue(Resource.Success(expandable.toMap()))
+            }
         }
 
-        lock -= name
-
-        return expandable[name]
+        return current.takeIf { generation == pageLoadGeneration.get() && expandable[name] === current }
     }
 
     // this is soo over engineered, but idk how I can make it clean without making the main api harder to use :pensive:
@@ -316,9 +342,10 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    private fun load(api: MainAPI): Job = ioSafe {
-        repo = //if (api != null) {
-            APIRepository(api)
+    private fun load(api: MainAPI, generation: Long): Job = ioSafe {
+        val newRepo = APIRepository(api)
+        if (pageLoadGeneration.get() != generation) return@ioSafe
+        repo = newRepo
         //} else {
         //    autoloadRepo()
         //}
@@ -516,27 +543,31 @@ class HomeViewModel : ViewModel() {
                 return@ioSafe
             }
 
+            // Invalidate in-flight page requests even when the requested source is no longer
+            // installed and this call can only publish a loading state.
+            val generation = pageLoadGeneration.incrementAndGet()
+
             val api = getApiFromNameNull(preferredApiName)
             if (preferredApiName == noneApi.name) {
                 // just set to random
                 if (fromUI) DataStoreHelper.currentHomePage = noneApi.name
-                loadAndCancel(noneApi)
+                loadAndCancel(noneApi, generation)
             } else if (preferredApiName == randomApi.name) {
                 // randomize the api, if none exist like if not loaded or not installed
                 // then use nothing
                 val validAPIs = context?.filterProviderByPreferredMedia()
                 if (validAPIs.isNullOrEmpty()) {
-                    loadAndCancel(noneApi)
+                    loadAndCancel(noneApi, generation)
                 } else {
                     val apiRandom = validAPIs.random()
-                    loadAndCancel(apiRandom)
+                    loadAndCancel(apiRandom, generation)
                     if (fromUI) DataStoreHelper.currentHomePage = apiRandom.name
                 }
             } else if (api == null) {
                 // API is not found aka not loaded or removed, post the loading
                 // progress if waiting for plugins, otherwise nothing
                 if (PluginManager.loadedOnlinePlugins || PluginManager.isSafeMode()) {
-                    loadAndCancel(noneApi)
+                    loadAndCancel(noneApi, generation)
                 } else {
                     _page.postValue(Resource.Loading())
                     if (preferredApiName != null)
@@ -545,7 +576,7 @@ class HomeViewModel : ViewModel() {
             } else {
                 // if the api is found, then set it to it and save key
                 if (fromUI) DataStoreHelper.currentHomePage = api.name
-                loadAndCancel(api)
+                loadAndCancel(api, generation)
             }
             reloadAccount()
         }

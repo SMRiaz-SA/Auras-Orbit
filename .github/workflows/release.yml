@@ -170,7 +170,14 @@ jobs:
           Accept = 'application/vnd.github+json'
           'X-GitHub-Api-Version' = '2022-11-28'
         }
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" -Headers $headers
+        $release = $null
+        try {
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" -Headers $headers
+        } catch {
+          $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+          if ($statusCode -ne 404) { throw }
+          Write-Host "No release exists for $env:GITHUB_REF_NAME yet; skipping previous APK cleanup."
+        }
         foreach ($asset in @($release.assets | Where-Object { $_.name -match '(?i)\.apk$' })) {
           Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$($asset.id)" -Headers $headers
         }

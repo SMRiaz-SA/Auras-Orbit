@@ -15,6 +15,7 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
@@ -465,9 +466,11 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             ).firstOrNull { it.isVisible }
 
             resultCastItems.setRecycledViewPool(ActorAdaptor.sharedPool)
-            resultCastItems.adapter = ActorAdaptor(aboveCast?.id) {
-                toggleEpisodes(false)
-            }
+            resultCastItems.adapter = ActorAdaptor(
+                nextFocusUpId = aboveCast?.id,
+                focusCallback = { toggleEpisodes(false) },
+                onPersonSelected = ::openPersonFilmography,
+            )
 
             if (isLayout(EMULATOR)) {
                 episodesShadow.setOnClickListener {
@@ -961,5 +964,15 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                 //resultReloadConnectionOpenInBrowser.isVisible = data is Resource.Failure
             }
         }
+    }
+
+    private fun openPersonFilmography(person: com.lagradost.cloudstream3.Actor) {
+        findNavController().navigate(
+            R.id.navigation_person_filmography,
+            Bundle().apply {
+                putString("personName", person.name)
+                putString("personImage", person.image)
+            },
+        )
     }
 }

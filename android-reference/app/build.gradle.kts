@@ -1,4 +1,5 @@
 import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
+import java.io.File
 import org.jetbrains.dokka.gradle.engine.parameters.KotlinPlatform
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
@@ -11,6 +12,40 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+}
+
+abstract class CanonicalAndroidApkNameTask : org.gradle.api.DefaultTask() {
+    @get:org.gradle.api.tasks.InputDirectory
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    abstract val inputDirectory: org.gradle.api.file.DirectoryProperty
+
+    @get:org.gradle.api.tasks.OutputDirectory
+    abstract val outputDirectory: org.gradle.api.file.DirectoryProperty
+
+    @org.gradle.api.tasks.TaskAction
+    fun applyCanonicalName() {
+        val input = inputDirectory.get().asFile
+        val apkFiles = input.walkTopDown().filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }.toList()
+        check(apkFiles.size == 1) {
+            "Expected one APK for this variant, found ${apkFiles.size} in $input"
+        }
+
+        val metadataFiles = input.walkTopDown().filter { it.isFile && it.name == "output-metadata.json" }.toList()
+        check(metadataFiles.size == 1) {
+            "Expected one APK output metadata file for this variant, found " + metadataFiles.size + " in " + input
+        }
+
+        val output = outputDirectory.get().asFile
+        output.deleteRecursively()
+        output.mkdirs()
+        apkFiles.single().copyTo(File(output, "Auras-Orbit.apk"), overwrite = true)
+
+        val metadata = metadataFiles.single().readText()
+        val outputFileField = Regex("\"outputFile\"\\s*:\\s*\"[^\"]+\"")
+        val rewritten = outputFileField.replace(metadata) { "\"outputFile\": \"Auras-Orbit.apk\"" }
+        check(rewritten != metadata) { "APK output metadata did not contain an outputFile entry: " + metadataFiles.single() }
+        File(output, "output-metadata.json").writeText(rewritten)
+    }
 }
 
 val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
@@ -139,6 +174,13 @@ android {
                 generateGitHash,
                 GenerateGitHashTask::outputDir
             )
+
+            tasks.register<CanonicalAndroidApkNameTask>(
+                "canonical${variant.name.replaceFirstChar { it.uppercase() }}Apk"
+            ) {
+                inputDirectory.set(variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.APK))
+                outputDirectory.set(layout.buildDirectory.dir("outputs/canonical/" + variant.name))
+            }
         }
     }
 
@@ -314,6 +356,7 @@ dependencies {
 
     // Coil Image Loading
     implementation(libs.bundles.coil)
+    implementation(libs.coil.svg)
 
     // Media 3 (ExoPlayer)
     implementation(libs.bundles.media3)

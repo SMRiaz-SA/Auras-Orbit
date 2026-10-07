@@ -55,10 +55,10 @@ $distribution = Join-Path $repoRoot 'desktop-app/build/compose/binaries/main/app
 $outputDirectory = Join-Path $repoRoot 'desktop-app/build/outputs'
 $portableZip = Join-Path $outputDirectory "Auras-Orbit-Portable-$version.zip"
 $sourceZip = Join-Path $outputDirectory "Auras-Orbit-Source-$version.zip"
-$androidApk = Join-Path $outputDirectory "Auras-Orbit-Android-$version-debug.apk"
+$androidApk = Join-Path $outputDirectory 'Auras-Orbit.apk'
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
-foreach ($archive in @($portableZip, $sourceZip, $androidApk)) {
+foreach ($archive in @($portableZip, $sourceZip)) {
     if ((Test-Path -LiteralPath $archive -PathType Leaf) -and -not $ForceArchives) {
         throw "Output already exists; move it aside or rerun with -ForceArchives: $archive"
     }
@@ -154,7 +154,7 @@ $previousJavaHome = $env:JAVA_HOME
 $env:JAVA_HOME = $androidJavaHome
 Push-Location $androidProject
 try {
-    & .\gradlew.bat ':app:assembleStableDebug' "-PAPP_VERSION=$version" '--no-daemon' '--console=plain' '--stacktrace' '--max-workers=2'
+    & .\gradlew.bat ':app:canonicalStableDebugApk' "-PAPP_VERSION=$version" '--no-daemon' '--console=plain' '--stacktrace' '--max-workers=2'
     if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location
@@ -165,12 +165,9 @@ try {
     }
 }
 
-$builtAndroidApk = Join-Path $androidProject 'app/build/outputs/apk/stable/debug/app-stable-debug.apk'
+$builtAndroidApk = Join-Path $androidProject 'app/build/outputs/canonical/stableDebug/Auras-Orbit.apk'
 & (Join-Path $repoRoot '.github/scripts/verify-android-apk.ps1') -ExpectedVersion $version -ApkPath $builtAndroidApk
-if ($ForceArchives -and (Test-Path -LiteralPath $androidApk -PathType Leaf)) {
-    Remove-Item -LiteralPath $androidApk -Force
-}
-Copy-Item -LiteralPath $builtAndroidApk -Destination $androidApk
+Copy-Item -LiteralPath $builtAndroidApk -Destination $androidApk -Force
 
 $isccCandidates = [System.Collections.Generic.List[string]]::new()
 $isccCandidates.Add((Join-Path $repoRoot 'build/tools/innosetup/install/ISCC.exe'))

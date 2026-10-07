@@ -103,7 +103,7 @@ fun SettingsAbout() {
                         fontWeight = FontWeight.Medium,
                     )
                     Text(
-                        "This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.",
+                        "This product uses the TMDB API but is not endorsed or certified by TMDB.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
