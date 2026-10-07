@@ -7,11 +7,12 @@ $mpvDll = Join-Path $mpvDirectory 'libmpv-2.dll'
 $mpvLicense = Join-Path $legalDirectory 'mpv-LICENSE.GPL.txt'
 $mpvProvenance = Join-Path $legalDirectory 'MPV-PROVENANCE.txt'
 
-$assetName = 'mpv-dev-x86_64-20260610-git-304426c.7z'
-$assetUrl = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260610/mpv-dev-x86_64-20260610-git-304426c.7z'
-$expectedArchiveSha256 = '8CBB25EA784F01AFBB3F904217CAB1317430A8BCFD5680FD827A866367F71CC9'
-$expectedDllSha256 = '5C876D79E070529128331591B48F87846FB30557F19C11280DF9C6EE9B6DBAFA'
-$mpvSourceCommit = '304426c39'
+$assetReleaseTag = '20261007'
+$assetName = 'mpv-dev-x86_64-20261007-git-eb0ee10315.7z'
+$assetUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/$assetReleaseTag/$assetName"
+$expectedArchiveSha256 = '3FD93055D437310AD094D3F80C9B04F9A56E8B138BCB7D9C5CF01870ABBFE5A5'
+$expectedDllSha256 = '872827614ED0ADFCA11E68DEF5273BCFCAEA6ACF38BBF1950C35980B59F43A5F'
+$mpvSourceCommit = 'eb0ee1031590b3f369a5b783e8aa91eeaaded7e6'
 $licenseUrl = "https://raw.githubusercontent.com/mpv-player/mpv/$mpvSourceCommit/LICENSE.GPL"
 
 New-Item -ItemType Directory -Force -Path $mpvDirectory, $legalDirectory | Out-Null
@@ -72,7 +73,7 @@ $provenanceLines = @(
     "mpv source commit: $mpvSourceCommit",
     "mpv source URL: https://github.com/mpv-player/mpv/tree/$mpvSourceCommit",
     "License: GNU GPL v2; license text: $licenseUrl",
-    'Build recipe/provenance: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260610'
+    "Build recipe/provenance: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/$assetReleaseTag"
 )
 [IO.File]::WriteAllLines($mpvProvenance, $provenanceLines, [Text.UTF8Encoding]::new($false))
 

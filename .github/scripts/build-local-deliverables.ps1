@@ -118,7 +118,7 @@ foreach ($requiredSource in @(
 }
 
 $mpvDll = Join-Path $repoRoot 'desktop-app/appResources/windows/mpv/libmpv-2.dll'
-$mpvHashExpected = '5C876D79E070529128331591B48F87846FB30557F19C11280DF9C6EE9B6DBAFA'
+$mpvHashExpected = '872827614ED0ADFCA11E68DEF5273BCFCAEA6ACF38BBF1950C35980B59F43A5F'
 $mpvLicense = Join-Path $repoRoot 'desktop-app/appResources/legal/mpv-LICENSE.GPL.txt'
 $mpvProvenance = Join-Path $repoRoot 'desktop-app/appResources/legal/MPV-PROVENANCE.txt'
 $mpvReady = (Test-Path -LiteralPath $mpvDll -PathType Leaf) -and
