@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0.26 — 2026-10-08
+
+### Fixed
+
+- Show the media type from explicit TV or movie shelf categories when a provider gives its cards the wrong type.
+
 ## 0.2.0.25 — 2026-10-08
 
 ### Added
