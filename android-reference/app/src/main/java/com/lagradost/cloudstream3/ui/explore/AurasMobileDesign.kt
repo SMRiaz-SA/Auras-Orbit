@@ -54,6 +54,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
+import java.util.Locale
 
 internal object AurasPalette {
     val Ink = Color(0xFF100D17)
@@ -137,6 +138,19 @@ internal data class AurasShelf(
     val isLoadingMore: Boolean = false,
     val pageError: String? = null,
 )
+
+/** Shelf names can be more reliable than a provider's item type for a categorized catalog row. */
+internal fun mediaTypeLabelForShelf(name: String): String? {
+    val normalized = name.lowercase(Locale.ROOT)
+    val tvShelf = Regex("\\b(tv|television|series|shows?)\\b").containsMatchIn(normalized)
+    val movieShelf = Regex("\\b(movies?|films?)\\b").containsMatchIn(normalized)
+
+    return when {
+        tvShelf -> "TV SHOW"
+        movieShelf -> "MOVIE"
+        else -> null
+    }
+}
 
 internal data class AurasBrowseState(
     val sourceName: String? = null,
@@ -374,6 +388,7 @@ internal fun AurasPosterRail(
     actionEnabled: Boolean = true,
 ) {
     if (items.isEmpty()) return
+    val typeLabelOverride = mediaTypeLabelForShelf(title)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -381,6 +396,7 @@ internal fun AurasPosterRail(
                 AurasPosterCard(
                     item = item,
                     width = 137.dp,
+                    typeLabelOverride = typeLabelOverride,
                     progress = progressByUrl[item.url],
                     onClick = { onOpen(item, index) },
                 )
@@ -393,6 +409,7 @@ internal fun AurasPosterRail(
 internal fun AurasPosterCard(
     item: SearchResponse,
     width: Dp,
+    typeLabelOverride: String? = null,
     progress: Float? = null,
     rank: Int? = null,
     onClick: () -> Unit,
@@ -458,7 +475,7 @@ internal fun AurasPosterCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    item.type?.name?.replace('_', ' ')?.uppercase() ?: item.apiName,
+                    typeLabelOverride ?: item.type?.name?.replace('_', ' ')?.uppercase() ?: item.apiName,
                     color = AurasPalette.Muted,
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -494,6 +511,7 @@ internal fun AurasTopTenRail(
     items: List<SearchResponse>,
     onOpen: (SearchResponse, Int) -> Unit,
     onLoadMore: (() -> Unit)? = null,
+    typeLabelOverride: String? = null,
 ) {
     val topTen = items.take(10)
     if (topTen.isEmpty()) return
@@ -508,6 +526,7 @@ internal fun AurasTopTenRail(
                 AurasPosterCard(
                     item = item,
                     width = 137.dp,
+                    typeLabelOverride = typeLabelOverride,
                     rank = index + 1,
                     onClick = { onOpen(item, index) },
                 )

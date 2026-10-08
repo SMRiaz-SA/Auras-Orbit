@@ -246,6 +246,7 @@ private fun AurasExploreScreen(
                             items = shelf.items,
                             onOpen = onOpenTitle,
                             onLoadMore = if (shelf.hasNext) ({ onExpand(shelf.name) }) else null,
+                            typeLabelOverride = mediaTypeLabelForShelf(shelf.name),
                         )
                     } else {
                         AurasPosterRail(
