@@ -67,7 +67,6 @@
     <string name="popup_resume_download">Възобновете изтеглянето</string>
     <string name="popup_pause_download">Пауза на изтеглянето</string>
     <string name="home_more_info">Повече информация</string>
-    <string name="home_expanded_hide">Скрий</string>
     <string name="home_play">Пусни</string>
     <string name="home_info">Информация</string>
     <string name="filter_bookmarks">Филтриране на отметки</string>
@@ -91,7 +90,7 @@
     <string name="subs_font_size">Размер на шрифта</string>
     <string name="search_provider_text_providers">Търсене чрез доставчици</string>
     <string name="search_provider_text_types">Търсене с помощта на типове</string>
-    <string name="benene_count_text">%d Банан/а даден/и на разработчиците</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Банан/а даден/и на разработчиците</item><item quantity="other">%d Банан/а даден/и на разработчиците</item></plurals>
     <string name="benene_count_text_none">Не е/са даден/и Банан/и</string>
     <string name="subs_auto_select_language">Автоматичен избор на език</string>
     <string name="subs_download_languages">Изтегляне на езици</string>
@@ -401,7 +400,7 @@
     <string formatted="true" name="plugins_downloaded">Изтеглено: %d</string>
     <string formatted="true" name="plugins_disabled">Деактивирано: %d</string>
     <string formatted="true" name="plugins_not_downloaded">Не е изтеглено: %d</string>
-    <string formatted="true" name="plugins_updated">Актуализирани %d плъгини</string>
+    <plurals name="plugins_updated"><item quantity="one">Актуализирани %d плъгини</item><item quantity="other">Актуализирани %d плъгини</item></plurals>
     <string name="blank_repo_message">Auras Orbit няма инсталирани сайтове по подразбиране. Трябва да инсталирате сайтовете от хранилища. \n \nПрисъединете се към нашия Дискорд или потърсете онлайн.</string>
     <string name="view_public_repositories_button">Вижте хранилищата на общността</string>
     <string name="view_public_repositories_button_short">Публичен списък</string>
@@ -585,7 +584,7 @@
     <string name="encoding_error">Проблем с кодирането</string>
     <string name="unsupported_error">Неподдържана грешка</string>
     <string name="subtitles_from_online">Онлайн</string>
-    <string name="volume_exceeded_100">Обемът надвиши 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Обемът надвиши 100%</string>
     <string name="slide_up_again_to_exceed_100">Плъзнете нагоре отново, за да преминете над 100%</string>
     <string name="player_notification_channel_description">Известие на плейъра за контролиране на възпроизвеждането от фона</string>
     <string name="subtitles_from_embedded">Вграден</string>
@@ -594,7 +593,6 @@
     <string name="preview_seekbar">Преглед на лентата за търсене</string>
     <string name="sort_episodes_number_asc">Епизод (възходящо)</string>
     <string name="sort_episodes_rating_low_high">Оценка (най-ниска)</string>
-    <string name="sort_button_episode">Епизод %s</string>
     <string name="backup_path_title">Местоположение на папката за архивиране</string>
     <string name="confirm_before_exiting_title">Потвърдете преди да излезете</string>
     <string name="subs_edge_size">Размер на ръба</string>
@@ -608,15 +606,13 @@
     <string name="hide_player_control_names">Скрий имената на контролните елементи на играча</string>
     <string name="sort_episodes_rating_high_low">Оценка (най-висока)</string>
     <string name="sort_episodes_date_newest">Дата на излъчване (най-нова)</string>
-    <string name="sort_button_rating">Оценка %s</string>
     <string name="preview_seekbar_desc">Активирай миниатюра за преглед на лентата за търсене</string>
     <string name="custom">По избор</string>
     <string name="sort_release_date_old">Дата на издаване (от стара към нова)</string>
     <string name="torrent_preferred_media">Активирай торент в Настройки/Доставчици/Предпочитани медии</string>
-    <string name="plugins_updated_manually">Успешно актуализиран/и %d плъгин/а!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Успешно актуализиран/и %d плъгин/а!</item><item quantity="other">Успешно актуализиран/и %d плъгин/а!</item></plurals>
     <string name="all_subtitles_italic">Направете всички субтитри наклонени</string>
     <string name="sort_episodes_date_oldest">Дата на излъчване (най-стара)</string>
-    <string name="sort_button_date">Дата %s</string>
     <string name="no_plugins_updated_manually">Няма актуализирани плъгини.</string>
     <string name="delete_message_series_only" formatted="true">Are you sure you wСигурни ли сте, че искате трайно да изтриете всички епизоди от тази поредица?\n\n%s</string>
     <string name="torrent_not_accepted">Рестартирайте приложението и приемете изскачащото съобщение за Stream Torrent, за да продължите.</string>
@@ -685,14 +681,11 @@
     <string name="play_full_series_button">Пусни цялата поредица</string>
     <string name="queue_empty_message">В момента няма изтегляния в опашката.</string>
     <string name="extra_brightness_settings">Допълнителна яркост</string>
-    <string name="extra_brightness_settings_des">Активирай филтъра за яркост, когато яркостта на екрана надвиши 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Активирай филтъра за яркост, когато яркостта на екрана надвиши 100%</string>
     <string name="search_suggestions">Предложения за търсене</string>
     <string name="search_suggestions_des">Показвай предложения за търсене по време на писане</string>
     <string name="clear_suggestions">Изтрий предложения</string>
     <string name="show_cast_in_details">Покажи панела за излъчване</string>
-    <string name="install_prerelease">Инсталирай предварителна версия</string>
-    <string name="prerelease_already_installed">Предварителна версия вече е изтеглена.</string>
-    <string name="prerelease_install_failed">Неуспешна инсталация на предварителната версия.</string>
     <string name="show_rating">Етикет за рейтинг</string>
     <string name="show_episode_text">Текст на епизода</string>
     <string name="video_info">Информация за медията</string>

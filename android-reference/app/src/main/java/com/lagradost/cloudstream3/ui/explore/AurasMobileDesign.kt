@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,22 +41,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.lagradost.cloudstream3.AnimeSearchResponse
+import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.TvSeriesSearchResponse
+import com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
-import java.util.Locale
+import com.lagradost.cloudstream3.utils.getImageFromDrawable
 
 internal object AurasPalette {
     val Ink = Color(0xFF100D17)
@@ -140,18 +148,6 @@ internal data class AurasShelf(
 )
 
 /** Shelf names can be more reliable than a provider's item type for a categorized catalog row. */
-internal fun mediaTypeLabelForShelf(name: String): String? {
-    val normalized = name.lowercase(Locale.ROOT)
-    val tvShelf = Regex("\\b(tv|television|series|shows?)\\b").containsMatchIn(normalized)
-    val movieShelf = Regex("\\b(movies?|films?)\\b").containsMatchIn(normalized)
-
-    return when {
-        tvShelf -> "TV SHOW"
-        movieShelf -> "MOVIE"
-        else -> null
-    }
-}
-
 internal data class AurasBrowseState(
     val sourceName: String? = null,
     val sources: List<AurasSourceOption> = emptyList(),
@@ -163,31 +159,19 @@ internal data class AurasBrowseState(
 
 @Composable
 internal fun AurasBrandBar(
-    sourceName: String?,
-    sourceLabel: String,
-    onSourceClick: () -> Unit,
-    onHelpClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onHelpClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(15.dp),
-            color = AurasPalette.AccentDeep,
-            border = BorderStroke(1.dp, AurasPalette.Stroke),
-            modifier = Modifier.size(46.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.auras_orbit_mark),
-                    contentDescription = null,
-                    modifier = Modifier.size(30.dp),
-                )
-            }
-        }
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.auras_orbit_mark),
+            contentDescription = null,
+            modifier = Modifier.size(42.dp),
+        )
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = "AURAS ORBIT",
@@ -196,28 +180,12 @@ internal fun AurasBrandBar(
                 letterSpacing = 1.2.sp,
             )
             Text(
-                text = if (sourceName.isNullOrBlank()) "DISCOVER YOUR NEXT STORY" else "YOUR ORBIT · $sourceName",
+                text = stringResource(R.string.auras_explore_brand_tagline),
                 color = AurasPalette.Muted,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        Surface(
-            onClick = onSourceClick,
-            color = AurasPalette.SurfaceRaised,
-            contentColor = AurasPalette.Text,
-            shape = CircleShape,
-            border = BorderStroke(1.dp, AurasPalette.Stroke),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(sourceLabel, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                Text("⌄", color = AurasPalette.Accent, fontSize = 16.sp)
-            }
         }
         if (onHelpClick != null) {
             Surface(
@@ -277,107 +245,6 @@ internal fun AurasSectionHeading(
 }
 
 @Composable
-internal fun AurasFeaturedCard(
-    item: SearchResponse?,
-    onOpen: () -> Unit,
-    onBrowse: () -> Unit,
-) {
-    Card(
-        onClick = if (item == null) onBrowse else onOpen,
-        shape = RoundedCornerShape(30.dp),
-        colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
-        border = BorderStroke(1.dp, AurasPalette.Stroke),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 250.dp)
-                .clip(RoundedCornerShape(30.dp)),
-        ) {
-            if (item?.posterUrl != null) {
-                AurasArtwork(
-                    url = item.posterUrl,
-                    headers = item.posterHeaders,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(AurasPalette.AccentDeep, AurasPalette.Surface, AurasPalette.Ink)
-                            )
-                        ),
-                )
-            }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to AurasPalette.Ink.copy(alpha = 0.04f),
-                            0.3f to AurasPalette.Ink.copy(alpha = 0.20f),
-                            1f to AurasPalette.Ink.copy(alpha = 0.95f),
-                        )
-                    ),
-            )
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(horizontal = 21.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = if (item == null) "A NEW WAY TO FIND YOUR NEXT WATCH" else "IN YOUR ORBIT",
-                    color = AurasPalette.Accent,
-                    style = MaterialTheme.typography.labelMedium,
-                    letterSpacing = 1.1.sp,
-                )
-                Text(
-                    text = item?.name ?: "Stories, gathered around you.",
-                    color = AurasPalette.Text,
-                    style = MaterialTheme.typography.headlineMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = if (item == null) {
-                        "Connect a source and explore its catalogs in your own Orbit."
-                    } else {
-                        "A title selected from your connected catalog."
-                    },
-                    color = AurasPalette.Text.copy(alpha = 0.82f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AurasPrimaryButton(
-                        label = if (item == null) "Connect a source" else "Open title",
-                        onClick = if (item == null) onBrowse else onOpen,
-                    )
-                    if (item != null) AurasQuietButton("Browse catalogs", onBrowse)
-                }
-            }
-            if (item == null) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.auras_orbit_mark),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 26.dp, end = 24.dp)
-                        .size(96.dp),
-                    alpha = 0.48f,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 internal fun AurasPosterRail(
     title: String,
     items: List<SearchResponse>,
@@ -386,20 +253,160 @@ internal fun AurasPosterRail(
     onAction: (() -> Unit)? = null,
     progressByUrl: Map<String, Float> = emptyMap(),
     actionEnabled: Boolean = true,
+    rankStart: Int? = null,
 ) {
     if (items.isEmpty()) return
-    val typeLabelOverride = mediaTypeLabelForShelf(title)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-            itemsIndexed(items, key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" }) { index, item ->
-                AurasPosterCard(
-                    item = item,
-                    width = 137.dp,
-                    typeLabelOverride = typeLabelOverride,
-                    progress = progressByUrl[item.url],
-                    onClick = { onOpen(item, index) },
+        itemsIndexed(items, key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" }) { index, item ->
+            AurasPosterCard(
+                item = item,
+                width = 98.dp,
+                progress = progressByUrl[item.url],
+                rank = rankStart?.plus(index),
+                onClick = { onOpen(item, index) },
+            )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AurasSourceRow(
+    sourceName: String?,
+    hasSources: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = AurasPalette.Surface,
+        contentColor = AurasPalette.Text,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, AurasPalette.Stroke),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (hasSources) R.string.auras_explore_current_source
+                    else R.string.auras_explore_source_not_connected
+                ),
+                color = AurasPalette.Muted,
+                style = MaterialTheme.typography.labelMedium,
+                letterSpacing = 0.8.sp,
+            )
+            Text(
+                text = sourceName?.takeIf { it.isNotBlank() }
+                    ?: stringResource(R.string.auras_explore_source_choose),
+                color = AurasPalette.Text,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(
+                    if (hasSources) R.string.auras_explore_source_change_hint
+                    else R.string.auras_explore_source_connect_hint
+                ),
+                color = AurasPalette.Muted,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AurasRankedTrendingRow(
+    item: SearchResponse,
+    rank: Int,
+    onOpen: () -> Unit,
+) {
+    val year = when (item) {
+        is AnimeSearchResponse -> item.year
+        is MovieSearchResponse -> item.year
+        is TvSeriesSearchResponse -> item.year
+        else -> null
+    }
+    val score = item.score?.toStringNull(minScore = 0.1, maxScore = 10, decimals = 1)
+    val shape = RoundedCornerShape(20.dp)
+    Card(
+        onClick = onOpen,
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
+        border = BorderStroke(1.dp, AurasPalette.Stroke),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = rank.toString().padStart(2, '0'),
+                color = AurasPalette.Accent,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Box(
+                modifier = Modifier
+                    .width(78.dp)
+                    .aspectRatio(PORTRAIT_POSTER_ASPECT_RATIO)
+                    .clip(RoundedCornerShape(13.dp)),
+            ) {
+                AurasArtwork(
+                    url = item.posterUrl,
+                    headers = item.posterHeaders,
+                    modifier = Modifier.fillMaxSize(),
                 )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = item.name,
+                    color = AurasPalette.Text,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (year != null || score != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        year?.let {
+                            Text(
+                                text = it.toString(),
+                                color = AurasPalette.Muted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        score?.let {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Text(
+                                    text = "★",
+                                    color = AurasPalette.Accent,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Text(
+                                    text = it,
+                                    color = AurasPalette.Muted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -409,23 +416,36 @@ internal fun AurasPosterRail(
 internal fun AurasPosterCard(
     item: SearchResponse,
     width: Dp,
-    typeLabelOverride: String? = null,
     progress: Float? = null,
     rank: Int? = null,
     onClick: () -> Unit,
 ) {
+    val year = when (item) {
+        is AnimeSearchResponse -> item.year
+        is MovieSearchResponse -> item.year
+        is TvSeriesSearchResponse -> item.year
+        else -> null
+    }
+    val score = item.score?.toStringNull(minScore = 0.1, maxScore = 10, decimals = 1)
+    val accessibilityDescription = listOfNotNull(
+        item.name,
+        year?.toString(),
+        score?.let { "Rating $it" },
+    ).joinToString(", ")
     val shape = RoundedCornerShape(21.dp)
     Card(
         onClick = onClick,
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
         border = BorderStroke(1.dp, AurasPalette.Stroke),
-        modifier = Modifier.width(width),
+        modifier = Modifier.width(width).semantics(mergeDescendants = true) {
+            contentDescription = accessibilityDescription
+        },
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.69f)
+                .aspectRatio(PORTRAIT_POSTER_ASPECT_RATIO)
                 .clip(shape),
         ) {
             AurasArtwork(
@@ -435,101 +455,65 @@ internal fun AurasPosterCard(
             )
             if (rank != null) {
                 Surface(
+                    modifier = Modifier.align(Alignment.TopStart).padding(7.dp),
                     color = AurasPalette.Ink.copy(alpha = 0.86f),
-                    shape = RoundedCornerShape(11.dp),
+                    shape = RoundedCornerShape(9.dp),
                     border = BorderStroke(1.dp, AurasPalette.Stroke),
-                    modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
                 ) {
                     Text(
                         text = rank.toString().padStart(2, '0'),
                         color = AurasPalette.Accent,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
                     )
                 }
             }
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(92.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, AurasPalette.Ink.copy(alpha = 0.94f))
+            score?.let { rating ->
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                    color = AurasPalette.Ink.copy(alpha = 0.86f),
+                    contentColor = AurasPalette.Text,
+                    shape = RoundedCornerShape(9.dp),
+                    border = BorderStroke(1.dp, AurasPalette.Stroke),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "★",
+                            color = AurasPalette.Accent,
+                            style = MaterialTheme.typography.labelSmall,
                         )
-                    ),
-            )
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(horizontal = 11.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Text(
-                    item.name,
-                    color = AurasPalette.Text,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    typeLabelOverride ?: item.type?.name?.replace('_', ' ')?.uppercase() ?: item.apiName,
-                    color = AurasPalette.Muted,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                        Text(
+                            text = rating,
+                            color = AurasPalette.Text,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
             }
-            if (progress != null) {
+            progress?.let { value ->
                 Box(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 11.dp, end = 11.dp, bottom = 5.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                        .height(4.dp)
                         .clip(CircleShape)
-                        .background(AurasPalette.Text.copy(alpha = 0.25f)),
+                        .background(AurasPalette.Text.copy(alpha = 0.32f)),
                 ) {
                     Box(
-                        Modifier
-                            .fillMaxWidth(progress.coerceIn(0f, 1f))
-                            .height(3.dp)
+                        modifier = Modifier
+                            .fillMaxWidth(value.coerceIn(0f, 1f))
+                            .fillMaxSize()
                             .clip(CircleShape)
                             .background(AurasPalette.Accent),
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun AurasTopTenRail(
-    title: String,
-    items: List<SearchResponse>,
-    onOpen: (SearchResponse, Int) -> Unit,
-    onLoadMore: (() -> Unit)? = null,
-    typeLabelOverride: String? = null,
-) {
-    val topTen = items.take(10)
-    if (topTen.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AurasSectionHeading(
-            title = title,
-            actionLabel = if (onLoadMore != null && topTen.size < 10) "Load more" else null,
-            onAction = onLoadMore?.takeIf { topTen.size < 10 },
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-            itemsIndexed(topTen, key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" }) { index, item ->
-                AurasPosterCard(
-                    item = item,
-                    width = 137.dp,
-                    typeLabelOverride = typeLabelOverride,
-                    rank = index + 1,
-                    onClick = { onOpen(item, index) },
-                )
             }
         }
     }
@@ -542,25 +526,42 @@ internal fun AurasCatalogShelf(
     onExpand: (() -> Unit)?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        AurasPosterRail(
-            title = shelf.name,
-            items = shelf.items,
-            onOpen = onOpen,
-            actionLabel = when {
-                !shelf.hasNext -> null
-                shelf.isLoadingMore -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_loading_more)
-                shelf.pageError != null -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_retry)
-                else -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_more)
-            },
-            onAction = if (shelf.hasNext) onExpand else null,
-            actionEnabled = !shelf.isLoadingMore,
-        )
-        shelf.pageError?.let { message ->
+        val actionLabel = when {
+            !shelf.hasNext -> null
+            shelf.isLoadingMore -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_loading_more)
+            shelf.pageError != null -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_retry)
+            else -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_more)
+        }
+        if (shelf.items.isEmpty()) {
+            AurasSectionHeading(
+                title = shelf.name,
+                actionLabel = actionLabel,
+                onAction = if (shelf.hasNext) onExpand else null,
+                actionEnabled = !shelf.isLoadingMore,
+            )
             Text(
-                text = androidx.compose.ui.res.stringResource(R.string.auras_catalog_page_error, message),
-                color = AurasPalette.Ember,
+                text = shelf.pageError?.let {
+                    androidx.compose.ui.res.stringResource(R.string.auras_catalog_page_error, it)
+                } ?: androidx.compose.ui.res.stringResource(R.string.auras_catalog_empty_shelf),
+                color = if (shelf.pageError == null) AurasPalette.Muted else AurasPalette.Ember,
                 style = MaterialTheme.typography.bodyMedium,
             )
+        } else {
+            AurasPosterRail(
+                title = shelf.name,
+                items = shelf.items,
+                onOpen = onOpen,
+                actionLabel = actionLabel,
+                onAction = if (shelf.hasNext) onExpand else null,
+                actionEnabled = !shelf.isLoadingMore,
+            )
+            shelf.pageError?.let { message ->
+                Text(
+                    text = androidx.compose.ui.res.stringResource(R.string.auras_catalog_page_error, message),
+                    color = AurasPalette.Ember,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }
@@ -599,6 +600,7 @@ internal fun AurasQuietButton(label: String, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AurasSourcePicker(
     visible: Boolean,
@@ -606,20 +608,36 @@ internal fun AurasSourcePicker(
     options: List<AurasSourceOption>,
     onDismiss: () -> Unit,
     onSelect: (AurasSourceOption) -> Unit,
+    onConnectSource: (() -> Unit)? = null,
 ) {
     if (!visible) return
-    AlertDialog(
+    var query by remember { mutableStateOf("") }
+    val matchingOptions = remember(options, query) {
+        options.filter { it.label.contains(query.trim(), ignoreCase = true) }
+    }
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = AurasPalette.Surface,
-        titleContentColor = AurasPalette.Text,
-        textContentColor = AurasPalette.Muted,
-        title = { Text("Choose your source", style = MaterialTheme.typography.titleLarge) },
-        text = {
+        contentColor = AurasPalette.Text,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(stringResource(R.string.auras_source_picker_title), style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.auras_source_picker_search)) },
+            )
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.heightIn(max = 380.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(options, key = { _, option -> option.key }) { _, option ->
+                itemsIndexed(matchingOptions, key = { _, option -> option.key }) { _, option ->
                     val selected = option.key == selectedKey
                     Surface(
                         onClick = { onSelect(option) },
@@ -637,12 +655,19 @@ internal fun AurasSourcePicker(
                         }
                     }
                 }
+                if (matchingOptions.isEmpty()) item {
+                    Text(
+                        stringResource(R.string.auras_source_picker_no_results),
+                        color = AurasPalette.Muted,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+                if (onConnectSource != null) item {
+                    AurasQuietButton(stringResource(R.string.auras_welcome_connect), onConnectSource)
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done", color = AurasPalette.Accent) }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -662,16 +687,12 @@ internal fun AurasEmptyPanel(
             modifier = Modifier.padding(horizontal = 22.dp, vertical = 25.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Surface(color = AurasPalette.AccentDeep, shape = CircleShape, modifier = Modifier.size(54.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    androidx.compose.foundation.Image(
-                        painter = painterResource(R.drawable.auras_orbit_mark),
-                        contentDescription = null,
-                        modifier = Modifier.size(34.dp),
-                        colorFilter = ColorFilter.tint(AurasPalette.Accent),
-                    )
-                }
-            }
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.auras_orbit_mark),
+                contentDescription = null,
+                modifier = Modifier.size(54.dp),
+                colorFilter = ColorFilter.tint(AurasPalette.Accent),
+            )
             Text(title, style = MaterialTheme.typography.titleLarge, color = AurasPalette.Text)
             Text(body, style = MaterialTheme.typography.bodyMedium, color = AurasPalette.Muted)
             AurasPrimaryButton(button, onClick)
@@ -680,12 +701,15 @@ internal fun AurasEmptyPanel(
 }
 
 @Composable
-private fun AurasArtwork(
+internal fun AurasArtwork(
     url: String?,
     headers: Map<String, String>?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val fallbackArtwork = remember(context) {
+        getImageFromDrawable(context, R.drawable.default_cover)
+    }
     if (url.isNullOrBlank()) {
         Box(
             modifier.background(AurasPalette.SurfaceRaised),
@@ -706,7 +730,10 @@ private fun AurasArtwork(
                 val key = "$url|${headers?.hashCode()}"
                 if (imageView.tag != key) {
                     imageView.tag = key
-                    imageView.loadImage(url, headers)
+                    imageView.loadImage(url, headers) {
+                        placeholder(fallbackArtwork)
+                        error(fallbackArtwork)
+                    }
                 }
             },
         )

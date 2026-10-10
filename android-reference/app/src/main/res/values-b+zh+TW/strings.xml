@@ -71,7 +71,6 @@
     <string name="popup_resume_download">繼續下載</string>
     <string name="popup_pause_download">暫停下載</string>
     <string name="home_more_info">更多資訊</string>
-    <string name="home_expanded_hide">隱藏</string>
     <string name="home_play">播放</string>
     <string name="home_info">資訊</string>
     <string name="filter_bookmarks">篩選書籤</string>
@@ -95,7 +94,7 @@
     <string name="subs_font_size">字體大小</string>
     <string name="search_provider_text_providers">按片源搜尋</string>
     <string name="search_provider_text_types">按類型搜尋</string>
-    <string name="benene_count_text">送開發者 %d 根香蕉</string>
+    <plurals name="benene_count_text"><item quantity="other">送開發者 %d 根香蕉</item></plurals>
     <string name="benene_count_text_none">不送香蕉</string>
     <string name="subs_auto_select_language">自動選擇語言</string>
     <string name="subs_download_languages">下載語言</string>
@@ -409,7 +408,7 @@
     <string name="plugins_downloaded" formatted="true">已下載：%d</string>
     <string name="plugins_disabled" formatted="true">已停用：%d</string>
     <string name="plugins_not_downloaded" formatted="true">未下載：%d</string>
-    <string name="plugins_updated" formatted="true">已更新 %d 外掛程式</string>
+    <plurals name="plugins_updated"><item quantity="other">已更新 %d 外掛程式</item></plurals>
     <string name="blank_repo_message">Auras Orbit 預設沒有安裝網站。你需要從儲存庫安裝網站。 \n \n加入我們的 Discord 或在網路上搜尋。</string>
     <string name="view_public_repositories_button">查看</string>
     <string name="view_public_repositories_button_short">公開清單</string>
@@ -657,21 +656,18 @@
     <string name="play_full_series_button">播放全劇</string>
     <string name="queue_empty_message">目前佇列中無下載影片。</string>
     <string name="extra_brightness_settings">額外亮度</string>
-    <string name="extra_brightness_settings_des">超過100%亮度時開啟亮度調整</string>
+    <string  name="extra_brightness_settings_des" formatted="false">超過100%亮度時開啟亮度調整</string>
     <string name="extra_brightness_key">已開啟額外亮度</string>
     <string name="search_suggestions">搜尋建議</string>
     <string name="search_suggestions_des">輸入時顯示搜尋建議</string>
     <string name="clear_suggestions">清除建議</string>
     <string name="show_cast_in_details">顯示投影控制板</string>
-    <string name="install_prerelease">安裝提前發行版</string>
-    <string name="prerelease_already_installed">已安裝提前發行版。</string>
-    <string name="prerelease_install_failed">提前發行版安裝失敗。</string>
     <string name="episode_action_play_mirror">鏡像播放</string>"
     <string name="show_rating">評分標籤</string>
     <string name="show_episode_text">影劇文本</string>
     <string name="video_info">媒體資訊</string>
     <string name="player_settings_always_ask">總是詢問</string>
-    <string name="plugins_updated_manually">成功更新了 %d 外掛！</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">成功更新了 %d 外掛！</item></plurals>
     <string name="no_plugins_updated_manually">沒有需要更新的外掛。</string>
     <string name="player_notification_channel_name">播放器通知</string>
     <string name="player_notification_channel_description">控制背景播放的通知</string>
@@ -730,9 +726,6 @@
     <string name="sort_episodes_rating_low_high">評分（最低）</string>
     <string name="sort_episodes_date_newest">播放日期（最新）</string>
     <string name="sort_episodes_date_oldest">播放日期（最舊）</string>
-    <string name="sort_button_episode">第 %s 集</string>
-    <string name="sort_button_rating">評分 %s</string>
-    <string name="sort_button_date">日期 %s</string>
     <string name="slide_up_again_to_exceed_100">讓音量超過 100%（再次上滑）</string>
     <string name="update_plugins">更新外掛</string>
     <string name="update_plugins_manually">手動更新外掛</string>
@@ -742,7 +735,7 @@
     <string name="no_account">帳戶不存在</string>
     <string name="torrent_preferred_media">在「設定/影片來源/首選媒體」中啟用 Torrent下載</string>
     <string name="software_decoding_desc">軟體解碼使程式可以播放裝置不支援的影片，但可能導致播放高解析的影片時的延遲或不穩定。</string>
-    <string name="volume_exceeded_100">音量已超過 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">音量已超過 100%</string>
     <string name="show_player_metadata_overlay">顯示播放器元資料遮罩層</string>
     <string name="video_singular">影片</string>
     <string name="skip_type_preview">預覽</string>

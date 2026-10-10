@@ -347,6 +347,9 @@ class SkipTimeController(val view: ImageView, forwards: Boolean) : UIController(
     init {
         val time = 30
         view.setImageResource(if (forwards) R.drawable.go_forward_30 else R.drawable.go_back_30)
+        view.contentDescription = view.context.getString(
+            if (forwards) R.string.go_forward_30 else R.string.go_back_30
+        )
         view.setOnClickListener {
             remoteMediaClient?.let {
                 val options = MediaSeekOptions.Builder()

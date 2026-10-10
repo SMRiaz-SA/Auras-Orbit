@@ -21,7 +21,7 @@
     <string name="player_speed_text_format" formatted="true">再生速度 (%.2fx)</string>
     <string name="next_episode">次のエピソード</string>
     <string name="sort_apply">適用</string>
-    <string name="category_account">ア﻿カ﻿ウ﻿ン﻿トとセキュリティ</string>
+    <string name="category_account">アカウントとセキュリティ</string>
     <string name="cartoons">カートゥーン</string>
     <string name="tv_series">TVシリーズ</string>
     <string name="torrent">トレント</string>
@@ -90,7 +90,6 @@
     <string name="go_back">戻り</string>
     <string name="action_remove_from_bookmarks">削除</string>
     <string name="home_more_info">詳細情報</string>
-    <string name="home_expanded_hide">閉じる</string>
     <string name="category_updates">アップデートとバックアップ</string>
     <string name="app_language">アプリ言語</string>
     <string name="github">GitHub（ギットハブ）</string>
@@ -219,7 +218,7 @@
     <string name="swipe_to_change_settings">スワイプして設定を変更します</string>
     <string name="subs_outline_color">輪郭の色</string>
     <string name="subs_subtitle_elevation">字幕の標高</string>
-    <string name="benene_count_text">%d ベネネスが開発者に与えられました</string>
+    <plurals name="benene_count_text"><item quantity="other">%d ベネネスが開発者に与えられました</item></plurals>
     <string name="vpn_might_be_needed">このプロバイダーが正しく動作するには VPN が必要になる可能性があります</string>
     <string name="vpn_torrent">このプロバイダーは torrent です、VPN をお勧めします</string>
     <string name="player_size_settings">プレーヤーのサイズ変更ボタン</string>
@@ -612,7 +611,7 @@
     <string name="provider_languages_tip">これらの言語でビデオを視聴</string>
     <string name="no_repository_found_error">リポジトリが見つかりません。URLを確認し、VPNを試してください</string>
     <string name="batch_download">一括ダウンロード</string>
-    <string name="plugins_updated" formatted="true">%d 個のプラグインを更新しました</string>
+    <plurals name="plugins_updated"><item quantity="other">%d 個のプラグインを更新しました</item></plurals>
     <string name="safe_mode_description">トラブルを引き起こすものを特定するのを助けるために、クラッシュのためにすべての拡張機能がオフにされました。</string>
     <string name="extension_types">サポート</string>
     <string name="player_settings_select_cast_device">キャストデバイスを選択</string>
@@ -628,9 +627,6 @@
     <string name="sort_episodes_rating_low_high">評価 (最低)</string>
     <string name="sort_episodes_date_newest">放映日 (最新)</string>
     <string name="sort_episodes_date_oldest">放映日 (最古)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">評価 %s</string>
-    <string name="sort_button_date">日付 %s</string>
     <string name="subscription_deleted">%s の購読を解除しました</string>
     <string name="action_unsubscribe">購読解除</string>
     <string name="profiles">プロフィール</string>
@@ -645,7 +641,7 @@
     <string name="torrent_not_accepted">アプリを再起動し、ポップアップに同意して続行します。</string>
     <string name="software_decoding">ソフトウェアデコーディング</string>
     <string name="software_decoding_desc">ソフトウェアデコーディングにより、機器でサポートされていないビデオファイルを再生できますが、高解像度で遅延や不安定な再生を引き起こす可能性があります。</string>
-    <string name="plugins_updated_manually">%d 個のプラグインを更新しました</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">%d 個のプラグインを更新しました</item></plurals>
     <string name="no_plugins_updated_manually">更新されたプラグインはありません。</string>
     <string name="player_notification_channel_name">プレーヤー通知</string>
     <string name="player_notification_channel_description">バックグラウンドから再生を制御するためのプレーヤー通知</string>
@@ -657,7 +653,7 @@
     <string name="pref_category_actions">アクション</string>
     <string name="pref_category_player_features">プレーヤー機能</string>
     <string name="all_subtitles_bold">字幕を太字にする</string>
-    <string name="volume_exceeded_100">ボリュームが100%を越えました</string>
+    <string  name="volume_exceeded_100" formatted="false">ボリュームが100%を越えました</string>
     <string name="slide_up_again_to_exceed_100">再度上へスライドして100%以上に調整できます</string>
     <string name="all_subtitles_italic">字幕を斜体にする</string>
     <string name="background_radius">背景の半径</string>
@@ -702,9 +698,6 @@
     <string name="top_center">上中央</string>
     <string name="top_right">右上</string>
     <string name="play_full_series_button">全シリーズを再生</string>
-    <string name="install_prerelease">プレリリース版をインストール</string>
-    <string name="prerelease_already_installed">プレリリース版は既にインストールされています。</string>
-    <string name="prerelease_install_failed">プレリリース版のインストールに失敗しました。</string>
     <string name="show_episode_text">エピソードのテキスト</string>
     <string name="search_suggestions">検索候補</string>
     <string name="search_suggestions_des">入力中に検索候補を表示する</string>
@@ -713,7 +706,7 @@
     <string name="source_name">ソース名</string>
     <string name="video_info">メディア情報</string>
     <string name="extra_brightness_settings">追加の輝度設定</string>
-    <string name="extra_brightness_settings_des">画面の輝度が100%を超えた場合に輝度フィルターを有効にします</string>
+    <string  name="extra_brightness_settings_des" formatted="false">画面の輝度が100%を超えた場合に輝度フィルターを有効にします</string>
     <string name="extra_brightness_key">追加の輝度を有効化</string>
     <string name="download_queue">ダウンロードキュー</string>
     <string name="queue_empty_message">現在、ダウンロードキューは空です。</string>

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.cloudstream3.desktop.ui.screens.person.PersonCandidateCard
+import com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -42,8 +45,11 @@ fun CastDetailsDialog(
     onMovieClick: (com.lagradost.cloudstream3.SearchResponse) -> Unit = {},
 ) {
     var details by remember { mutableStateOf<TmdbEnrichmentService.DesktopActorDetails?>(null) }
+    var candidates by remember { mutableStateOf<List<TmdbPersonCandidate>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var show by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val searchName = actor.voiceActor?.name?.takeIf { it.isNotBlank() } ?: actor.actor.name
 
     LaunchedEffect(Unit) {
         show = true
@@ -60,13 +66,18 @@ fun CastDetailsDialog(
         }
     }
 
-    LaunchedEffect(actor.actor.name) {
+    LaunchedEffect(searchName) {
         isLoading = true
-        // For anime dual-cast: actor = character art, voiceActor = human VA.
-        // TMDB only knows real people, so search by voiceActor name if available.
-        val searchName = actor.voiceActor?.name?.takeIf { it.isNotBlank() } ?: actor.actor.name
-        details = TmdbEnrichmentService.getActorDetails(searchName)
-        isLoading = false
+        details = null
+        try {
+            candidates = TmdbEnrichmentService.searchPeople(searchName)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            candidates = emptyList()
+        } finally {
+            isLoading = false
+        }
     }
 
     com.lagradost.cloudstream3.desktop.ui.components.CloudstreamCustomDialog(
@@ -79,6 +90,36 @@ fun CastDetailsDialog(
                 Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
+            } else if (details == null && candidates.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Choose a person", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Select the matching TMDB profile for “$searchName”.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(candidates, key = { it.tmdbId }) { candidate ->
+                            PersonCandidateCard(
+                                candidate = candidate,
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isLoading = true
+                                        try {
+                                            details = TmdbEnrichmentService.getActorDetails(candidate.tmdbId)
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (_: Exception) {
+                                            details = null
+                                        } finally {
+                                            isLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
             } else if (details == null) {
                 Column(
                     modifier = Modifier.fillMaxWidth().height(300.dp),
@@ -88,15 +129,13 @@ fun CastDetailsDialog(
                     Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "No details available for ${actor.voiceActor?.name?.takeIf { it.isNotBlank() } ?: actor.actor.name}",
+                        "No details available for $searchName",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else {
                 val d = details ?: return@Box
-                val coroutineScope = rememberCoroutineScope()
-
                 val mainScrollState = rememberScrollState()
 
                 Column(

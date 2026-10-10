@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,12 +21,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,6 +41,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,7 +120,20 @@ class PersonFilmographyFragment : Fragment() {
         val name = requireArguments().getString("personName").orEmpty()
         val image = requireArguments().getString("personImage")
         pageState = PersonPageState(name, image)
-        loadCandidates()
+        val personId = requireArguments().getInt("personId", -1)
+        if (personId > 0) {
+            loadPerson(
+                AndroidPersonRepository.PersonCandidate(
+                    id = personId,
+                    name = name,
+                    profileUrl = image,
+                    department = null,
+                    knownFor = emptyList(),
+                )
+            )
+        } else {
+            loadCandidates()
+        }
     }
 
     override fun onDestroyView() {
@@ -354,9 +371,10 @@ private fun PersonCredits(
                     model = person.profileUrl ?: state.fallbackImage,
                     contentDescription = person.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(112.dp).clip(RoundedCornerShape(12.dp)),
+                    modifier = Modifier.width(112.dp).height(154.dp).clip(RoundedCornerShape(14.dp)),
                 )
-                Column(Modifier.padding(start = 14.dp)) {
+                Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(person.name, color = AurasPalette.Text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(person.department.orEmpty(), color = AurasPalette.Accent, style = MaterialTheme.typography.labelLarge)
                     Text(
                         listOfNotNull(person.birthday, person.deathday?.let { "– $it" }, person.placeOfBirth)
@@ -376,14 +394,33 @@ private fun PersonCredits(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth()) {
                 listOf("all" to R.string.person_all, "movie" to R.string.person_movies, "tv" to R.string.person_tv)
                     .forEach { (category, label) ->
-                        FilterChip(
-                            selected = state.category == category,
-                            onClick = { onCategorySelected(category) },
-                            label = { Text(stringResourceText(label)) },
-                        )
+                        val isSelected = state.category == category
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.Tab,
+                                    onClick = { onCategorySelected(category) },
+                                )
+                                .padding(top = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                stringResourceText(label),
+                                color = if (isSelected) AurasPalette.Text else AurasPalette.Muted,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Box(
+                                Modifier.fillMaxWidth().height(2.dp).background(
+                                    if (isSelected) AurasPalette.Accent else AurasPalette.Canvas
+                                )
+                            )
+                        }
                     }
             }
             OutlinedTextField(
@@ -394,7 +431,7 @@ private fun PersonCredits(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
             Text(
-                stringResourceText(R.string.person_credit_count, credits.size),
+                pluralStringResource(R.plurals.person_credit_count, credits.size, credits.size),
                 color = AurasPalette.Muted,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
@@ -411,7 +448,9 @@ private fun PersonCredits(
                         model = credit.posterUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.width(58.dp).height(84.dp).clip(RoundedCornerShape(8.dp)),
+                                    modifier = Modifier.width(58.dp)
+                                        .aspectRatio(com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO)
+                                        .clip(RoundedCornerShape(8.dp)),
                     )
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
                         Text(credit.title, color = AurasPalette.Text, fontWeight = FontWeight.SemiBold)

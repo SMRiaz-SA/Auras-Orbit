@@ -11,7 +11,7 @@
     android:layout_margin="10dp"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:defaultFocusHighlightEnabled="false">
+    android:defaultFocusHighlightEnabled="false" tools:targetApi="26">
 
     <FrameLayout
         android:layout_width="wrap_content"
@@ -31,14 +31,14 @@
             app:cardCornerRadius="100dp"
             app:cardElevation="0dp">
 
-            <ImageView
+            <ImageView android:contentDescription="@null"
                 android:id="@+id/account_image"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:alpha="0.4"
                 android:scaleType="centerCrop" />
 
-            <ImageView
+            <ImageView android:contentDescription="@string/edit"
                 android:id="@+id/pencil_icon"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
@@ -48,7 +48,7 @@
 
         </androidx.cardview.widget.CardView>
 
-        <ImageView
+        <ImageView android:contentDescription="@string/video_lock"
             android:id="@+id/lock_icon"
             android:layout_width="26dp"
             android:layout_height="26dp"

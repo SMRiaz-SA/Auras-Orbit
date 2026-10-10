@@ -29,6 +29,8 @@ kotlin {
         compileSdk = libs.versions.compileSdk.get().toInt()
         minSdk = libs.versions.minSdk.get().toInt()
 
+        withHostTest { }
+
         compilerOptions {
             jvmTarget.set(javaTarget)
         }
@@ -73,8 +75,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
 
-        val jvmCommonMain by creating {
-            dependsOn(commonMain.get())
+        val jvmCommonMain = create("jvmCommonMain") {
+            dependsOn(getByName("commonMain"))
             dependencies {
                 implementation(libs.kotlin.reflect)
                 implementation(libs.newpipeextractor)

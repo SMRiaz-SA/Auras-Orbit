@@ -42,9 +42,11 @@ import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.desktop.ui.navigation.Config
 import com.lagradost.cloudstream3.desktop.ui.screens.CategoryGridCache
+import com.lagradost.cloudstream3.desktop.ui.screens.person.PersonCandidateCard
 import com.lagradost.cloudstream3.desktop.ui.screens.search.components.AnimatedCategoryTab
 import com.lagradost.cloudstream3.desktop.ui.screens.search.components.SearchHistoryView
 import com.lagradost.cloudstream3.desktop.ui.screens.search.components.SearchSuggestionsOverlay
+import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchMode
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.search.dialogs.ProviderSelectionDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.search.dialogs.fuzzyMatchPluginIcon
@@ -69,6 +71,7 @@ fun ComposeSearchScreen(
     val searchResultsGrouped = uiState.searchResultsGrouped
     val selectedProviderName = uiState.selectedProviderName
     val selectedCategories = uiState.selectedCategories
+    val searchMode = uiState.searchMode
     val pluginIcons = uiState.pluginIcons
     val searchHistory = uiState.searchHistory
     var showProviderDropdown by remember { mutableStateOf(false) }
@@ -123,7 +126,7 @@ fun ComposeSearchScreen(
                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                 if (uiState.searchQuery.isEmpty()) {
                                     Text(
-                                        "Search movies, series, anime...",
+                                        if (searchMode == SearchMode.PEOPLE) "Search people..." else "Search movies, series, anime...",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 15.sp,
                                     )
@@ -199,50 +202,52 @@ fun ComposeSearchScreen(
                                 }
                             }
 
-                            // Subtle vertical separator
-                            Box(
-                                modifier = Modifier
-                                    .width(1.dp)
-                                    .height(22.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            )
+                            if (searchMode == SearchMode.TITLES) {
+                                // Subtle vertical separator
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(22.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                                )
 
-                            // Embedded Plugin Selector Chip
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp),
-                                onClick = { showProviderDropdown = true },
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                // Embedded Plugin Selector Chip
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp),
+                                    onClick = { showProviderDropdown = true },
                                 ) {
-                                    if (!isGlobalSearchEnabled && selectedProviderName != null) {
-                                        val icon = pluginIcons[selectedProviderName] ?: fuzzyMatchPluginIcon(selectedProviderName, pluginIcons)
-                                        if (icon != null) {
-                                            AsyncImage(
-                                                model = icon,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White),
-                                            )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        if (!isGlobalSearchEnabled && selectedProviderName != null) {
+                                            val icon = pluginIcons[selectedProviderName] ?: fuzzyMatchPluginIcon(selectedProviderName, pluginIcons)
+                                            if (icon != null) {
+                                                AsyncImage(
+                                                    model = icon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White),
+                                                )
+                                            }
                                         }
+                                        Text(
+                                            text = if (isGlobalSearchEnabled) "All Plugins" else (selectedProviderName ?: "Select Plugin"),
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            modifier = Modifier.widthIn(max = 120.dp),
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Icon(
+                                            Icons.Default.ArrowDropDown,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
-                                    Text(
-                                        text = if (isGlobalSearchEnabled) "All Plugins" else (selectedProviderName ?: "Select Plugin"),
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        maxLines = 1,
-                                        modifier = Modifier.widthIn(max = 120.dp),
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Icon(
-                                        Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
                                 }
                             }
                         }
@@ -271,38 +276,57 @@ fun ComposeSearchScreen(
                         },
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AnimatedCategoryTab(
+                            selected = searchMode == SearchMode.TITLES,
+                            label = "Titles",
+                            onClick = {
+                                showProviderDropdown = false
+                                viewModel.onEvent(SearchUiEvent.OnSelectSearchMode(SearchMode.TITLES))
+                            },
+                        )
+                        AnimatedCategoryTab(
+                            selected = searchMode == SearchMode.PEOPLE,
+                            label = "People",
+                            onClick = {
+                                showProviderDropdown = false
+                                viewModel.onEvent(SearchUiEvent.OnSelectSearchMode(SearchMode.PEOPLE))
+                            },
+                        )
+                    }
 
-                    // ── Horizontal Category Filter Chips ──────────────────────────
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        item {
-                            AnimatedCategoryTab(
-                                selected = selectedCategories.isEmpty(),
-                                label = "All",
-                                onClick = {
-                                    viewModel.onEvent(SearchUiEvent.OnClearCategories)
-                                },
-                            )
-                        }
+                    if (searchMode == SearchMode.TITLES) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        // ── Horizontal Category Filter Chips ──────────────────────
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            item {
+                                AnimatedCategoryTab(
+                                    selected = selectedCategories.isEmpty(),
+                                    label = "All",
+                                    onClick = { viewModel.onEvent(SearchUiEvent.OnClearCategories) },
+                                )
+                            }
 
-                        items(SEARCH_CATEGORIES, key = { it.first.name }) { (type, label) ->
-                            AnimatedCategoryTab(
-                                selected = type in selectedCategories,
-                                label = label,
-                                onClick = { viewModel.onEvent(SearchUiEvent.OnToggleCategory(type)) },
-                            )
+                            items(SEARCH_CATEGORIES, key = { it.first.name }) { (type, label) ->
+                                AnimatedCategoryTab(
+                                    selected = type in selectedCategories,
+                                    label = label,
+                                    onClick = { viewModel.onEvent(SearchUiEvent.OnToggleCategory(type)) },
+                                )
+                            }
                         }
                     }
                 }
 
                 // ── Floating Search Suggestions Dropdown Overlay ──────────────────────
                 SearchSuggestionsOverlay(
-                    visible = (uiState.showSuggestions || uiState.isLoadingSuggestions) && uiState.searchQuery.isNotEmpty(),
+                    visible = searchMode == SearchMode.TITLES && (uiState.showSuggestions || uiState.isLoadingSuggestions) && uiState.searchQuery.isNotEmpty(),
                     suggestions = uiState.searchSuggestions,
                     isLoading = uiState.isLoadingSuggestions,
                     selectedIndex = selectedSuggestionIndex,
@@ -336,7 +360,7 @@ fun ComposeSearchScreen(
                     }
                 },
         ) {
-            val hasResults = !searchResultsGrouped.isNullOrEmpty()
+            val hasResults = if (searchMode == SearchMode.PEOPLE) uiState.peopleResults.isNotEmpty() else !searchResultsGrouped.isNullOrEmpty()
             val hasQuery = uiState.searchQuery.isNotBlank()
             val showInitialState = !hasResults && !isLoadingSearch && !hasQuery
             val showHistory = showInitialState && searchHistory.isNotEmpty()
@@ -370,14 +394,16 @@ fun ComposeSearchScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Search your favorite movies, series, or anime",
+                        if (searchMode == SearchMode.PEOPLE) "Find a person" else "Search your favorite movies, series, or anime",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        if (isGlobalSearchEnabled) {
+                        if (searchMode == SearchMode.PEOPLE) {
+                            "Search TMDB people and open the matching profile."
+                        } else if (isGlobalSearchEnabled) {
                             "Searching across all installed plugins."
                         } else {
                             "Searching across your selected plugin."
@@ -412,6 +438,10 @@ fun ComposeSearchScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     )
                 }
+            } else if (searchMode == SearchMode.PEOPLE && isLoadingSearch) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             } else if (showNoResults) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(top = 56.dp),
@@ -426,7 +456,7 @@ fun ComposeSearchScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        if (uiState.failedProviderKeys.isNotEmpty()) {
+                        if (uiState.peopleSearchFailed || uiState.failedProviderKeys.isNotEmpty()) {
                             "Search couldn't be completed"
                         } else {
                             "No results for “${uiState.searchQuery}”"
@@ -437,38 +467,56 @@ fun ComposeSearchScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        if (uiState.failedProviderKeys.isNotEmpty()) {
+                        if (uiState.peopleSearchFailed) {
+                            "People search couldn't be completed. Check your connection and try again."
+                        } else if (uiState.failedProviderKeys.isNotEmpty()) {
                             "${uiState.failedProviderKeys.size} provider(s) couldn't be searched. Try again or choose another provider."
                         } else {
-                            "Try another title, clear a category filter, or choose a different provider."
+                            if (searchMode == SearchMode.PEOPLE) "Try another name or spelling." else "Try another title, clear a category filter, or choose a different provider."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     )
                 }
             } else {
-                val resultsList = searchResultsGrouped?.values?.toList()
+                if (searchMode == SearchMode.PEOPLE) {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(uiState.peopleResults, key = { it.tmdbId }) { person ->
+                            PersonCandidateCard(
+                                candidate = person,
+                                onClick = { onNavigate(Config.Person(person.name, person.profileUrl, person.tmdbId)) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                } else {
+                    val resultsList = searchResultsGrouped?.values?.toList()
 
-                SearchResults(
-                    searchResultsGrouped = resultsList,
-                    selectedCategories = selectedCategories,
-                    isLoadingSearch = isLoadingSearch,
-                    isLoadingMore = uiState.isLoadingMore,
-                    canPaginate = uiState.canPaginate,
-                    providerPagination = uiState.providerPagination,
-                    failedProviderCount = uiState.failedProviderKeys.size,
-                    isGlobalSearchEnabled = isGlobalSearchEnabled,
-                    onLoadMore = { providerKey -> viewModel.onEvent(SearchUiEvent.OnLoadMore(providerKey)) },
-                    onViewAll = { provider, title, items ->
-                        CategoryGridCache.put(provider.name, title, items)
-                        onNavigate(Config.CategoryGrid(provider.name, title))
-                    },
-                    onItemClick = { provider, item, backdrop, autoPlay ->
-                        onNavigate(
-                            Config.Details(provider.name, item.url, item.name, item.posterUrl, backdrop, autoPlay),
-                        )
-                    },
-                )
+                    SearchResults(
+                        searchResultsGrouped = resultsList,
+                        selectedCategories = selectedCategories,
+                        isLoadingSearch = isLoadingSearch,
+                        isLoadingMore = uiState.isLoadingMore,
+                        canPaginate = uiState.canPaginate,
+                        providerPagination = uiState.providerPagination,
+                        failedProviderCount = uiState.failedProviderKeys.size,
+                        isGlobalSearchEnabled = isGlobalSearchEnabled,
+                        onLoadMore = { providerKey -> viewModel.onEvent(SearchUiEvent.OnLoadMore(providerKey)) },
+                        onViewAll = { provider, title, items ->
+                            CategoryGridCache.put(provider.name, title, items)
+                            onNavigate(Config.CategoryGrid(provider.name, title))
+                        },
+                        onItemClick = { provider, item, backdrop, autoPlay ->
+                            onNavigate(
+                                Config.Details(provider.name, item.url, item.name, item.posterUrl, backdrop, autoPlay),
+                            )
+                        },
+                    )
+                }
             }
         }
     }

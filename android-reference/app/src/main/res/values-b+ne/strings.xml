@@ -63,7 +63,6 @@
     <string name="popup_resume_download">डाउनलोड सुचारु गर्नुहोस्</string>
     <string name="popup_pause_download">डाउनलोड रोक्नुहोस्</string>
     <string name="home_more_info">थप जानकारी</string>
-    <string name="home_expanded_hide">लुकाउनुहोस्</string>
     <string name="home_play">प्ले</string>
     <string name="home_info">जानकारी</string>
     <string name="filter_bookmarks">बुकमार्कहरू फिल्टर गर्नुहोस्</string>
@@ -104,7 +103,7 @@
     <string name="subs_font_size">अक्षरको नाप</string>
     <string name="subs_font">फन्ट</string>
     <string name="search_provider_text_types">प्रकारको उपयोग गरी खोज्नुहोस्</string>
-    <string name="benene_count_text">%d केरा डेभलपर लाई दिइयो</string>
+    <plurals name="benene_count_text"><item quantity="one">%d केरा डेभलपर लाई दिइयो</item><item quantity="other">%d केरा डेभलपर लाई दिइयो</item></plurals>
     <string name="benene_count_text_none">एउटै पनी केरा दिइएन</string>
     <string name="continue_watching">हेर्न सुचारु राख्नुहोस</string>
     <string name="action_remove_watching">हटाउनुहोस्</string>

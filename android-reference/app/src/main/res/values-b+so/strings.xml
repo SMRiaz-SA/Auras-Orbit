@@ -70,7 +70,6 @@
     <string name="update_started">Way bilaabantay cuaboonaysiintu</string>
     <string name="error_loading_links_toast">Soo raridda lifaaqyadu way fashilantay</string>
     <string name="app_subbed_text">Qrl</string>
-    <string name="home_expanded_hide">Qari</string>
     <string name="home_info">Warbixin</string>
     <string name="home_more_info">Warbixin dheeraad ah</string>
     <string name="subtitles_settings">Habaynta Qoraal-hoosaadka</string>
@@ -140,7 +139,7 @@
     <string name="preview_background_img_des">Muuq dambeedka</string>
     <string name="search_provider_text_providers">Ku raadi qaybiyeyaasha</string>
     <string name="search_provider_text_types">Ku raadi noocyada</string>
-    <string name="benene_count_text">%d oo beniin ayaad siisey dhiseyaasha</string>
+    <plurals name="benene_count_text"><item quantity="one">%d oo beniin ayaad siisey dhiseyaasha</item><item quantity="other">%d oo beniin ayaad siisey dhiseyaasha</item></plurals>
     <string name="benene_count_text_none">Wax beniin ah maad bixin</string>
     <string name="subs_auto_select_language">Iskeed-u-doorashada luuqadda</string>
     <string name="subs_download_languages">Luuqadda dejinta</string>
@@ -423,8 +422,8 @@
     <string name="delete_repository_plugins">Waxa la saarayaa dhammaan sidkanayaasha kayd-weynaha</string>
     <string name="plugins_disabled" formatted="true">Xayiran: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Aan dejinayn: %d</string>
-    <string name="plugins_updated" formatted="true">Waxa la cusbooneysiiyey %d sidkane</string>
-    <string name="blank_repo_message">Ugu horreyn Auras Orbit ma laha wax websaydyo uu filimaanta kasoo xigto, waxay noqonaysaa inaad adigu rakibato reboositarradooda. Sababtuna waa in mar dhexdaas ah na dacweeyeen shirkadda Sky UK Limited, markaa si aan mar dambe taasi u dhicin anagu kuma rakibi karno...\n\nDiscord naga soo qabo ama internetka ka baadh.</string>
+    <plurals name="plugins_updated"><item quantity="one">Waxa la cusbooneysiiyey %d sidkane</item><item quantity="other">Waxa la cusbooneysiiyey %d sidkane</item></plurals>
+    <string name="blank_repo_message">Ugu horreyn Auras Orbit ma laha wax websaydyo uu filimaanta kasoo xigto, waxay noqonaysaa inaad adigu rakibato reboositarradooda. Sababtuna waa in mar dhexdaas ah na dacweeyeen shirkadda Sky UK Limited, markaa si aan mar dambe taasi u dhicin anagu kuma rakibi karno…\n\nDiscord naga soo qabo ama internetka ka baadh.</string>
     <string name="download_all_plugins_from_repo">Digniin: Auras Orbit mas\'uuliyad kama qaadanayo isticmaalka kordhinnada (extensions) dhinac saddexaad mana bixiyo wax taageero ah oo iyaga ku saabsan!</string>
     <string name="result_poster_img_des">Boodhka</string>
     <string name="episode_poster_img_des">Boodhka xalqadda</string>
@@ -494,7 +493,7 @@
     <string name="test_log">Diiwaanka</string>
     <string name="speed_setting_summary">Wuxuu ku darayaa inaad doorato xawaaraha muuqaalka</string>
     <string name="extra_brightness_settings">Iftiin dheeraad ah</string>
-    <string name="extra_brightness_settings_des">Daar filter-ka iftiinka marka uu iftiinku 100% ka bato</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Daar filter-ka iftiinka marka uu iftiinku 100% ka bato</string>
     <string name="extra_brightness_key">Iftiinka dheeraadka ah waa shidan yahay</string>
     <string name="backup_frequency">Inta jeer ee la kaydinayo</string>
     <string name="library">Kaydka</string>
@@ -504,6 +503,4 @@
     <string name="show_player_metadata_overlay">Muuji xogta dulsaaran muuqaalka</string>
     <string name="show_cast_in_details">Soo bandhig guddiga dhibidda</string>
     <string name="automatic_plugin_download_mode_title">Dooro habka loo kala saarayo soo dejinta plugins-ka</string>
-    <string name="install_prerelease">Soo deji nooca hordhaca ah</string>
-    <string name="prerelease_already_installed">Nooca hordhaca ah horey ayaa loo soo dejiyay.</string>
 </resources>

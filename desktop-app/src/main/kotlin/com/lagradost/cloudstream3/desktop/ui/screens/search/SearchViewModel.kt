@@ -7,6 +7,8 @@ import com.lagradost.cloudstream3.desktop.di.AppContainerHolder
 import com.lagradost.cloudstream3.desktop.domain.plugins.repository.PluginRepository
 import com.lagradost.cloudstream3.desktop.domain.providers.repository.ActiveProviderRepository
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
+import com.lagradost.cloudstream3.desktop.ui.screens.details.TmdbEnrichmentService
+import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchMode
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchProviderPagination
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEvent
@@ -84,6 +86,8 @@ class SearchViewModel(
                         updateState {
                             copy(
                                 searchResultsGrouped = null,
+                                peopleResults = emptyList(),
+                                peopleSearchFailed = false,
                                 isLoadingSearch = false,
                                 isLoadingMore = false,
                                 canPaginate = true,
@@ -105,10 +109,20 @@ class SearchViewModel(
         // Debounced search suggestions
         viewModelScope.launch {
             @OptIn(kotlinx.coroutines.FlowPreview::class)
-            uiState.map { it.searchQuery }
+            uiState.map { it.searchMode to it.searchQuery }
                 .distinctUntilChanged()
                 .debounce(200)
-                .collectLatest { query ->
+                .collectLatest { (searchMode, query) ->
+                    if (searchMode == SearchMode.PEOPLE) {
+                        updateState {
+                            if (searchQuery == query) {
+                                copy(searchSuggestions = emptyList(), showSuggestions = false, isLoadingSuggestions = false)
+                            } else {
+                                this
+                            }
+                        }
+                        return@collectLatest
+                    }
                     val trimmed = query.trim()
                     if (trimmed.length >= 2 && query != suppressSuggestionsForQuery) {
                         updateState {
@@ -169,6 +183,30 @@ class SearchViewModel(
     override fun handleEvent(event: SearchUiEvent) {
         when (event) {
             is SearchUiEvent.OnSearchQueryChange -> handleQueryChange(event.query)
+            is SearchUiEvent.OnSelectSearchMode -> {
+                if (event.mode == uiState.value.searchMode) return
+                invalidateSearchWork()
+                lastSearchedQuery = ""
+                suppressSuggestionsForQuery = if (event.mode == SearchMode.PEOPLE) uiState.value.searchQuery else null
+                updateState {
+                    copy(
+                        searchMode = event.mode,
+                        searchResultsGrouped = null,
+                        peopleResults = emptyList(),
+                        peopleSearchFailed = false,
+                        isLoadingSearch = false,
+                        isLoadingMore = false,
+                        canPaginate = true,
+                        providerPagination = emptyMap(),
+                        failedProviderKeys = emptySet(),
+                        awaitingSearchSubmission = false,
+                        searchSuggestions = emptyList(),
+                        showSuggestions = false,
+                        isLoadingSuggestions = false,
+                    )
+                }
+                if (uiState.value.searchQuery.isNotBlank()) search(force = true)
+            }
             is SearchUiEvent.OnSearch -> {
                 skipAutoSearchForQuery = null
                 suppressSuggestionsForQuery = uiState.value.searchQuery
@@ -191,6 +229,8 @@ class SearchViewModel(
                     copy(
                         searchQuery = "",
                         searchResultsGrouped = null,
+                        peopleResults = emptyList(),
+                        peopleSearchFailed = false,
                         isLoadingSearch = false,
                         isLoadingMore = false,
                         canPaginate = true,
@@ -226,6 +266,8 @@ class SearchViewModel(
                         copy(
                             searchQuery = event.query,
                             searchResultsGrouped = null,
+                            peopleResults = emptyList(),
+                            peopleSearchFailed = false,
                             isLoadingSearch = false,
                             isLoadingMore = false,
                             canPaginate = true,
@@ -305,6 +347,8 @@ class SearchViewModel(
             copy(
                 searchQuery = query,
                 searchResultsGrouped = null,
+                peopleResults = emptyList(),
+                peopleSearchFailed = false,
                 searchSuggestions = emptyList(),
                 showSuggestions = false,
                 isLoadingSuggestions = false,
@@ -367,6 +411,8 @@ class SearchViewModel(
                 isLoadingMore = false,
                 canPaginate = true,
                 searchResultsGrouped = null,
+                peopleResults = emptyList(),
+                peopleSearchFailed = false,
                 providerPagination = emptyMap(),
                 failedProviderKeys = emptySet(),
                 awaitingSearchSubmission = false,
@@ -375,61 +421,74 @@ class SearchViewModel(
 
         searchJob = viewModelScope.launch {
             try {
-                val providers = searchState.providers
-
-                val activeProviders = if (searchState.isGlobalSearchEnabled) {
-                    providers.filter { it.hasMainPage || it.supportedTypes.isNotEmpty() }
+                if (searchState.searchMode == SearchMode.PEOPLE) {
+                    val people = TmdbEnrichmentService.searchPeople(query)
+                    updateSearchState(generation, query) {
+                        copy(peopleResults = people, peopleSearchFailed = false)
+                    }
                 } else {
-                    val selName = searchState.selectedProviderName
-                    val selSource = searchState.selectedProviderSource
-                    val active = providers.find {
-                        (selName != null && (it.name == selName || it.name == selName.substringAfter("::"))) &&
-                            (selSource == null || it.sourcePlugin == selSource)
-                    } ?: providers.firstOrNull()
-                    active?.let { listOf(it) } ?: emptyList()
-                }
+                    val providers = searchState.providers
 
-                val tempResults = java.util.concurrent.ConcurrentHashMap<String, Pair<com.lagradost.cloudstream3.MainAPI, List<SearchResponse>>>()
+                    val activeProviders = if (searchState.isGlobalSearchEnabled) {
+                        providers.filter { it.hasMainPage || it.supportedTypes.isNotEmpty() }
+                    } else {
+                        val selName = searchState.selectedProviderName
+                        val selSource = searchState.selectedProviderSource
+                        val active = providers.find {
+                            (selName != null && (it.name == selName || it.name == selName.substringAfter("::"))) &&
+                                (selSource == null || it.sourcePlugin == selSource)
+                        } ?: providers.firstOrNull()
+                        active?.let { listOf(it) } ?: emptyList()
+                    }
 
-                activeProviders.map { p ->
-                    launch {
-                        searchSemaphore.withPermit {
-                            com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "Searching query: '$query'")
-                            val uniqueKey = "${p.name}::${p.sourcePlugin ?: ""}"
-                            val result = SafePluginInvoker.invoke(
-                                tag = "Search:${p.name}",
-                                timeoutMs = SafePluginInvoker.TIMEOUT_SEARCH_MS,
-                            ) {
-                                p.search(query, 1)
-                            }
-                            if (result.isFailure) {
-                                updateSearchState(generation, query) {
-                                    copy(failedProviderKeys = failedProviderKeys + uniqueKey)
+                    val tempResults = java.util.concurrent.ConcurrentHashMap<String, Pair<com.lagradost.cloudstream3.MainAPI, List<SearchResponse>>>()
+
+                    activeProviders.map { p ->
+                        launch {
+                            searchSemaphore.withPermit {
+                                com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "Searching query: '$query'")
+                                val uniqueKey = "${p.name}::${p.sourcePlugin ?: ""}"
+                                val result = SafePluginInvoker.invoke(
+                                    tag = "Search:${p.name}",
+                                    timeoutMs = SafePluginInvoker.TIMEOUT_SEARCH_MS,
+                                ) {
+                                    p.search(query, 1)
                                 }
-                            }
-                            val res = result.getOrNull()
-                            if (res != null && res.items.isNotEmpty()) {
-                                com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "Found ${res.items.size} results for '$query'")
-                                tempResults[uniqueKey] = Pair(p, res.items)
-                                updateSearchState(generation, query) {
-                                    copy(
-                                        searchResultsGrouped = tempResults.toMap(),
-                                        providerPagination = providerPagination + (
-                                            uniqueKey to SearchProviderPagination(canPaginate = res.hasNext)
-                                            ),
-                                        canPaginate = if (isGlobalSearchEnabled) canPaginate else res.hasNext,
-                                    )
+                                if (result.isFailure) {
+                                    updateSearchState(generation, query) {
+                                        copy(failedProviderKeys = failedProviderKeys + uniqueKey)
+                                    }
                                 }
-                            } else {
-                                com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "No results found for '$query'")
+                                val res = result.getOrNull()
+                                if (res != null && res.items.isNotEmpty()) {
+                                    com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "Found ${res.items.size} results for '$query'")
+                                    tempResults[uniqueKey] = Pair(p, res.items)
+                                    updateSearchState(generation, query) {
+                                        copy(
+                                            searchResultsGrouped = tempResults.toMap(),
+                                            providerPagination = providerPagination + (
+                                                uniqueKey to SearchProviderPagination(canPaginate = res.hasNext)
+                                                ),
+                                            canPaginate = if (isGlobalSearchEnabled) canPaginate else res.hasNext,
+                                        )
+                                    }
+                                } else {
+                                    com.lagradost.common.logging.AppLogger.i("Plugin:${p.name}", "No results found for '$query'")
+                                }
                             }
                         }
-                    }
-                }.forEach { it.join() }
+                    }.forEach { it.join() }
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                if (generation == searchGeneration) DesktopErrorReporter.report("Search failed", e)
+                if (generation == searchGeneration) {
+                    if (searchState.searchMode == SearchMode.PEOPLE) {
+                        updateSearchState(generation, query) { copy(peopleSearchFailed = true) }
+                    } else {
+                        DesktopErrorReporter.report("Search failed", e)
+                    }
+                }
             } finally {
                 updateSearchState(generation, query) { copy(isLoadingSearch = false) }
             }

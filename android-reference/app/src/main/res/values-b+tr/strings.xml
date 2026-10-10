@@ -71,7 +71,6 @@
     <string name="popup_resume_download">İndirmeyi Sürdür</string>
     <string name="popup_pause_download">İndirmeyi Duraklat</string>
     <string name="home_more_info">Daha fazla bilgi</string>
-    <string name="home_expanded_hide">Gizle</string>
     <string name="home_play">Oynat</string>
     <string name="home_info">Bilgi</string>
     <string name="filter_bookmarks">Yer İmlerini Filtrele</string>
@@ -95,7 +94,7 @@
     <string name="subs_font_size">Yazı Boyutu</string>
     <string name="search_provider_text_providers">Sağlayıcıları kullanarak ara</string>
     <string name="search_provider_text_types">Türleri kullanarak ara</string>
-    <string name="benene_count_text">Geliştiricilere %d muz verildi</string>
+    <plurals name="benene_count_text"><item quantity="one">Geliştiricilere %d muz verildi</item><item quantity="other">Geliştiricilere %d muz verildi</item></plurals>
     <string name="benene_count_text_none">Hiç muz verilmedi</string>
     <string name="subs_auto_select_language">Otomatik Seçilecek Dil</string>
     <string name="subs_download_languages">İndirilecek Diller</string>
@@ -409,7 +408,7 @@
     <string name="plugins_downloaded" formatted="true">İndirilen: %d</string>
     <string name="plugins_disabled" formatted="true">Devre dışı: %d</string>
     <string name="plugins_not_downloaded" formatted="true">İndirilmeyen: %d</string>
-    <string name="plugins_updated" formatted="true">%d eklentiler güncellendi</string>
+    <plurals name="plugins_updated"><item quantity="one">%d eklentiler güncellendi</item><item quantity="other">%d eklentiler güncellendi</item></plurals>
     <string name="blank_repo_message">Auras Orbit, varsayılan olarak hiçbir site ile gelmez. Siteleri depolardan kurmanız gerekir. \n \nDiscord\'umuza katılın veya internet üzerinden arama yapın.</string>
     <string name="view_public_repositories_button">Topluluk depolarını görüntüle</string>
     <string name="view_public_repositories_button_short">Herkese açık liste</string>
@@ -656,12 +655,9 @@
     <string name="sort_episodes_rating_low_high">Puanlama (En Düşük)</string>
     <string name="sort_episodes_date_newest">Yayınlanma Tarihi (En Yeni)</string>
     <string name="sort_episodes_date_oldest">Yayınlanma Tarihi (En Eski)</string>
-    <string name="sort_button_episode">Bölüm %s</string>
-    <string name="sort_button_rating">Puanlama %s</string>
-    <string name="sort_button_date">Tarih %s</string>
     <string name="update_plugins">Eklentileri Güncelle</string>
     <string name="starting_plugin_update_manually">Eklenti güncellemesi başlıyor!</string>
-    <string name="plugins_updated_manually">%d eklenti başarıyla güncellendi</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d eklenti başarıyla güncellendi</item><item quantity="other">%d eklenti başarıyla güncellendi</item></plurals>
     <string name="no_plugins_updated_manually">Hiçbir eklenti güncellenmedi.</string>
     <string name="update_plugins_manually">Eklentileri el ile güncelle</string>
     <string name="player_notification_channel_description">Oynatıcı bildirimi arka planda oynatmasını kontrol etmek içindir</string>
@@ -670,7 +666,7 @@
     <string name="subtitles_from_online">Çevrimiçi</string>
     <string name="speech_recognition_unavailable">Konuşma tanıma özelliği mevcut değil</string>
     <string name="begin_speaking">Konuşmaya Başlayın…</string>
-    <string name="volume_exceeded_100">Ses %100 oranını aştı</string>
+    <string  name="volume_exceeded_100" formatted="false">Ses %100 oranını aştı</string>
     <string name="slide_up_again_to_exceed_100">%100 üzerine çıkmak için yukarı kaydır</string>
     <string name="all_subtitles_bold">Tüm altyazıları kalın yap</string>
     <string name="all_subtitles_italic">Tüm altyazıları italik yap</string>
@@ -716,16 +712,13 @@
     <string name="top_right">Sağ üst</string>
     <string name="subs_subtitle_alignment">Altyazı Hizalama</string>
     <string name="play_full_series_button">Tüm Seriyi Oynat</string>
-    <string name="install_prerelease">Ön sürümünü yükleyin</string>
-    <string name="prerelease_already_installed">Ön sürüm zaten indirilmiş.</string>
-    <string name="prerelease_install_failed">Ön sürüm indirmesi başarısız oldu.</string>
     <string name="show_episode_text">Bölüm Başlığı</string>
     <string name="search_suggestions">Arama Önerileri</string>
     <string name="search_suggestions_des">Yazarken arama önerilerini göster</string>
     <string name="clear_suggestions">Önerileri Temizle</string>
     <string name="show_cast_in_details">Yayın panelini göster</string>
     <string name="extra_brightness_settings">Ekstra parlaklık</string>
-    <string name="extra_brightness_settings_des">Görüntü parlaklığı %100\'ü geçerse parlaklık filtresini aktifleştir</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Görüntü parlaklığı %100\'ü geçerse parlaklık filtresini aktifleştir</string>
     <string name="extra_brightness_key">Ekstra parlaklık aktifleştirildi</string>
     <string name="video_info">Medya bilgisi</string>
     <string name="source_name">Kaynağın adı</string>

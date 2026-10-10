@@ -52,7 +52,7 @@
                 android:nextFocusRight="@id/edit_profile_photo_button_holder"
                 android:nextFocusDown="@id/edit_profile_photo_button_holder"
                 app:cardCornerRadius="100dp"
-                app:cardElevation="0dp">
+                app:cardElevation="0dp" tools:targetApi="26">
 
                 <requestFocus />
 
@@ -78,9 +78,9 @@
                 android:nextFocusDown="@id/account_name"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/primaryGrayBackground">
+                app:cardBackgroundColor="@color/primaryGrayBackground" tools:targetApi="26">
 
-                <ImageView
+                <ImageView android:contentDescription="@string/edit_profile_image"
                     android:id="@+id/edit_profile_photo_button"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
@@ -115,7 +115,7 @@
 
     </LinearLayout>
 
-    <RelativeLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/apply_btt_holder"
         android:layout_width="match_parent"
         android:layout_height="60dp"
@@ -127,9 +127,13 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/delete_btt"
             style="@style/BlackButton"
-            android:layout_width="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_gravity="center_vertical"
+            android:layout_width="0dp"
+            android:layout_marginEnd="4dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/apply_btt"
+            app:layout_constraintHorizontal_weight="1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
             android:nextFocusUp="@id/lockProfileCheckbox"
             android:nextFocusRight="@id/apply_btt"
             android:text="@string/delete" />
@@ -137,9 +141,13 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/apply_btt"
             style="@style/WhiteButton"
-            android:layout_width="wrap_content"
-            android:layout_gravity="center_vertical|end"
-            android:layout_toStartOf="@+id/cancel_btt"
+            android:layout_width="0dp"
+            android:layout_marginHorizontal="4dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/cancel_btt"
+            app:layout_constraintHorizontal_weight="1"
+            app:layout_constraintStart_toEndOf="@id/delete_btt"
+            app:layout_constraintTop_toTopOf="parent"
             android:nextFocusUp="@id/lockProfileCheckbox"
             android:nextFocusDown="@id/cancel_btt"
             android:nextFocusLeft="@id/delete_btt"
@@ -149,13 +157,17 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancel_btt"
             style="@style/BlackButton"
-            android:layout_width="wrap_content"
-            android:layout_alignParentEnd="true"
-            android:layout_gravity="center_vertical|end"
+            android:layout_width="0dp"
+            android:layout_marginStart="4dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_weight="1"
+            app:layout_constraintStart_toEndOf="@id/apply_btt"
+            app:layout_constraintTop_toTopOf="parent"
             android:nextFocusUp="@id/apply_btt"
             android:nextFocusDown="@id/apply_btt"
             android:nextFocusLeft="@id/apply_btt"
             android:text="@string/sort_cancel" />
 
-    </RelativeLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </LinearLayout>

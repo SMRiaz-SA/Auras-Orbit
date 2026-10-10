@@ -32,7 +32,7 @@
     <string name="episode_more_options_des">Meer Opsies</string>
     <string name="play_episode">Speel Episode</string>
     <string name="player_speed">Spelerspoed</string>
-    <string name="benene_count_text">%d Benenes gegee aan devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes gegee aan devs</item><item quantity="other">%d Benenes gegee aan devs</item></plurals>
     <string name="type_watching">Kyk tans</string>
     <string name="result_tags">Genres</string>
     <string name="episode_poster_img_des">Episode plakkaat</string>
@@ -51,7 +51,6 @@
     <string name="play_torrent_button">Stroom Torrent</string>
     <string name="download_canceled">Aflaai gekanselleer</string>
     <string name="rated_format" formatted="true">Gegradeer: %.1f</string>
-    <string name="home_expanded_hide">Versteek</string>
     <string name="sort_apply">Pas toe</string>
     <string name="browser">Blaaier</string>
     <string name="pick_subtitle">Onderskrifte</string>

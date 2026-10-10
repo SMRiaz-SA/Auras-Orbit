@@ -71,7 +71,6 @@
     <string name="popup_resume_download">继续下载</string>
     <string name="popup_pause_download">暂停下载</string>
     <string name="home_more_info">更多信息</string>
-    <string name="home_expanded_hide">隐藏</string>
     <string name="home_play">播放</string>
     <string name="home_info">信息</string>
     <string name="filter_bookmarks">筛选书签</string>
@@ -95,7 +94,7 @@
     <string name="subs_font_size">字体大小</string>
     <string name="search_provider_text_providers">按片源搜索</string>
     <string name="search_provider_text_types">按类型搜索</string>
-    <string name="benene_count_text">给开发者送 %d 根香蕉</string>
+    <plurals name="benene_count_text"><item quantity="other">给开发者送 %d 根香蕉</item></plurals>
     <string name="benene_count_text_none">不送香蕉</string>
     <string name="subs_auto_select_language">自动选择语言</string>
     <string name="subs_download_languages">下载语言</string>
@@ -410,7 +409,7 @@
     <string name="plugins_downloaded" formatted="true">已下载：%d</string>
     <string name="plugins_disabled" formatted="true">已禁用：%d</string>
     <string name="plugins_not_downloaded" formatted="true">未下载：%d</string>
-    <string name="plugins_updated" formatted="true">已更新 %d 插件</string>
+    <plurals name="plugins_updated"><item quantity="other">已更新 %d 插件</item></plurals>
     <string name="blank_repo_message">Auras Orbit 默认不安装片源。您需要从仓库中安装片源。 \n \n加入我们的 Discord 或在网上搜索。</string>
     <string name="view_public_repositories_button">查看社区仓库</string>
     <string name="view_public_repositories_button_short">公开列表</string>
@@ -652,17 +651,14 @@
     <string name="software_decoding_desc">软件解码让播放器能够播放你的设备所不支持的视频文件，但可能导致播放高分辨率视频时的延迟或不稳定。</string>
     <string name="sort_episodes_number_desc">集数（降序）</string>
     <string name="sort_episodes_date_oldest">播放日期（最旧）</string>
-    <string name="sort_button_rating">得分 %s</string>
-    <string name="sort_button_date">日期 %s</string>
     <string name="update_plugins">更新插件</string>
-    <string name="plugins_updated_manually">成功更新了 %d 个插件</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">成功更新了 %d 个插件</item></plurals>
     <string name="no_plugins_updated_manually">没有插件被更新。</string>
     <string name="update_plugins_manually">手动更新插件</string>
     <string name="sort_episodes_number_asc">集数（升序）</string>
     <string name="sort_episodes_date_newest">播出日期（最新）</string>
     <string name="sort_episodes_rating_high_low">评分（最高）</string>
     <string name="sort_episodes_rating_low_high">评分（最低）</string>
-    <string name="sort_button_episode">第 %s 集</string>
     <string name="starting_plugin_update_manually">正在开始插件更新过程！</string>
     <string name="player_notification_channel_description">控制后台播放的播放器通知</string>
     <string name="player_notification_channel_name">播放器通知</string>
@@ -673,7 +669,7 @@
     <string name="all_subtitles_italic">让所有字幕变为斜体</string>
     <string name="background_radius">背景半径</string>
     <string name="all_subtitles_bold">加粗所有字幕</string>
-    <string name="volume_exceeded_100">音量已经超过 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">音量已经超过 100%</string>
     <string name="slide_up_again_to_exceed_100">再次上滑让音量超过 100%</string>
     <string name="parallel_downloads">并行下载</string>
     <string name="concurrent_connections">并发连接</string>
@@ -716,9 +712,6 @@
     <string name="top_center">顶部居中</string>
     <string name="top_right">右上</string>
     <string name="play_full_series_button">播放全剧</string>
-    <string name="install_prerelease">安装预发行版</string>
-    <string name="prerelease_already_installed">已安装预发行版。</string>
-    <string name="prerelease_install_failed">安装预发行版失败。</string>
     <string name="show_episode_text">剧集文本</string>
     <string name="search_suggestions">搜索建议</string>
     <string name="search_suggestions_des">输入时显示搜索建议</string>
@@ -727,7 +720,7 @@
     <string name="video_info">媒体信息</string>
     <string name="source_name">源名称</string>
     <string name="extra_brightness_settings">额外亮度</string>
-    <string name="extra_brightness_settings_des">超过 100% 亮度时启用亮度过滤器</string>
+    <string  name="extra_brightness_settings_des" formatted="false">超过 100% 亮度时启用亮度过滤器</string>
     <string name="download_queue">下载队列</string>
     <string name="queue_empty_message">队列中当前无下载。</string>
     <string name="download_all">全部下载</string>

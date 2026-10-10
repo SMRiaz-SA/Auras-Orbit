@@ -64,7 +64,6 @@
     <string name="popup_resume_download">Lanjutkan unduhan</string>
     <string name="popup_pause_download">Jeda unduhan</string>
     <string name="home_more_info">Lebih banyak info</string>
-    <string name="home_expanded_hide">Sembunyikan</string>
     <string name="home_play">Putar</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Filter Markah</string>
@@ -88,7 +87,7 @@
     <string name="subs_font_size">Ukuran Fonta</string>
     <string name="search_provider_text_providers">Cari menggunakan penyedia</string>
     <string name="search_provider_text_types">Cari menggunakan jenis</string>
-    <string name="benene_count_text">%d piseng diberikan kepada pengembang</string>
+    <plurals name="benene_count_text"><item quantity="other">%d piseng diberikan kepada pengembang</item></plurals>
     <string name="benene_count_text_none">Tidak ada piseng yang diberikan</string>
     <string name="subs_auto_select_language">Pilih Bahasa Otomatis</string>
     <string name="subs_download_languages">Unduh Bahasa</string>
@@ -385,7 +384,7 @@
     <string name="extras">Ekstra</string>
     <string name="preferred_media_subtext">Apa yang ingin anda lihat</string>
     <string name="plugin_deleted">Plugin terhapus</string>
-    <string name="plugins_updated" formatted="true">%d plugin diperbarui</string>
+    <plurals name="plugins_updated"><item quantity="other">%d plugin diperbarui</item></plurals>
     <string name="view_public_repositories_button">Lihat repositori komunitas</string>
     <string name="view_public_repositories_button_short">Daftar publik</string>
     <string name="blank_repo_message">Auras Orbit tidak memiliki situs yang terinstal secara default. Anda perlu menginstal situs-situs dari repositori. \n \nBergabunglah dengan Discord kami atau cari secara online.</string>
@@ -651,17 +650,14 @@
     <string name="software_decoding_desc">Dekode perangkat lunak memungkinkan pemutar memainkan berkas video yang tidak didukung perangkat Anda, tetapi dapat memperburuk performa atau pemutaran yang tidak stabil pada resolusi tinggi.</string>
     <string name="software_decoding">Dekode perangkat lunak</string>
     <string name="sort_episodes_rating_low_high">Rating (Terendah)</string>
-    <string name="sort_button_date">Tanggal %s</string>
     <string name="sort_episodes_number_asc">Episode (Naik)</string>
     <string name="sort_episodes_number_desc">Episode (Menurun)</string>
     <string name="sort_episodes_rating_high_low">Rating (Tertinggi)</string>
     <string name="sort_episodes_date_newest">Tanggal Tayang (Terbaru)</string>
     <string name="sort_episodes_date_oldest">Tanggal Tayang (Paling Lama)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Rating %s</string>
     <string name="update_plugins">Perbarui Plugin</string>
     <string name="starting_plugin_update_manually">Mulai proses pembaruan plugin!</string>
-    <string name="plugins_updated_manually">Berhasil memperbarui %d plugin(s)</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">Berhasil memperbarui %d plugin(s)</item></plurals>
     <string name="update_plugins_manually">Perbarui plugin secara manual</string>
     <string name="no_plugins_updated_manually">Tidak ada plugin yang diperbarui.</string>
     <string name="player_notification_channel_description">Pemberitahuan pemutar untuk mengontrol pemutaran dari latar belakang</string>
@@ -673,7 +669,7 @@
     <string name="all_subtitles_bold">Tebalkan semua subtitel</string>
     <string name="all_subtitles_italic">Miringkan semua subtitel</string>
     <string name="background_radius">Radius Latar Belakang</string>
-    <string name="volume_exceeded_100">Volume telah melebihi 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Volume telah melebihi 100%</string>
     <string name="slide_up_again_to_exceed_100">Geser ke atas lagi untuk melampaui 100%</string>
     <string name="player_settings_always_ask">Selalu tanya</string>
     <string name="download_parallel_settings_des">Berapa banyak item yang bisa diunduh secara paralel</string>
@@ -716,12 +712,9 @@
     <string name="top_center">Atas tengah</string>
     <string name="top_right">Atas kanan</string>
     <string name="play_full_series_button">Putar Seri Penuh</string>
-    <string name="install_prerelease">Pasang versi pra-rilis</string>
-    <string name="prerelease_already_installed">Versi pra-rilis sudah terpasang.</string>
-    <string name="prerelease_install_failed">Gagal memasang versi pra-rilis.</string>
     <string name="show_episode_text">Teks Episode</string>
     <string name="extra_brightness_settings">Kecerahan ekstra</string>
-    <string name="extra_brightness_settings_des">Aktifkan filter kecerahan saat kecerahan layar melebihi 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Aktifkan filter kecerahan saat kecerahan layar melebihi 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="clear_suggestions">Hapus saran</string>
     <string name="show_cast_in_details">Tampilkan panel cast</string>

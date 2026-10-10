@@ -151,23 +151,68 @@ allprojects {
 
 $androidProject = Join-Path $repoRoot 'android-reference'
 $previousJavaHome = $env:JAVA_HOME
-$env:JAVA_HOME = $androidJavaHome
-Push-Location $androidProject
+$signingPropertiesPath = Join-Path $androidProject 'app/build/test-signing/local-signing.properties'
+if (-not (Test-Path -LiteralPath $signingPropertiesPath -PathType Leaf)) {
+    throw "Local Android signing properties were not found: $signingPropertiesPath"
+}
+$signingProperties = @{}
+foreach ($line in Get-Content -LiteralPath $signingPropertiesPath) {
+    if ($line -match '^\s*([^#!\s][^=]*)=(.*)$') {
+        $signingProperties[$Matches[1].Trim()] = $Matches[2].Trim()
+    }
+}
+foreach ($requiredProperty in @('storeFile', 'storePassword', 'keyAlias', 'keyPassword')) {
+    if ([string]::IsNullOrWhiteSpace([string] $signingProperties[$requiredProperty])) {
+        throw "Local Android signing properties are missing '$requiredProperty'."
+    }
+}
+$localKeystorePath = [string] $signingProperties.storeFile
+if (-not [System.IO.Path]::IsPathRooted($localKeystorePath)) {
+    $localKeystorePath = Join-Path (Join-Path $androidProject 'app') $localKeystorePath
+}
+if (-not (Test-Path -LiteralPath $localKeystorePath -PathType Leaf)) {
+    $localKeystorePath = Join-Path $androidProject 'app/build/test-signing/auras-orbit-local-test.p12'
+}
+if (-not (Test-Path -LiteralPath $localKeystorePath -PathType Leaf)) {
+    throw 'The local Android test signing keystore was not found.'
+}
+$localReleaseSigning = @{
+    AURAS_RELEASE_STORE_FILE = (Resolve-Path -LiteralPath $localKeystorePath).Path
+    AURAS_RELEASE_STORE_PASSWORD = [string] $signingProperties.storePassword
+    AURAS_RELEASE_KEY_ALIAS = [string] $signingProperties.keyAlias
+    AURAS_RELEASE_KEY_PASSWORD = [string] $signingProperties.keyPassword
+}
+$previousReleaseSigning = @{}
+foreach ($variableName in $localReleaseSigning.Keys) {
+    $previousReleaseSigning[$variableName] = [Environment]::GetEnvironmentVariable($variableName, 'Process')
+}
+
 try {
-    & .\gradlew.bat ':app:canonicalStableDebugApk' "-PAPP_VERSION=$version" '--no-daemon' '--console=plain' '--stacktrace' '--max-workers=2'
-    if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
+    $env:JAVA_HOME = $androidJavaHome
+    foreach ($variableName in $localReleaseSigning.Keys) {
+        [Environment]::SetEnvironmentVariable($variableName, $localReleaseSigning[$variableName], 'Process')
+    }
+    Push-Location $androidProject
+    try {
+        & .\gradlew.bat ':app:canonicalStableReleaseApk' "-PAPP_VERSION=$version" '--no-daemon' '--console=plain' '--stacktrace' '--max-workers=2'
+        if ($LASTEXITCODE -ne 0) { throw "Android APK build failed with exit code $LASTEXITCODE." }
+    } finally {
+        Pop-Location
+    }
+
+    $builtAndroidApk = Join-Path $androidProject 'app/build/outputs/canonical/stableRelease/Auras-Orbit.apk'
+    & (Join-Path $repoRoot '.github/scripts/verify-android-apk.ps1') -ExpectedVersion $version -ApkPath $builtAndroidApk
+    Copy-Item -LiteralPath $builtAndroidApk -Destination $androidApk -Force
 } finally {
-    Pop-Location
     if ([string]::IsNullOrWhiteSpace($previousJavaHome)) {
         Remove-Item Env:JAVA_HOME -ErrorAction SilentlyContinue
     } else {
         $env:JAVA_HOME = $previousJavaHome
     }
+    foreach ($variableName in $localReleaseSigning.Keys) {
+        [Environment]::SetEnvironmentVariable($variableName, $previousReleaseSigning[$variableName], 'Process')
+    }
 }
-
-$builtAndroidApk = Join-Path $androidProject 'app/build/outputs/canonical/stableDebug/Auras-Orbit.apk'
-& (Join-Path $repoRoot '.github/scripts/verify-android-apk.ps1') -ExpectedVersion $version -ApkPath $builtAndroidApk
-Copy-Item -LiteralPath $builtAndroidApk -Destination $androidApk -Force
 
 $isccCandidates = [System.Collections.Generic.List[string]]::new()
 $isccCandidates.Add((Join-Path $repoRoot 'build/tools/innosetup/install/ISCC.exe'))

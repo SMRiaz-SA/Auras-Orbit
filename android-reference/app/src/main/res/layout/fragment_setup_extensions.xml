@@ -25,7 +25,9 @@
         android:text="@string/setup_catalogs_subtext"
         android:textSize="14sp" />
 
+    <!-- Keep the logo at fixed size while the message can wrap independently. -->
     <LinearLayout
+        tools:ignore="UseCompoundDrawables"
         android:id="@+id/blank_repo_screen"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

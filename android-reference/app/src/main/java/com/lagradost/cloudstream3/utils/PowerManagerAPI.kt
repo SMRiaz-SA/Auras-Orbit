@@ -23,7 +23,7 @@ private const val TAG = "PowerManagerAPI"
 object BatteryOptimizationChecker {
 
     fun isAppRestricted(context: Context?): Boolean {
-        if (SDK_INT >= 23 && context != null) {
+        if (context != null) {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             return !powerManager.isIgnoringBatteryOptimizations(context.packageName)
         }
@@ -66,7 +66,7 @@ object BatteryOptimizationChecker {
     fun Context.showRequestIgnoreBatteryOptDialog() {
         try {
             val intent = Intent().apply {
-                action =  Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                action = Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                 data = "package:$PACKAGE_NAME".toUri()
             }
             startActivity(intent)

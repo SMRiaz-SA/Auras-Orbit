@@ -40,6 +40,7 @@ import kotlin.system.exitProcess
 
 class ExceptionHandler(
     val errorFile: File,
+    private val previousHandler: Thread.UncaughtExceptionHandler?,
     val onError: (() -> Unit)
 ) : Thread.UncaughtExceptionHandler {
 
@@ -63,7 +64,11 @@ class ExceptionHandler(
             onError()
         } catch (_: Exception) {
         }
-        exitProcess(1)
+        if (previousHandler != null && previousHandler !== this) {
+            previousHandler.uncaughtException(thread, error)
+        } else {
+            exitProcess(1)
+        }
     }
 }
 
@@ -75,7 +80,10 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
         // loading an image or GIF in a splash screen activity.
         // buildImageLoader(applicationContext)
 
-        ExceptionHandler(filesDir.resolve("last_error")) {
+        ExceptionHandler(
+            filesDir.resolve("last_error"),
+            Thread.getDefaultUncaughtExceptionHandler()
+        ) {
             val intent = context!!.packageManager.getLaunchIntentForPackage(context!!.packageName)
             startActivity(Intent.makeRestartActivityTask(intent!!.component))
         }.also {

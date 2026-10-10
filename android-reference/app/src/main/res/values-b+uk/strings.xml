@@ -47,7 +47,6 @@
     <string name="app_subbed_text">Суб.</string>
     <string name="popup_delete_file">Видалити файл</string>
     <string name="popup_resume_download">Відновити завантаження</string>
-    <string name="home_expanded_hide">Приховати</string>
     <string name="home_play">Переглянути</string>
     <string name="home_info">Подробиці</string>
     <string name="error_bookmarks_text">Закладки</string>
@@ -118,7 +117,7 @@
     <string name="subs_outline_color">Колір обведення</string>
     <string name="autoplay_next_settings">Автовідтворення наступного епізоду</string>
     <string name="swipe_to_seek_settings_des">Проведіть збоку в бік, щоби керувати часом відтворення у відео</string>
-    <string name="benene_count_text">Дано %d бананів розробникам</string>
+    <plurals name="benene_count_text"><item quantity="one">Дано %d бананів розробникам</item><item quantity="other">Дано %d бананів розробникам</item><item quantity="few">Дано %d бананів розробникам</item><item quantity="many">Дано %d бананів розробникам</item></plurals>
     <string name="player_size_settings">Кнопка зміни розміру програвача</string>
     <string name="action_open_play">@string/home_play</string>
     <string name="vpn_might_be_needed">Для коректної роботи цього постачальника може знадобитися VPN</string>
@@ -412,7 +411,7 @@
     <string name="plugins_downloaded" formatted="true">Завантажено: %d</string>
     <string name="plugins_disabled" formatted="true">Вимкнено: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Не завантажено: %d</string>
-    <string name="plugins_updated" formatted="true">Оновлено %d розширень</string>
+    <plurals name="plugins_updated"><item quantity="one">Оновлено %d розширень</item><item quantity="other">Оновлено %d розширень</item><item quantity="few">Оновлено %d розширень</item><item quantity="many">Оновлено %d розширень</item></plurals>
     <string name="blank_repo_message">Типово у Auras Orbit немає жодного встановленого сайту. Вам потрібно встановити сайти зі сховищ.\n\nПриєднуйтеся до нашого Discord або шукайте в інтернеті.</string>
     <string name="view_public_repositories_button">Переглянути сховища спільноти</string>
     <string name="view_public_repositories_button_short">Публічний список</string>
@@ -639,14 +638,11 @@
     <string name="sort_episodes_date_newest">Датою виходу (найновіша)</string>
     <string name="sort_episodes_number_asc">Епізодом (за зростанням)</string>
     <string name="sort_episodes_rating_low_high">Рейтингом (найнижчий)</string>
-    <string name="sort_button_rating">Рейтинг %s</string>
     <string name="sort_episodes_number_desc">Епізодом (за спаданням)</string>
     <string name="sort_episodes_rating_high_low">Рейтингом (найвищий)</string>
     <string name="sort_episodes_date_oldest">Датою виходу (найстаріша)</string>
-    <string name="sort_button_episode">Еп. %s</string>
-    <string name="sort_button_date">Дата %s</string>
     <string name="update_plugins">Оновити розширення</string>
-    <string name="plugins_updated_manually">Успішно оновлено %d розширення(-ь)</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Успішно оновлено %d розширення(-ь)</item><item quantity="other">Успішно оновлено %d розширення(-ь)</item><item quantity="few">Успішно оновлено %d розширення(-ь)</item><item quantity="many">Успішно оновлено %d розширення(-ь)</item></plurals>
     <string name="update_plugins_manually">Оновити розширення вручну</string>
     <string name="starting_plugin_update_manually">Починається оновлення розширень!</string>
     <string name="no_plugins_updated_manually">Не оновлено жодного розширення.</string>
@@ -659,7 +655,7 @@
     <string name="background_radius">Радіус тла</string>
     <string name="all_subtitles_bold">Зробити всі субтитри потовщеним</string>
     <string name="all_subtitles_italic">Зробити всі субтитри курсивом</string>
-    <string name="volume_exceeded_100">Гучність перевищила 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Гучність перевищила 100%</string>
     <string name="slide_up_again_to_exceed_100">Ще раз проведіть угору, щоби перевищити 100%</string>
     <string name="concurrent_connections">Одночасних з’єднань</string>
     <string name="overscan_settings_des">Змінює межі екрана</string>
@@ -702,15 +698,12 @@
     <string name="top_center">Угорі в центрі</string>
     <string name="top_right">Угорі праворуч</string>
     <string name="play_full_series_button">Відтворити весь серіал</string>
-    <string name="install_prerelease">Встановити передрелізну версію</string>
-    <string name="prerelease_already_installed">Передрелізна версія вже встановлена.</string>
-    <string name="prerelease_install_failed">Не вдалося встановити передрелізну версію.</string>
     <string name="show_episode_text">Текст епізоду</string>
     <string name="search_suggestions">Пропозиції пошуку</string>
     <string name="search_suggestions_des">Показувати підказки пошуку під час введення тексту</string>
     <string name="clear_suggestions">Очистити пропозиції</string>
     <string name="extra_brightness_settings">Додаткова яскравість</string>
-    <string name="extra_brightness_settings_des">Увімкнути фільтр яскравості при перевищенні 100% яскравості дисплея</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Увімкнути фільтр яскравості при перевищенні 100% яскравості дисплея</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="show_cast_in_details">Показати панель трансляції</string>
     <string name="video_info">Інформація про медіа</string>

@@ -30,11 +30,11 @@
                     android:layout_width="30dp"
                     android:layout_height="30dp"
                     android:layout_gravity="center_vertical|start"
-                    android:src="@drawable/ic_baseline_arrow_back_24"
+                    android:src="@drawable/close_24px"
                     android:contentDescription="@string/go_back"
                     app:tint="?attr/white" />
 
-            <ImageView
+            <ImageView android:contentDescription="@string/add_sync"
                 android:visibility="gone"
                 android:nextFocusRight="@id/result_subscribe"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
@@ -68,7 +68,7 @@
                     android:visibility="gone"
                     app:mediaRouteButtonTint="?attr/textColor" />
 
-            <ImageView
+            <ImageView android:contentDescription="@string/subscribe_tooltip"
                     android:visibility="gone"
                     android:nextFocusUp="@id/result_back"
                     android:nextFocusDown="@id/result_description"
@@ -86,9 +86,9 @@
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/baseline_notifications_none_24"
                     android:layout_gravity="end|center_vertical"
-                    app:tint="?attr/textColor" />
+                    app:tint="?attr/textColor" tools:targetApi="26" />
 
-            <ImageView
+            <ImageView android:contentDescription="@string/action_add_to_favorites"
                 android:nextFocusUp="@id/result_back"
                 android:nextFocusDown="@id/result_description"
                 android:nextFocusLeft="@id/result_subscribe"
@@ -103,7 +103,7 @@
                 android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_baseline_favorite_border_24"
                 android:layout_gravity="end|center_vertical"
-                app:tint="?attr/textColor" />
+                app:tint="?attr/textColor" tools:targetApi="26" />
 
             <ImageView
                     android:nextFocusUp="@id/result_back"
@@ -121,7 +121,7 @@
                     android:src="@drawable/ic_outline_share_24"
                     android:layout_gravity="end|center_vertical"
                     android:contentDescription="@string/result_share"
-                    app:tint="?attr/textColor" />
+                    app:tint="?attr/textColor" tools:targetApi="26" />
 
             <ImageView
                     android:nextFocusUp="@id/result_back"
@@ -139,7 +139,7 @@
                     android:src="@drawable/ic_baseline_public_24"
                     android:layout_gravity="end|center_vertical"
                     android:contentDescription="@string/result_open_in_browser"
-                    app:tint="?attr/textColor" />
+                    app:tint="?attr/textColor" tools:targetApi="26" />
 
             <ImageView
                     android:nextFocusUp="@id/result_back"
@@ -157,7 +157,7 @@
                     android:src="@drawable/search_icon"
                     android:layout_gravity="end|center_vertical"
                     android:contentDescription="@string/result_open_in_browser"
-                    app:tint="?attr/textColor" />
+                    app:tint="?attr/textColor" tools:targetApi="26" />
             <ImageView
                     tools:visibility="visible"
                     android:visibility="gone"
@@ -175,7 +175,7 @@
                     android:src="@drawable/baseline_list_alt_24"
                     android:layout_gravity="end|center_vertical"
                     android:contentDescription="@string/result_open_in_browser"
-                    app:tint="?attr/textColor" />
+                    app:tint="?attr/textColor" tools:targetApi="26" />
         </LinearLayout>
     </FrameLayout>
 

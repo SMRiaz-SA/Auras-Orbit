@@ -11,11 +11,11 @@ import kotlin.test.assertTrue
 class SettingsNavigationTest {
 
     @Test
-    fun testMainNavItems_ConsolidatedToEightDesktopCategories() {
+    fun testMainNavItems_ContainOnlyReleaseSettingsCategories() {
         assertEquals(
-            8,
+            7,
             MAIN_NAV_ITEMS.size,
-            "Main settings navigation must have exactly 8 category hubs to avoid desktop rail overcrowding",
+            "Main settings navigation must contain the seven release settings categories",
         )
 
         val expectedTabs = listOf(
@@ -25,7 +25,6 @@ class SettingsNavigationTest {
             LeafTab.INTEGRATIONS,
             LeafTab.EXTENSIONS,
             LeafTab.NETWORK,
-            LeafTab.DEVELOPER,
             LeafTab.ADVANCED,
         )
         assertEquals(expectedTabs, MAIN_NAV_ITEMS)

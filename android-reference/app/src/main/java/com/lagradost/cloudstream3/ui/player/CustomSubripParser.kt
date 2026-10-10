@@ -168,7 +168,7 @@ class CustomSubripParser : SubtitleParser {
      */
     private fun processLine(line: String, tags: ArrayList<String>): String {
         var line = line
-        line = line.trim { it <= ' ' }
+        line = line.trim()
 
         var removedCharacterCount = 0
         val processedLine = StringBuilder(line)

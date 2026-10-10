@@ -3,11 +3,16 @@ package com.lagradost.cloudstream3.ui.result
 import android.animation.Animator
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isGone
@@ -19,6 +24,9 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.LoadResponse
@@ -54,7 +62,9 @@ import com.lagradost.cloudstream3.utils.AppContextUtils.loadCache
 import com.lagradost.cloudstream3.utils.AppContextUtils.updateHasTrailers
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.attachBackPressedCallback
 import com.lagradost.cloudstream3.utils.BackPressedCallbackHelper.detachBackPressedCallback
+import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialog
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialogInstant
 import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
@@ -62,6 +72,7 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
+import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
 import com.lagradost.cloudstream3.utils.getImageFromDrawable
 import com.lagradost.cloudstream3.utils.setText
@@ -73,8 +84,17 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
 ) {
 
     private lateinit var viewModel: ResultViewModel2
+    private var inlineSourceEpisode: ResultEpisode? = null
+    private var inlineSourceEpisodeIsResume = false
+    private var inlineSourceResults: Pair<ResultEpisode, LinkLoadingResult>? = null
+    private var inlineSourceShowAll = false
 
     override fun onDestroyView() {
+        viewModel.cancelInlineSourceSearch()
+        inlineSourceEpisode = null
+        inlineSourceEpisodeIsResume = false
+        inlineSourceResults = null
+        inlineSourceShowAll = false
         updateUIEvent -= ::updateUI
         activity?.detachBackPressedCallback(this@ResultFragmentTv.toString())
         super.onDestroyView()
@@ -281,6 +301,9 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             resultFinishLoading.setOnScrollChangeListener(NestedScrollView.OnScrollChangeListener { view, _, scrollY, _, oldScrollY ->
                 backgroundPosterHolder.translationY = -scrollY.toFloat() * 0.8f
             })
+            resultRetrySources.setOnClickListener {
+                findInlineSources(forceReload = true)
+            }
 
             redirectToPlay.setOnFocusChangeListener { _, hasFocus ->
                 if (!hasFocus) return@setOnFocusChangeListener
@@ -480,6 +503,11 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         }
 
         observeNullable(viewModel.resumeWatching) { resume ->
+            if (resume != null && !resume.isMovie && !comingSoon) {
+                setInlineSourcesEpisode(resume.result, fromResume = true)
+            } else if (resume == null) {
+                inlineSourceEpisodeIsResume = false
+            }
             binding.apply {
                 if (resume == null) {
                     return@observeNullable
@@ -679,7 +707,9 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             }
 
             binding.apply {
-                (data as? Resource.Success)?.value?.let { (_, ep) ->
+                (data as? Resource.Success)?.value?.let { (text, ep) ->
+                    resultPlayMovieText.text = text.asString(resultPlayMovieText.context)
+                    if (!comingSoon) setInlineSourcesEpisode(ep)
                     resultPlayMovieButton.setOnClickListener {
                         viewModel.handleAction(
                             EpisodeClickEvent(ACTION_CLICK_DEFAULT, ep)
@@ -821,6 +851,9 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                         episodes.value.getOrElse(lastWatchedIndex + 1) { episodes.value.firstOrNull() }
 
                     if (firstUnwatched != null) {
+                        if (!inlineSourceEpisodeIsResume && !comingSoon) {
+                            setInlineSourcesEpisode(firstUnwatched)
+                        }
                         resultPlaySeriesText.text =
                             when {
                                 firstUnwatched.season != null ->
@@ -925,6 +958,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
 
                         comingSoon = d.comingSoon
                         resultTvComingSoon.isVisible = d.comingSoon
+                        if (d.comingSoon) setInlineSourcesEpisode(null)
 
                         populateChips(resultTag, d.tags)
                         val prefs =
@@ -965,6 +999,345 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             }
         }
     }
+
+    private fun setInlineSourcesEpisode(
+        episode: ResultEpisode?,
+        fromResume: Boolean = false
+    ) {
+        if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
+            if (fromResume && episode != null) inlineSourceEpisodeIsResume = true
+            return
+        }
+
+        viewModel.cancelInlineSourceSearch()
+        inlineSourceEpisode = episode
+        inlineSourceEpisodeIsResume = fromResume && episode != null
+        inlineSourceResults = null
+        inlineSourceShowAll = false
+
+        this.binding?.apply {
+            resultInlineSources.isVisible = episode != null
+            resultInlineSources.setOnClickListener {
+                if (inlineSourceResults == null || inlineSourceResults?.second?.links.isNullOrEmpty()) {
+                    findInlineSources(forceReload = true)
+                }
+            }
+            resultSourceOptions.removeAllViews()
+            resultSourceOptions.isGone = true
+            resultSourceCount.isGone = true
+            resultSourceShowAll.isGone = true
+            resultRetrySources.isGone = true
+            resultSourcesStatusPanel.isVisible = episode != null
+            resultSourcesProgress.isVisible = episode != null
+            resultSourcesStatusPanel.isFocusable = episode != null
+            resultSourcesStatusPanel.isClickable = episode != null
+            resultSourcesStatusPanel.nextFocusUpId = resultDescription.id
+            resultSourcesStatusPanel.nextFocusDownId = resultRetrySources.id
+            resultRetrySources.nextFocusUpId = resultSourcesStatusPanel.id
+            resultSourcesEpisode.isVisible = episode?.let { it.season != null || it.episode > 0 } == true
+            resultSourcesEpisode.text = episode
+                ?.takeIf { it.season != null || it.episode > 0 }
+                ?.let { value ->
+                    val label = context?.getNameFull(
+                        value.name ?: value.headerName,
+                        value.episode,
+                        value.season
+                    ) ?: value.headerName
+                    getString(R.string.sources_for_episode, label)
+                }
+            resultSourcesStatus.apply {
+                text = if (episode == null) null else context.getString(R.string.searching_sources)
+                isVisible = episode != null
+            }
+        }
+
+        if (episode != null) findInlineSources()
+    }
+
+    private fun findInlineSources(forceReload: Boolean = false) {
+        val episode = inlineSourceEpisode ?: return
+        val binding = this.binding ?: return
+
+        inlineSourceResults?.takeIf {
+            isSameInlineSourceEpisode(it.first, episode) && !forceReload
+        }?.let { (_, result) ->
+            showInlineSourceOptions(episode, result)
+            return
+        }
+
+        inlineSourceResults = null
+        binding.resultRetrySources.isGone = true
+        binding.resultSourceCount.isGone = true
+        binding.resultSourceShowAll.isGone = true
+        binding.resultSourcesStatus.apply {
+            text = context.getString(R.string.searching_sources)
+            isVisible = true
+        }
+        binding.resultSourcesStatusPanel.isVisible = true
+        binding.resultSourcesStatusPanel.isFocusable = true
+        binding.resultSourcesStatusPanel.isClickable = true
+        binding.resultInlineSources.nextFocusDownId = binding.resultSourcesStatusPanel.id
+        binding.resultSourcesStatusPanel.setOnClickListener {
+            findInlineSources(forceReload = true)
+        }
+        binding.resultSourcesProgress.isVisible = true
+        binding.resultSourceOptions.isGone = true
+        binding.resultSourceOptions.removeAllViews()
+
+        viewModel.loadInlineSources(episode, forceReload = forceReload) { result ->
+            if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return@loadInlineSources
+            inlineSourceResults = episode to result
+            showInlineSourceOptions(episode, result)
+        }
+    }
+
+    private fun showInlineSourceOptions(episode: ResultEpisode, result: LinkLoadingResult) {
+        val binding = this.binding ?: return
+        if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return
+
+        val links = result.links
+        binding.resultSourceOptions.removeAllViews()
+        if (links.isEmpty()) {
+            binding.resultSourceOptions.isGone = true
+            binding.resultSourceCount.isGone = true
+            binding.resultSourceShowAll.isGone = true
+            binding.resultSourcesProgress.isGone = true
+            binding.resultSourcesStatusPanel.isVisible = true
+            binding.resultSourcesStatusPanel.isFocusable = true
+            binding.resultSourcesStatusPanel.isClickable = true
+            binding.resultInlineSources.nextFocusDownId = binding.resultSourcesStatusPanel.id
+            binding.resultSourcesStatusPanel.setOnClickListener {
+                findInlineSources(forceReload = true)
+            }
+            binding.resultSourcesStatus.apply {
+                text = context.getString(R.string.no_playable_sources_found)
+                isVisible = true
+            }
+            binding.resultRetrySources.apply {
+                setText(R.string.retry_sources)
+                isEnabled = true
+                isVisible = true
+            }
+            binding.resultCastItems.nextFocusUpId = binding.resultRetrySources.id
+            return
+        }
+
+        binding.resultSourcesStatusPanel.isGone = true
+        binding.resultSourcesStatusPanel.isFocusable = false
+        binding.resultSourcesStatusPanel.isClickable = false
+        binding.resultSourcesProgress.isGone = true
+        binding.resultSourcesStatus.isGone = true
+        binding.resultRetrySources.isGone = true
+        binding.resultSourceCount.apply {
+            text = context.resources.getQuantityString(
+                R.plurals.source_links_count,
+                links.size,
+                links.size
+            )
+            isVisible = true
+        }
+        binding.resultSourceOptions.isVisible = true
+        val ctx = context ?: return
+
+        val qualityGroups = links.groupBy { it.quality }
+            .toList()
+            .sortedByDescending { (quality, _) -> quality }
+        val visibleGroups = if (inlineSourceShowAll) qualityGroups else qualityGroups.take(2)
+        visibleGroups.forEach { (quality, groupLinks) ->
+            addInlineSourceQualityGroup(
+                ctx,
+                binding.resultSourceOptions,
+                quality,
+                groupLinks,
+                result,
+                inlineSourceShowAll
+            )
+        }
+
+        val optionCards = (0 until binding.resultSourceOptions.childCount).mapNotNull { index ->
+            (binding.resultSourceOptions.getChildAt(index) as? LinearLayout)?.getChildAt(0)
+        }
+        optionCards.firstOrNull()?.let { firstCard ->
+            firstCard.nextFocusUpId = binding.resultDescription.id
+            binding.resultInlineSources.nextFocusDownId = firstCard.id
+        }
+        binding.resultCastItems.nextFocusUpId = if (links.size > 2) {
+            binding.resultSourceShowAll.id
+        } else {
+            optionCards.lastOrNull()?.id ?: binding.resultInlineSources.id
+        }
+
+        binding.resultSourceShowAll.apply {
+            isVisible = links.size > 2
+            text = if (inlineSourceShowAll) {
+                getString(R.string.show_fewer_source_results)
+            } else {
+                resources.getQuantityString(
+                    R.plurals.show_all_source_results,
+                    links.size,
+                    links.size
+                )
+            }
+            setOnClickListener {
+                inlineSourceShowAll = !inlineSourceShowAll
+                showInlineSourceOptions(episode, result)
+            }
+            nextFocusDownId = binding.resultCastItems.id
+            nextFocusUpId = optionCards.lastOrNull()?.id ?: binding.resultDescription.id
+        }
+    }
+
+    private fun addInlineSourceQualityGroup(
+        ctx: android.content.Context,
+        container: LinearLayout,
+        quality: Int,
+        links: List<ExtractorLink>,
+        result: LinkLoadingResult,
+        expanded: Boolean
+    ) {
+        val density = ctx.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        val group = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        }
+        val card = MaterialCardView(ctx).apply {
+            id = View.generateViewId()
+            radius = dp(11).toFloat()
+            strokeWidth = dp(1)
+            strokeColor = ctx.colorFromAttribute(R.attr.iconColor)
+            setCardBackgroundColor(ctx.colorFromAttribute(R.attr.primaryGrayBackground))
+            isClickable = true
+            isFocusable = true
+        }
+        val row = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(9), dp(8), dp(10), dp(8))
+        }
+        val qualityBadge = TextView(ctx).apply {
+            text = Qualities.getStringByInt(quality)
+            gravity = Gravity.CENTER
+            textSize = 11f
+            setTextColor(ctx.colorFromAttribute(R.attr.colorPrimary))
+            background = GradientDrawable().apply {
+                setColor(ctx.colorFromAttribute(R.attr.boxItemBackground))
+                cornerRadius = dp(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(36)).apply {
+                marginEnd = dp(9)
+            }
+        }
+        val sourceCopy = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val sourceNames = links.map { it.name.trim() }.filter(String::isNotBlank).distinct()
+        val sourceTitle = TextView(ctx).apply {
+            text = if (links.size == 1) {
+                sourceNames.firstOrNull() ?: ctx.getString(R.string.source_name)
+            } else {
+                ctx.resources.getQuantityString(R.plurals.source_count, links.size, links.size)
+            }
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 14f
+            setTextColor(ctx.colorFromAttribute(R.attr.textColor))
+        }
+        val sourceMeta = TextView(ctx).apply {
+            text = if (links.size == 1) {
+                ctx.resources.getQuantityString(R.plurals.source_links_count, 1, 1)
+            } else {
+                val shownNames = sourceNames.take(2)
+                val remaining = (links.size - shownNames.size).coerceAtLeast(0)
+                shownNames.joinToString(" · ") + if (remaining > 0) " +$remaining" else ""
+            }
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 12f
+            setTextColor(ctx.colorFromAttribute(R.attr.grayTextColor))
+        }
+        val action = TextView(ctx).apply {
+            text = ctx.getString(if (links.size == 1) R.string.source_row_play else R.string.source_row_view)
+            gravity = Gravity.CENTER_VERTICAL
+            textSize = 11f
+            setTextColor(ctx.colorFromAttribute(R.attr.colorPrimary))
+            setPadding(dp(9), 0, 0, 0)
+        }
+
+        sourceCopy.addView(sourceTitle)
+        sourceCopy.addView(sourceMeta)
+        row.addView(qualityBadge)
+        row.addView(sourceCopy)
+        row.addView(action)
+        card.addView(row)
+        group.addView(card)
+
+        val detailChips = ChipGroup(ctx).apply {
+            isGone = !expanded || links.size < 2
+            setChipSpacingHorizontal(dp(5))
+            setChipSpacingVertical(dp(2))
+            links.forEach { link ->
+                addView(createInlineSourceChip(ctx, link.name, link, result))
+            }
+        }
+        if (links.size > 1) group.addView(detailChips)
+
+        card.setOnClickListener {
+            if (links.size == 1) {
+                playInlineSource(links.first(), result)
+            } else {
+                detailChips.isVisible = !detailChips.isVisible
+            }
+        }
+        container.addView(group)
+    }
+
+    private fun createInlineSourceChip(
+        ctx: android.content.Context,
+        name: String,
+        link: ExtractorLink,
+        result: LinkLoadingResult
+    ): Chip = Chip(ctx).apply {
+        text = name.ifBlank { ctx.getString(R.string.source_name) }
+        isCheckable = false
+        chipBackgroundColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.boxItemBackground))
+        chipStrokeColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.iconColor))
+        chipStrokeWidth = ctx.resources.displayMetrics.density
+        setTextColor(ctx.colorFromAttribute(R.attr.textColor))
+        setOnClickListener { playInlineSource(link, result) }
+    }
+
+    private fun playInlineSource(link: ExtractorLink, result: LinkLoadingResult) {
+        findNavController().navigate(
+            R.id.global_to_navigation_player,
+            GeneratorPlayer.newInstance(
+                ExtractorLinkGenerator(
+                    listOf(link),
+                    result.subs,
+                    result.episode,
+                    result.nextEpisode
+                ),
+                0,
+                result.syncData
+            )
+        )
+    }
+
+    private fun isSameInlineSourceEpisode(
+        first: ResultEpisode?,
+        second: ResultEpisode?
+    ): Boolean = when {
+        first == null || second == null -> first == second
+        else -> first.id == second.id && first.parentId == second.parentId && first.apiName == second.apiName
+    }
+
 
     private fun openPersonFilmography(person: com.lagradost.cloudstream3.Actor) {
         findNavController().navigate(

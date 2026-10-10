@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonDetail
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonMediaCredit
+import com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.common.logging.AppLogger
@@ -32,29 +33,62 @@ object TmdbPersonFetcher {
         val knownFor: List<SearchResponse>,
     )
 
-    suspend fun getActorDetails(name: String): DesktopActorDetails? {
+    suspend fun searchPeople(query: String): List<TmdbPersonCandidate> {
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return emptyList()
+
         return withContext(Dispatchers.IO) {
             try {
                 TmdbRateLimiter.acquire()
                 val apiKey = TmdbEnrichmentService.TMDB_API_KEY
-                val searchUrl = "https://api.themoviedb.org/3/search/person?api_key=$apiKey&query=${URLEncoder.encode(name, "UTF-8")}&page=1"
+                val searchUrl = "https://api.themoviedb.org/3/search/person?api_key=$apiKey&query=${URLEncoder.encode(trimmed, "UTF-8")}&page=1&language=en-US"
                 val searchData = app.get(searchUrl).parsedSafe<JsonNode>()
                 val results = searchData?.get("results")
+                if (results == null || !results.isArray) return@withContext emptyList()
 
-                val firstResult = if (results != null && results.isArray && results.size() > 0) results.get(0) else null
-                val id = firstResult?.get("id")?.asInt() ?: return@withContext null
+                results.mapNotNull { result ->
+                    val id = result.get("id")?.asInt()?.takeIf { it > 0 } ?: return@mapNotNull null
+                    val name = result.get("name")?.asText()?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val knownFor = result.get("known_for")
+                        ?.takeIf { it.isArray }
+                        ?.mapNotNull { credit ->
+                            (credit.get("title")?.asText() ?: credit.get("name")?.asText())
+                                ?.trim()
+                                ?.takeIf { it.isNotBlank() }
+                        }
+                        ?.distinct()
+                        ?.take(3)
+                        .orEmpty()
 
+                    TmdbPersonCandidate(
+                        tmdbId = id,
+                        name = name,
+                        profileUrl = TmdbEnrichmentService.tmdbImageUrl(
+                            result.get("profile_path")?.asText()?.takeIf { it.isNotBlank() && it != "null" },
+                            "w500",
+                        ),
+                        knownForDepartment = result.get("known_for_department")?.asText()?.takeIf { it.isNotBlank() },
+                        knownFor = knownFor,
+                    )
+                }.distinctBy { it.tmdbId }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                AppLogger.e("TmdbPersonFetcher: Failed to search people", e)
+                throw e
+            }
+        }
+    }
+
+    suspend fun getActorDetails(personId: Int): DesktopActorDetails? {
+        if (personId <= 0) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val apiKey = TmdbEnrichmentService.TMDB_API_KEY
                 TmdbRateLimiter.acquire()
-                val detailsUrl = "https://api.themoviedb.org/3/person/$id?api_key=$apiKey&append_to_response=combined_credits"
+                val detailsUrl = "https://api.themoviedb.org/3/person/$personId?api_key=$apiKey&append_to_response=combined_credits"
                 val detailsData = app.get(detailsUrl).parsedSafe<JsonNode>() ?: return@withContext null
 
-                val bio = detailsData.get("biography")?.asText()?.takeIf { it.isNotBlank() }
-                val bday = detailsData.get("birthday")?.asText()?.takeIf { it.isNotBlank() }
-                val pob = detailsData.get("place_of_birth")?.asText()?.takeIf { it.isNotBlank() }
-                val dday = detailsData.get("deathday")?.asText()?.takeIf { it.isNotBlank() && it != "null" }
                 val profilePath = detailsData.get("profile_path")?.asText()?.takeIf { it.isNotBlank() && it != "null" }
-                val profileUrl = TmdbEnrichmentService.tmdbImageUrl(profilePath, "original")
-
                 val castList = detailsData.get("combined_credits")?.get("cast")
                 val knownFor = mutableListOf<SearchResponse>()
                 if (castList != null && castList.isArray) {
@@ -62,9 +96,7 @@ object TmdbPersonFetcher {
                     sortedCast.take(15).forEach { credit ->
                         val mediaType = credit.get("media_type")?.asText()
                         val title = credit.get("title")?.asText() ?: credit.get("name")?.asText() ?: return@forEach
-                        val posterPath = credit.get("poster_path")?.asText()
-                        val posterUrl = TmdbEnrichmentService.tmdbImageUrl(posterPath, "original")
-
+                        val posterUrl = TmdbEnrichmentService.tmdbImageUrl(credit.get("poster_path")?.asText(), "original")
                         val recId = credit.get("id")?.asInt()
                         val recUrl = if (recId != null) "https://www.themoviedb.org/$mediaType/$recId" else ""
                         if (mediaType == "movie") {
@@ -86,16 +118,18 @@ object TmdbPersonFetcher {
                 }
 
                 DesktopActorDetails(
-                    id = id,
-                    name = name,
-                    profilePath = profileUrl,
-                    biography = bio,
-                    birthday = bday,
-                    placeOfBirth = pob,
-                    deathday = dday,
+                    id = personId,
+                    name = detailsData.get("name")?.asText()?.takeIf { it.isNotBlank() } ?: "",
+                    profilePath = TmdbEnrichmentService.tmdbImageUrl(profilePath, "original"),
+                    biography = detailsData.get("biography")?.asText()?.takeIf { it.isNotBlank() },
+                    birthday = detailsData.get("birthday")?.asText()?.takeIf { it.isNotBlank() },
+                    placeOfBirth = detailsData.get("place_of_birth")?.asText()?.takeIf { it.isNotBlank() },
+                    deathday = detailsData.get("deathday")?.asText()?.takeIf { it.isNotBlank() && it != "null" },
                     knownFor = knownFor,
                 )
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                AppLogger.e("TmdbPersonFetcher: Failed to load actor details", e)
                 null
             }
         }
@@ -108,16 +142,7 @@ object TmdbPersonFetcher {
         return withContext(Dispatchers.IO) {
             try {
                 val apiKey = TmdbEnrichmentService.TMDB_API_KEY
-                val resolvedId = if (tmdbId != null && tmdbId > 0) {
-                    tmdbId
-                } else {
-                    TmdbRateLimiter.acquire()
-                    val searchUrl = "https://api.themoviedb.org/3/search/person?api_key=$apiKey&query=${URLEncoder.encode(name, "UTF-8")}&page=1"
-                    val searchData = app.get(searchUrl).parsedSafe<JsonNode>()
-                    val results = searchData?.get("results")
-                    val firstResult = if (results != null && results.isArray && results.size() > 0) results.get(0) else null
-                    firstResult?.get("id")?.asInt() ?: return@withContext null
-                }
+                val resolvedId = tmdbId?.takeIf { it > 0 } ?: return@withContext null
 
                 TmdbRateLimiter.acquire()
                 val detailsUrl = "https://api.themoviedb.org/3/person/$resolvedId?api_key=$apiKey&append_to_response=combined_credits"
@@ -190,6 +215,7 @@ object TmdbPersonFetcher {
                     tvCredits = tvCredits,
                 )
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 AppLogger.e("TmdbPersonFetcher: Failed to fetch person detail", e)
                 null
             }

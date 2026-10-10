@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.ui.account
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.fragment.app.FragmentActivity
@@ -211,11 +212,27 @@ class AccountSelectActivity : FragmentActivity(), BiometricCallback {
         askBiometricAuth()
     }
 
-    @SuppressLint("UnsafeIntentLaunch")
     private fun navigateToMainActivity() {
         hasLoggedIn = true
-        // We want to propagate any intent we get here to MainActivity since this is just an intermediary
-        openActivity(MainActivity::class.java, baseIntent = intent)
+        // This exported activity receives external links. Forward only deep links that
+        // MainActivity understands; never carry through caller flags, components, or extras.
+        val incomingUri = intent.data
+        val allowedSchemes = setOf(
+            "cloudstreamapp",
+            "cloudstreamplayer",
+            "cloudstreamrepo",
+            "cloudstreamsearch",
+            "csshare",
+            "http",
+            "https",
+        )
+        val safeIntent = Intent(this, MainActivity::class.java).apply {
+            if (intent.action == Intent.ACTION_VIEW && incomingUri?.scheme in allowedSchemes) {
+                action = Intent.ACTION_VIEW
+                data = incomingUri
+            }
+        }
+        openActivity(MainActivity::class.java, baseIntent = safeIntent)
         finish() // Finish the account selection activity
     }
 

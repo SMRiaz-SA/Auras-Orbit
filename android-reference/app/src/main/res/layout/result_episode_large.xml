@@ -55,7 +55,7 @@
 <!--                    android:src="@drawable/play_button"-->
 <!--                    tools:visibility="invisible" />-->
 
-                <ImageView
+                <ImageView android:contentDescription="@string/episode_upcoming"
                     android:id="@+id/episode_upcoming_icon"
                     android:layout_width="36dp"
                     android:layout_height="36dp"

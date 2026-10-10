@@ -116,25 +116,25 @@ data class VideoState(
     }
 
     @Contract(pure = true)
-    fun add(item: SubtitleData): VideoState = copy(subtitles = subtitles.add(item))
+    fun add(item: SubtitleData): VideoState = copy(subtitles = subtitles.adding(item))
 
     @Contract(pure = true)
-    fun add(item: VideoLink): VideoState = copy(links = links.add(item))
+    fun add(item: VideoLink): VideoState = copy(links = links.adding(item))
 
     @Contract(pure = true)
-    fun add(item: VideoSkipStamp): VideoState = copy(stamps = stamps.add(item))
+    fun add(item: VideoSkipStamp): VideoState = copy(stamps = stamps.adding(item))
 
     @JvmName("addSubtitleData")
     @Contract(pure = true)
-    fun add(items: Collection<SubtitleData>): VideoState = copy(subtitles = subtitles.addAll(items))
+    fun add(items: Collection<SubtitleData>): VideoState = copy(subtitles = subtitles.addingAll(items))
 
     @JvmName("addVideoLink")
     @Contract(pure = true)
-    fun add(items: Collection<VideoLink>): VideoState = copy(links = links.addAll(items))
+    fun add(items: Collection<VideoLink>): VideoState = copy(links = links.addingAll(items))
 
     @JvmName("addVideoSkipStamp")
     @Contract(pure = true)
-    fun add(items: Collection<VideoSkipStamp>): VideoState = copy(stamps = stamps.addAll(items))
+    fun add(items: Collection<VideoSkipStamp>): VideoState = copy(stamps = stamps.addingAll(items))
 
     @Contract(pure = true)
     fun set(item: SubtitleData): VideoState = copy(subtitles = persistentSetOf(item))
@@ -158,7 +158,7 @@ data class VideoState(
     fun set(items: Collection<VideoSkipStamp>): VideoState = copy(stamps = items.toPersistentList())
 
     @Contract(pure = true)
-    fun addError(item: VideoLink): VideoState = copy(erroredLinks = erroredLinks.add(item))
+    fun addError(item: VideoLink): VideoState = copy(erroredLinks = erroredLinks.adding(item))
 
     @Contract(pure = true)
     fun setError(items: Collection<VideoLink>): VideoState = copy(erroredLinks = items.toPersistentSet())
@@ -393,7 +393,7 @@ class PlayerGeneratorViewModel : ViewModel() {
                 generatorState = generator?.let { gen ->
                     GeneratorState(
                         meta = gen.videos.getOrNull(index),
-                        nextMeta = gen.videos.getOrNull(index + 1),
+                        nextMeta = gen.getNextMeta(index),
                         id = gen.getId(index),
                         response = (gen as? RepoLinkGenerator)?.page,
                         index = index,

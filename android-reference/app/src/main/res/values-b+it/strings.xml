@@ -70,7 +70,6 @@
     <string name="popup_resume_download">Riprendi download</string>
     <string name="popup_pause_download">Ferma download</string>
     <string name="home_more_info">Più info</string>
-    <string name="home_expanded_hide">Nascondi</string>
     <string name="home_play">Riproduci</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Filtra segnalibri</string>
@@ -94,7 +93,7 @@
     <string name="subs_font_size">Dimensione</string>
     <string name="search_provider_text_providers">Cerca per provider</string>
     <string name="search_provider_text_types">Cerca per tipo</string>
-    <string name="benene_count_text">%d banane date agli sviluppatori</string>
+    <plurals name="benene_count_text"><item quantity="one">%d banane date agli sviluppatori</item><item quantity="other">%d banane date agli sviluppatori</item><item quantity="many">%d banane date agli sviluppatori</item></plurals>
     <string name="benene_count_text_none">Nessuna banana data</string>
     <string name="subs_auto_select_language">Selezione automatica lingua</string>
     <string name="subs_download_languages">Lingue da scaricare</string>
@@ -408,7 +407,7 @@
     <string name="plugins_downloaded" formatted="true">Scaricato: %d</string>
     <string name="plugins_disabled" formatted="true">Disabilitato: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Non scaricato: %d</string>
-    <string name="plugins_updated" formatted="true">Aggiornati %d plugin</string>
+    <plurals name="plugins_updated"><item quantity="one">Aggiornati %d plugin</item><item quantity="other">Aggiornati %d plugin</item><item quantity="many">Aggiornati %d plugin</item></plurals>
     <string name="blank_repo_message">Auras Orbit non ha siti installati per impostazione predefinita. È necessario installare i siti dai repository. \n \nUnisciti al nostro Discord o cerca online.</string>
     <string name="view_public_repositories_button">Visualizza i repository della comunità</string>
     <string name="view_public_repositories_button_short">Lista pubblica</string>
@@ -661,16 +660,13 @@
     <string name="sort_episodes_rating_high_low">Valutazione (più alta)</string>
     <string name="sort_episodes_rating_low_high">Valutazione (più bassa)</string>
     <string name="sort_episodes_date_newest">Data di messa in onda (più recente)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_date">Data %s</string>
     <string name="update_plugins">Aggiorna plugin</string>
     <string name="update_plugins_manually">Aggiorna plugin manualmente</string>
     <string name="sort_episodes_number_asc">Episodio (ascendente)</string>
     <string name="sort_episodes_number_desc">Episodio (discendente)</string>
     <string name="sort_episodes_date_oldest">Data di messa in onda (più vecchia)</string>
-    <string name="sort_button_rating">Valutazione %s</string>
     <string name="starting_plugin_update_manually">Avvio del processo di aggiornamento plugin!</string>
-    <string name="plugins_updated_manually">%d plugin aggiornati correttamente</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d plugin aggiornati correttamente</item><item quantity="other">%d plugin aggiornati correttamente</item><item quantity="many">%d plugin aggiornati correttamente</item></plurals>
     <string name="no_plugins_updated_manually">Nessun plugin è stato aggiornato.</string>
     <string name="player_notification_channel_name">Notifiche lettore</string>
     <string name="player_notification_channel_description">La notifica del lettore per controllare la riproduzione in background</string>
@@ -681,7 +677,7 @@
     <string name="all_subtitles_bold">Rendi tutti i sottotitoli in grassetto</string>
     <string name="all_subtitles_italic">Rendi tutti i sottotitoli in corsivo</string>
     <string name="background_radius">Raggio di sfondo</string>
-    <string name="volume_exceeded_100">Il volume ha superato il 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Il volume ha superato il 100%</string>
     <string name="slide_up_again_to_exceed_100">Scorri di nuovo verso l\'alto per andare oltre il 100%</string>
     <string name="download_parallel_settings_des">Quanti oggetti possono essere scaricati contemporaneamente</string>
     <string name="parallel_downloads">Download paralleli</string>
@@ -724,9 +720,6 @@
     <string name="top_right">In alto a destra</string>
     <string name="middle_left">In centro a sinistra</string>
     <string name="play_full_series_button">Riproduci serie completa</string>
-    <string name="install_prerelease">Installa la versione pre-release</string>
-    <string name="prerelease_already_installed">La versione pre-release è già installata.</string>
-    <string name="prerelease_install_failed">Impossibile installare la versione pre-release.</string>
     <string name="show_episode_text">Testo dell\'episodio</string>
     <string name="search_suggestions">Suggerimenti per la ricerca</string>
     <string name="search_suggestions_des">Mostra suggerimenti di ricerca durante la digitazione</string>
@@ -735,7 +728,7 @@
     <string name="video_info">Info sui media</string>
     <string name="source_name">Nome fonte</string>
     <string name="extra_brightness_settings">Luminosità extra</string>
-    <string name="extra_brightness_settings_des">Attiva il filtro di luminosità quando viene superato il 100% della luminosità dello schermo</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Attiva il filtro di luminosità quando viene superato il 100% della luminosità dello schermo</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="download_queue">Coda di download</string>
     <string name="queue_empty_message">Al momento non ci sono download in coda.</string>

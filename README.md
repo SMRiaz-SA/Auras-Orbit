@@ -6,9 +6,8 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** Beta **0.2.0.26**<br>
-**Source build date:** 2026-10-08<br>
-**Platform:** Windows 10 or 11, 64-bit; Android beta APK<br>
+**Current version (desktop and Android):** **1.0.0.00**<br>
+**Platform:** Windows 10 or 11, 64-bit; Android APK<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
 **Changelog:** [Release history](CHANGELOG.md)
 
@@ -122,22 +121,21 @@ pwsh -File .\.github\scripts\build-local-deliverables.ps1
 
 The local packaging helper builds and verifies the portable app, Windows installer, Android APK, and a source ZIP containing the public source tree. It checks formatting, compilation, JVM and native tests, and packaged deliverables. The CloudStream-compatible library and Orbit's episode-date fixes are included directly in **android-reference/**; no submodule setup or patch step is needed.
 
-GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using GitHub-hosted Windows x64 runners. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v** and attaches the Android beta APK.
+GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using GitHub-hosted Windows x64 runners. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v** and attaches the Android APK.
 
 The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in **gradle.properties** to change the app version; installer version metadata is generated under **desktop-app/build/generated/installer/**.
 
 ### Android build foundation
 
-The Android app has a separate Gradle root in **android-reference/** and does not build the Windows application. It starts from the pinned CloudStream Android source for extension compatibility. The Android package ID for this beta APK is **com.auras.orbit.debug**. Android reads **APP_VERSION** from the repository-root **gradle.properties**, so the APK and desktop use the same version without a second version setting. The downloadable APK is built from the **stableDebug** variant and uses Android's debug signing key.
+The Android app has a separate Gradle root in **android-reference/** and does not build the Windows application. It preserves the Android extension API namespace for compatibility. Android reads **APP_VERSION** from the repository-root **gradle.properties**, so the APK and desktop use the same version without a second version setting. Local packaging builds the **stableRelease** variant with the ignored test signing configuration in **android-reference/app/build/test-signing/local-signing.properties**. That key is for local validation and is not the GitHub release key.
 
-With an Android SDK installed, build the local stable debug APK from PowerShell:
+Build and verify the local deliverables, including the stable test APK, from the repository root:
 
 ~~~powershell
-cd .\android-reference
-.\gradlew.bat :app:assembleStableDebug
+pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ~~~
 
- This command builds locally; it does not publish an APK or write to GitHub.
+The verifier checks the APK's embedded package name and version, validates its signature, and compares the signer certificate with the configured keystore. This command builds locally; it does not publish an APK or write to GitHub.
 
 ## Acknowledgements
 

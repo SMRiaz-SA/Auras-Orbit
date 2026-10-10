@@ -57,7 +57,6 @@
     <string name="popup_resume_download">Fortsett nedlasting</string>
     <string name="popup_pause_download">Stopp nedlastingen</string>
     <string name="home_more_info">Mer informasjon</string>
-    <string name="home_expanded_hide">Gjemme seg</string>
     <string name="home_play">Spille</string>
     <string name="home_info">Informasjon</string>
     <string name="filter_bookmarks">Filtrer bokmerker</string>
@@ -76,7 +75,7 @@
     <string name="subs_font_size">Skriftstørrelse</string>
     <string name="search_provider_text_providers">Søk med leverandører</string>
     <string name="search_provider_text_types">Søk med typer</string>
-    <string name="benene_count_text">%d Benenes gitt til utvikler</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes gitt til utvikler</item><item quantity="other">%d Benenes gitt til utvikler</item></plurals>
     <string name="benene_count_text_none">Nei Benenes gitt</string>
     <string name="subs_auto_select_language">Velg språk automatisk</string>
     <string name="subs_download_languages">Last ned språk</string>
@@ -317,7 +316,7 @@
     <string name="plugins_downloaded" formatted="true">Nedlastet: %d</string>
     <string name="plugins_disabled" formatted="true">Avskrudd: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Ikke nedlastet: %d</string>
-    <string name="plugins_updated" formatted="true">Oppdaterte %d programtillegg</string>
+    <plurals name="plugins_updated"><item quantity="one">Oppdaterte %d programtillegg</item><item quantity="other">Oppdaterte %d programtillegg</item></plurals>
     <string name="setup_extensions_subtext">Last ned listen over sider du vil bruke</string>
     <string name="delete_repository_plugins">Dette vil også slette alle pakkebrønnsprogramtillegg</string>
     <string name="view_public_repositories_button">Vis gemenskapspakkebrønner</string>

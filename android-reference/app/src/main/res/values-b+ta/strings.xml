@@ -35,7 +35,6 @@
     <string name="popup_play_file">கோப்பு</string>
     <string name="popup_pause_download">இடைநிறுத்தம் பதிவிறக்கம்</string>
     <string name="home_more_info">மேலும் செய்தி</string>
-    <string name="home_expanded_hide">மறை</string>
     <string name="action_remove_from_bookmarks">அகற்று</string>
     <string name="sort_clear">தெளிவான</string>
     <string name="sort_save">சேமி</string>
@@ -373,7 +372,7 @@
     <string name="next_season_episode_format" formatted="true">சீசன் %1$d எபிசோட் %2$d வெளியிடப்படும்</string>
     <string name="update_started">புதுப்பிப்பு தொடங்கியது</string>
     <string name="recommendations_tooltip">பரிந்துரைகளைக் காட்டு</string>
-    <string name="benene_count_text">டெவ்சுக்கு வழங்கப்பட்ட %d பெனின்கள்</string>
+    <plurals name="benene_count_text"><item quantity="one">டெவ்சுக்கு வழங்கப்பட்ட %d பெனின்கள்</item><item quantity="other">டெவ்சுக்கு வழங்கப்பட்ட %d பெனின்கள்</item></plurals>
     <string name="speed_setting_summary">பிளேயரில் வேக விருப்பத்தை சேர்க்கிறது</string>
     <string name="restore_failed_format" formatted="true">கோப்பு %s இலிருந்து தரவை மீட்டெடுப்பதில் தோல்வி</string>
     <string name="library">நூலகம்</string>
@@ -532,7 +531,7 @@
     <string name="repository_name_hint">களஞ்சிய பெயர் (விரும்பினால்)</string>
     <string name="is_adult">18+</string>
     <string name="plugins_not_downloaded" formatted="true">பதிவிறக்கம் செய்யப்படவில்லை: %d</string>
-    <string name="plugins_updated" formatted="true">புதுப்பிக்கப்பட்டது %d செருகுநிரல்கள்</string>
+    <plurals name="plugins_updated"><item quantity="one">புதுப்பிக்கப்பட்டது %d செருகுநிரல்கள்</item><item quantity="other">புதுப்பிக்கப்பட்டது %d செருகுநிரல்கள்</item></plurals>
     <string name="player_settings_play_in_app">உள் வீரர்</string>
     <string name="skip_type_op">திறப்பு</string>
     <string name="skip_type_mixed_op">கலப்பு திறப்பு</string>
@@ -640,19 +639,16 @@
     <string name="sort_episodes_rating_low_high">மதிப்பீடு (மிகக் குறைந்த)</string>
     <string name="sort_episodes_date_newest">காற்று தேதி (புதியது)</string>
     <string name="sort_episodes_date_oldest">காற்று தேதி (பழமையானது)</string>
-    <string name="sort_button_episode">பாகம் %s</string>
-    <string name="sort_button_rating">மதிப்பீடு %s</string>
-    <string name="sort_button_date">தேதி %s</string>
     <string name="torrent_preferred_media">அமைப்புகள்/வழங்குநர்கள்/விருப்பமான ஊடகங்களில் டொரெண்டை இயக்கவும்</string>
     <string name="torrent_not_accepted">பயன்பாட்டை மறுதொடக்கம் செய்து, தொடர ச்ட்ரீம் டொரண்ட் பாப்-அப் ஏற்றுக்கொள்ளுங்கள்.</string>
     <string name="software_decoding">மென்பொருள் டிகோடிங்</string>
     <string name="software_decoding_desc">மென்பொருள் டிகோடிங் உங்கள் சாதனத்தால் ஆதரிக்கப்படாத வீடியோ கோப்புகளை பிளேயருக்கு இயக்க உதவுகிறது, ஆனால் உயர் தெளிவுத்திறனில் பின்னடைவு அல்லது நிலையற்ற பிளேபேக்கை ஏற்படுத்தலாம்.</string>
-    <string name="volume_exceeded_100">தொகுதி 100% ஐ தாண்டியுள்ளது</string>
+    <string  name="volume_exceeded_100" formatted="false">தொகுதி 100% ஐ தாண்டியுள்ளது</string>
     <string name="slide_up_again_to_exceed_100">100% க்கு அப்பால் செல்ல மீண்டும் சறுக்கவும்</string>
     <string name="update_plugins">செருகுநிரல்களைப் புதுப்பிக்கவும்</string>
     <string name="update_plugins_manually">செருகுநிரல்களை கைமுறையாக புதுப்பிக்கவும்</string>
     <string name="starting_plugin_update_manually">சொருகி புதுப்பிப்பு செயல்முறையைத் தொடங்குகிறது!</string>
-    <string name="plugins_updated_manually">%d செருகுநிரல்(கள்) வெற்றிகரமாக புதுப்பிக்கப்பட்டது</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d செருகுநிரல்(கள்) வெற்றிகரமாக புதுப்பிக்கப்பட்டது</item><item quantity="other">%d செருகுநிரல்(கள்) வெற்றிகரமாக புதுப்பிக்கப்பட்டது</item></plurals>
     <string name="no_plugins_updated_manually">செருகுநிரல்கள் எதுவும் புதுப்பிக்கப்படவில்லை.</string>
     <string name="player_notification_channel_name">பிளேயர் அறிவிப்புகள்</string>
     <string name="player_notification_channel_description">பின்னணியில் இருந்து பின்னணியைக் கட்டுப்படுத்துவதற்கான பிளேயர் அறிவிப்பு</string>
@@ -678,15 +674,12 @@
     <string name="play_full_series_button">முழு தொடரையும் விளையாடு</string>
     <string name="queue_empty_message">தற்போது வரிசைப்படுத்தப்பட்ட பதிவிறக்கங்கள் எதுவும் இல்லை.</string>
     <string name="extra_brightness_settings">கூடுதல் ஒளி</string>
-    <string name="extra_brightness_settings_des">100% காட்சி பிரகாசத்தை மீறும் போது பிரகாச வடிப்பானை இயக்கவும்</string>
+    <string  name="extra_brightness_settings_des" formatted="false">100% காட்சி பிரகாசத்தை மீறும் போது பிரகாச வடிப்பானை இயக்கவும்</string>
     <string name="extra_brightness_key">கூடுதல்_பிரகாசம்_செயல்படுத்தப்பட்டது</string>
     <string name="search_suggestions">தேடல் பரிந்துரைகள்</string>
     <string name="search_suggestions_des">தட்டச்சு செய்யும் போது தேடல் பரிந்துரைகளைக் காட்டு</string>
     <string name="clear_suggestions">தெளிவான பரிந்துரைகள்</string>
     <string name="show_cast_in_details">காச்ட் பேனலைக் காட்டு</string>
-    <string name="install_prerelease">வெளியீட்டிற்கு முந்தைய பதிப்பை நிறுவவும்</string>
-    <string name="prerelease_already_installed">முன் வெளியீடு ஏற்கனவே நிறுவப்பட்டுள்ளது.</string>
-    <string name="prerelease_install_failed">முன் வெளியீட்டை நிறுவுவதில் தோல்வி.</string>
     <string name="episode_action_play_mirror">கண்ணாடியை விளையாடு</string>"
     <string name="show_rating">மதிப்பீடு சிட்டை</string>
     <string name="show_episode_text">எபிசோட் உரை</string>

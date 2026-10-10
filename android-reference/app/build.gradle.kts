@@ -125,10 +125,42 @@ val generateGitHash = tasks.register<GenerateGitHashTask>("generateGitHash") {
     outputDir.set(layout.buildDirectory.dir("generated/git"))
 }
 
+abstract class VerifyStableReleaseSigningTask : DefaultTask() {
+    @get:org.gradle.api.tasks.Input
+    abstract val storeFilePath: org.gradle.api.provider.Property<String>
+
+    @get:org.gradle.api.tasks.Input
+    abstract val storePasswordConfigured: org.gradle.api.provider.Property<Boolean>
+
+    @get:org.gradle.api.tasks.Input
+    abstract val keyAliasConfigured: org.gradle.api.provider.Property<Boolean>
+
+    @get:org.gradle.api.tasks.Input
+    abstract val keyPasswordConfigured: org.gradle.api.provider.Property<Boolean>
+
+    @org.gradle.api.tasks.TaskAction
+    fun verifySigningConfiguration() {
+        val missing = buildList {
+            if (storeFilePath.get().isBlank()) add("AURAS_RELEASE_STORE_FILE")
+            if (!storePasswordConfigured.get()) add("AURAS_RELEASE_STORE_PASSWORD")
+            if (!keyAliasConfigured.get()) add("AURAS_RELEASE_KEY_ALIAS")
+            if (!keyPasswordConfigured.get()) add("AURAS_RELEASE_KEY_PASSWORD")
+        }
+
+        check(missing.isEmpty()) {
+            "stableRelease requires signing configuration. Missing: ${missing.joinToString()}"
+        }
+        check(File(storeFilePath.get()).isFile) {
+            "AURAS_RELEASE_STORE_FILE does not point to an existing keystore."
+        }
+    }
+}
+
 val stableReleaseStoreFile = providers.environmentVariable("AURAS_RELEASE_STORE_FILE").orNull
 val stableReleaseStorePassword = providers.environmentVariable("AURAS_RELEASE_STORE_PASSWORD").orNull
 val stableReleaseKeyAlias = providers.environmentVariable("AURAS_RELEASE_KEY_ALIAS").orNull
 val stableReleaseKeyPassword = providers.environmentVariable("AURAS_RELEASE_KEY_PASSWORD").orNull
+val stableReleaseStoreFilePath = stableReleaseStoreFile?.let { file(it).absolutePath }.orEmpty()
 val hasStableReleaseSigning = listOf(
     stableReleaseStoreFile,
     stableReleaseStorePassword,
@@ -136,25 +168,21 @@ val hasStableReleaseSigning = listOf(
     stableReleaseKeyPassword
 ).all { !it.isNullOrBlank() }
 
-val verifyStableReleaseSigning = tasks.register("verifyStableReleaseSigning") {
-    doLast {
-        val missing = mapOf(
-            "AURAS_RELEASE_STORE_FILE" to stableReleaseStoreFile,
-            "AURAS_RELEASE_STORE_PASSWORD" to stableReleaseStorePassword,
-            "AURAS_RELEASE_KEY_ALIAS" to stableReleaseKeyAlias,
-            "AURAS_RELEASE_KEY_PASSWORD" to stableReleaseKeyPassword
-        ).filterValues { it.isNullOrBlank() }.keys
-
-        check(missing.isEmpty()) {
-            "stableRelease requires signing configuration. Missing: ${missing.joinToString()}"
-        }
-        check(file(stableReleaseStoreFile!!).isFile) {
-            "AURAS_RELEASE_STORE_FILE does not point to an existing keystore."
-        }
-    }
+val verifyStableReleaseSigning = tasks.register<VerifyStableReleaseSigningTask>("verifyStableReleaseSigning") {
+    storeFilePath.set(stableReleaseStoreFilePath)
+    storePasswordConfigured.set(!stableReleaseStorePassword.isNullOrBlank())
+    keyAliasConfigured.set(!stableReleaseKeyAlias.isNullOrBlank())
+    keyPasswordConfigured.set(!stableReleaseKeyPassword.isNullOrBlank())
 }
 
 android {
+    bundle {
+        language {
+            // Locale changes are handled in-app, so all strings must stay available locally.
+            enableSplit = false
+        }
+    }
+
     @Suppress("UnstableApiUsage")
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -194,19 +222,6 @@ android {
             }
         }
 
-        // We just use SIGNING_KEY_ALIAS here since it won't change
-        // so won't kill the configuration cache.
-        if (System.getenv("SIGNING_KEY_ALIAS") != null) {
-            create("prerelease") {
-                val tmpFilePath = System.getProperty("user.home") + "/work/_temp/keystore/"
-                val prereleaseStoreFile: File? = File(tmpFilePath).listFiles()?.first()
-
-                storeFile = prereleaseStoreFile?.let { file(it) }
-                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
-            }
-        }
     }
 
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -278,17 +293,6 @@ android {
     productFlavors {
         create("stable") {
             dimension = "state"
-        }
-        create("prerelease") {
-            dimension = "state"
-            applicationIdSuffix = ".prerelease"
-            if (signingConfigs.names.contains("prerelease")) {
-                signingConfig = signingConfigs.getByName("prerelease")
-            } else {
-                logger.warn("No prerelease signing config!")
-            }
-            versionNameSuffix = "-PRE"
-            versionCode = aurasVersionCode
         }
     }
 
@@ -393,12 +397,13 @@ dependencies {
     implementation(libs.zipline)
 
     // Temp/deprecated; will be removed once extensions have time to migrate from using it
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation(libs.gson)
     // Deprecated; will be removed once extensions have time to migrate from using it
-    implementation("me.xdrop:fuzzywuzzy:1.4.0")
+    implementation(libs.fuzzywuzzy)
 
     // Torrent Support
-    implementation(libs.torrentserver)
+    // Vendor the upstream API/classes with 16 KB-aligned 64-bit torrent native libraries.
+    implementation(files("libs/torrentserver-7861970-16kb.aar"))
 
     // Downloading & Networking
     implementation(libs.work.runtime.ktx)
@@ -427,7 +432,7 @@ tasks.register<Jar>("androidSourcesJar") {
 tasks.register<Copy>("copyJar") {
     dependsOn("build", ":library:jvmJar")
     from(
-        "build/intermediates/compile_app_classes_jar/prereleaseDebug/bundlePrereleaseDebugClassesToCompileJar",
+        "build/intermediates/compile_app_classes_jar/stableDebug/bundleStableDebugClassesToCompileJar",
         "../library/build/libs"
     )
     into("build/app-classes")
@@ -468,7 +473,7 @@ dokka {
     moduleName = "App"
     dokkaSourceSets {
         configureEach {
-            suppress = name != "prereleaseDebug"
+            suppress = name != "stableDebug"
             analysisPlatform = KotlinPlatform.JVM
             displayName = "JVM"
             documentedVisibilities(

@@ -88,7 +88,6 @@
     <string name="popup_resume_download">Rifillo shkarkimin</string>
     <string name="popup_pause_download">Ndalo shkarkimin</string>
     <string name="home_more_info">Më shumë info</string>
-    <string name="home_expanded_hide">Fsheh</string>
     <string name="home_play">Luaj</string>
     <string name="home_info">Informacion</string>
     <string name="filter_bookmarks">Filtro të ruajturat</string>
@@ -117,7 +116,7 @@
     <string name="subs_font_size">Madhësia e shkrimit</string>
     <string name="search_provider_text_providers">Kërko duke përdorur ofruesit</string>
     <string name="search_provider_text_types">Kërko duke përdorur tipet</string>
-    <string name="benene_count_text">%d Banane të dhëna për developer-at</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Banane të dhëna për developer-at</item><item quantity="other">%d Banane të dhëna për developer-at</item></plurals>
     <string name="benene_count_text_none">Asnjë Banane e dhënë</string>
     <string name="subs_auto_select_language">Zgjedhje automatike e gjuhës</string>
     <string name="subs_download_languages">Shkarko gjuhët</string>
@@ -160,7 +159,7 @@
     <string name="use_system_brightness_settings">Përdor nivelin e ndriçimit të sitemit</string>
     <string name="use_system_brightness_settings_des">Përdor ndriçimin e sistemit në luajtësin e aplikacionit në vend të një mbivendosjeje të errët</string>
     <string name="extra_brightness_settings">Ndriçim ekstra</string>
-    <string name="extra_brightness_settings_des">Aktivizo filtrin e ndriçimit kur ndriçimi i ekranit kalon 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Aktivizo filtrin e ndriçimit kur ndriçimi i ekranit kalon 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="episode_sync_settings">Përditëso progresin e shikimit</string>
     <string name="episode_sync_settings_des">Sinkronizo automatikisht progresin e episodit aktual</string>
@@ -195,9 +194,6 @@
     <string name="updates_settings">Shfaq përditësimet e aplikacionit</string>
     <string name="updates_settings_des">Kërko automatikisht për përditësime të reja kur hapet aplikacioni.</string>
     <string name="redo_setup_process">Ribëj procesin e konfigurimit</string>
-    <string name="install_prerelease">Instalo versione beta</string>
-    <string name="prerelease_already_installed">Versioni beta është i instaluar.</string>
-    <string name="prerelease_install_failed">Dështoi instalimi i versionit beta.</string>
     <string name="apk_installer_settings">Instaluesi i APK-ve</string>
     <string name="apk_installer_settings_des">Disa pajisje nuk mbështesin instaluesin e ri të paketës. Provoni opsionin e vjetër nëse përditësimet nuk instalohen.</string>
     <string name="github">Github</string>
@@ -520,7 +516,7 @@
     <string name="extension_types">Të suportuara</string>
     <string name="plugins_downloaded" formatted="true">Shkarkuar: %d</string>
     <string name="video_tracks">Gjurmë video-je</string>
-    <string name="plugins_updated" formatted="true">U përditësuan %d shtesa</string>
+    <plurals name="plugins_updated"><item quantity="one">U përditësuan %d shtesa</item><item quantity="other">U përditësuan %d shtesa</item></plurals>
     <string name="hls_playlist">Lista e HLS</string>
     <string name="plugin">shtesa</string>
     <string name="extension_rating" formatted="true">Vlerësimi: %s</string>
@@ -584,9 +580,6 @@
     <string name="sort_episodes_rating_low_high">Vlerësimi (më i ulëti)</string>
     <string name="sort_episodes_date_newest">Data e publikimit (më e fundit)</string>
     <string name="sort_episodes_date_oldest">Data e publikimit (më e hershmja)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Vlerësimi %s</string>
-    <string name="sort_button_date">Data %s</string>
     <string name="open_with">Hape me</string>
     <string name="empty_library_logged_in_message">Kjo listë është bosh. Provo një tjetër.</string>
     <string name="safe_mode_file">U gjet skedari i modalitetit të sigurt!\nNuk do të ngarkohen asnjë shtesë gjatë nisjes derisa skedari të hiqet.</string>
@@ -674,12 +667,12 @@
     <string name="torrent_not_accepted">Rifillo aplikacionin dhe prano dritaren “Stream Torrent” për të vazhduar.</string>
     <string name="software_decoding">Dekodim me softuer</string>
     <string name="software_decoding_desc">Dekodimi me softuer i lejon player-it të luajë video që nuk mbështeten nga pajisja juaj, por mund të shkaktojë vonesa ose paqëndrueshmëri në rezolucione të larta.</string>
-    <string name="volume_exceeded_100">Volumi është mbi 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Volumi është mbi 100%</string>
     <string name="slide_up_again_to_exceed_100">Rrëshqit lart përsëri për të kaluar mbi 100%</string>
     <string name="update_plugins">Përditëso shtesat</string>
     <string name="update_plugins_manually">Përditëso shtesat manualisht</string>
     <string name="starting_plugin_update_manually">Filloi procesi i përditësimit të shtesave!</string>
-    <string name="plugins_updated_manually">%d Shtes(a) u përditësuan me sukses</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d Shtes(a) u përditësuan me sukses</item><item quantity="other">%d Shtes(a) u përditësuan me sukses</item></plurals>
     <string name="no_plugins_updated_manually">Nuk u përditësua asnjë shtesë.</string>
     <string name="player_notification_channel_name">Njoftimet e luajtësit</string>
     <string name="player_notification_channel_description">Njoftimi për kontrollin e luajtjes nga sfondi</string>

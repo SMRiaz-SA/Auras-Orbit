@@ -29,19 +29,6 @@ object GithubReleases {
         @JsonProperty("draft") @SerialName("draft") val draft: Boolean = false,
     )
 
-    @Serializable
-    private data class GithubObject(
-        @JsonProperty("sha") @SerialName("sha") val sha: String, // SHA-256 hash
-        @JsonProperty("type") @SerialName("type") val type: String? = null,
-        ///@JsonProperty("url") @SerialName("url") val url: String,
-    )
-
-    @Serializable
-    private data class GithubTag(
-        //@JsonProperty("node_id") @SerialName("node_id") val nodeId: String,
-        @JsonProperty("object") @SerialName("object") val githubObject: GithubObject,
-    )
-
     /** GitHub file update package */
     @Immutable
     data class GithubFile(
@@ -62,40 +49,12 @@ object GithubReleases {
     private val defaultHeaders = mapOf("Accept" to "application/vnd.github.v3+json")
 
     @Throws
-    suspend fun getShaFromTag(
-        userName: String,
-        repository: String,
-        tag: String,
-    ): String {
-        var gitObject = app.get(
-            url = "https://api.github.com/repos/$userName/$repository/git/ref/tags/$tag",
-            headers = defaultHeaders
-        ).parsed<GithubTag>().githubObject
-
-        // Annotated tags point to another Git object; follow them until reaching the commit.
-        repeat(5) {
-            if (gitObject.type != "tag") {
-                return gitObject.sha
-            }
-
-            gitObject = app.get(
-                url = "https://api.github.com/repos/$userName/$repository/git/tags/${gitObject.sha}",
-                headers = defaultHeaders
-            ).parsed<GithubTag>().githubObject
-        }
-
-        return gitObject.sha
-    }
-
-    @Throws
     suspend fun getLatestReleaseFile(
         userName: String,
         repository: String,
-        prerelease: Boolean,
         contentType: String,
     ): GithubFile? {
-        // Read versioned releases directly. This handles repositories with no stable release yet
-        // and prereleases that use version tags instead of a moving tag name.
+        // Read the latest published stable release directly.
         val releases = app.get(
             url = "https://api.github.com/repos/$userName/$repository/releases?per_page=100",
             headers = defaultHeaders
@@ -103,7 +62,7 @@ object GithubReleases {
 
         val releaseAndAsset = releases.asSequence()
             .filterNot { it.draft }
-            .filter { it.prerelease == prerelease }
+            .filterNot { it.prerelease }
             .sortedByDescending { it.createdAt }
             .mapNotNull { release ->
                 // GitHub can label APK uploads as octet-stream, so accept the .apk suffix too.

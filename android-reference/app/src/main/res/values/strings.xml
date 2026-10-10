@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--https://newbedev.com/concatenate-multiple-strings-in-xml--><resources>
+<!--https://newbedev.com/concatenate-multiple-strings-in-xml--><resources xmlns:tools="http://schemas.android.com/tools">
     <!-- FORMAT MIGHT TRANSLATE, WILL CAUSE CRASH IF APPLIED WRONG -->
     <string name="person_filmography_title">Filmography</string>
     <string name="person_missing_name">This person does not have a name to search.</string>
@@ -13,7 +13,7 @@
     <string name="person_movies">Movies</string>
     <string name="person_tv">TV</string>
     <string name="person_filter_credits">Filter credits</string>
-    <string name="person_credit_count">%1$d credits</string>
+    <plurals name="person_credit_count"><item quantity="one">%1$d credit</item><item quantity="other">%1$d credits</item></plurals>
     <string name="person_find_on_providers">Select to search installed providers</string>
     <string name="person_no_credits">No credits match this filter.</string>
     <string name="person_provider_search_intro">Matching provider results for %1$s</string>
@@ -22,8 +22,9 @@
     <string name="person_retry">Try again</string>
     <string name="app_dub_sub_episode_text_format" formatted="true">%1$s Ep %2$d</string>
     <string name="cast_format" formatted="true">Cast: %s</string>
-    <string name="next_episode_format" formatted="true">Episode %d will be released in</string>
-    <string name="next_season_episode_format" formatted="true">Season %1$d Episode %2$d will be released in</string>
+    <!-- These numbers identify a specific episode; “Episode” remains singular at every value. -->
+    <string name="next_episode_format" formatted="true" tools:ignore="PluralsCandidate">Episode %d will be released in</string>
+    <string name="next_season_episode_format" formatted="true" tools:ignore="PluralsCandidate">Season %1$d Episode %2$d will be released in</string>
     <string name="next_episode_time_day_format" formatted="true">%1$dd %2$dh %3$dm</string>
     <string name="next_episode_time_hour_format" formatted="true">%1$dh %2$dm</string>
     <string name="next_episode_time_min_format" formatted="true">%dm</string>
@@ -31,8 +32,8 @@
     <string name="download_time_left_min_sec_format" formatted="true">%1$dm %2$ds</string>
     <string name="download_time_left_sec_format" formatted="true">%1$ds</string>
     <!-- IS NOT NEEDED TO TRANSLATE AS THEY ARE ONLY USED FOR SCREEN READERS AND WONT SHOW UP TO NORMAL USERS -->
-    <string name="result_poster_img_des">Poster</string>
     <string name="search_poster_img_des">Poster</string>
+    <string name="result_poster_img_des">Poster</string>
     <string name="episode_poster_img_des">Episode Poster</string>
     <string name="home_main_poster_img_des">Main Poster</string>
     <string name="home_next_random_img_des">Next Random</string>
@@ -47,6 +48,25 @@
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
     <string name="app_name">Auras Orbit</string>
+    <string name="auras_wordmark">ORBIT</string>
+    <string name="bullet_separator">•</string>
+    <string name="tests_passed">Tests passed</string>
+    <string name="tests_failed">Tests failed</string>
+    <string name="test_progress_format" formatted="true">%1$d / %2$s</string>
+    <string name="edit_profile_image">Edit profile image</string>
+    <string name="vote_for_extension">Vote for this extension</string>
+    <string name="player_fullscreen">Toggle full-screen mode</string>
+    <string name="available_offline">Available offline</string>
+    <string name="toggle_download_options">Show or hide download options</string>
+    <string name="pinned">Pinned</string>
+    <string name="add_episode">Add episode</string>
+    <string name="remove_episode">Remove episode</string>
+    <string name="decrease_playback_speed">Decrease playback speed</string>
+    <string name="increase_playback_speed">Increase playback speed</string>
+    <string name="episode_upcoming">Upcoming episode</string>
+    <string name="increase_source_priority">Increase source priority</string>
+    <string name="decrease_source_priority">Decrease source priority</string>
+    <string name="preview_settings">Preview settings</string>
     <string name="play_with_app_name">Play with Auras Orbit</string>
     <string name="title_home">Home</string>
     <string name="title_explore">Explore</string>
@@ -71,11 +91,74 @@
     <string name="auras_help_open_screen">Open related screen</string>
     <string name="auras_help_steps_heading">Steps</string>
     <string name="auras_help_recovery_heading">If something goes wrong</string>
-    <string name="auras_help_recovery_title">Common fixes</string>
+    <string name="auras_help_popular_heading">Popular guides</string>
+    <string name="auras_help_all_guides_heading">More guides</string>
+    <string name="auras_media_movie">MOVIE</string>
+    <string name="auras_media_tv_show">TV SHOW</string>
+    <string name="auras_media_anime">ANIME</string>
+    <string name="auras_download_in_progress">In progress</string>
+    <string name="auras_download_available_offline">Available offline</string>
+    <string name="auras_explore_current_source">CURRENT SOURCE</string>
+    <string name="auras_explore_source_not_connected">SOURCE NOT CONNECTED</string>
+    <string name="auras_explore_source_choose">Choose a source</string>
+    <string name="auras_explore_source_change_hint">Tap to choose another source</string>
+    <string name="auras_explore_source_connect_hint">Tap to connect a source</string>
+    <string name="auras_explore_brand_tagline">DISCOVER YOUR NEXT STORY</string>
+    <string name="auras_explore_resume_title">Pick up where you left off</string>
+    <string name="auras_explore_resume_see_all">View all</string>
+    <string name="auras_explore_empty_title">Your Orbit is waiting</string>
+    <string name="auras_explore_load_error_title">We couldn’t load this catalog</string>
+    <string name="auras_explore_empty_body">Connect a catalog to bring its collections and titles into Auras Orbit.</string>
+    <string name="auras_explore_connect_source">Connect a catalog</string>
+    <string name="auras_explore_choose_source">Choose a catalog</string>
+    <string name="auras_explore_browse_catalog">Browse full catalog</string>
+    <string name="auras_explore_search">Search Orbit</string>
+    <string name="auras_catalogs_subtitle">Browse collections from your connected sources.</string>
+    <string name="auras_catalogs_back">Back to Explore</string>
+    <string name="auras_catalogs_unreachable_title">This catalog is out of reach</string>
+    <string name="auras_catalogs_empty_title">Bring your catalogs into Orbit</string>
+    <string name="auras_catalogs_empty_body">Connect a catalog to browse its collections and discover titles here.</string>
+    <string name="auras_source_picker_title">Choose your source</string>
+    <string name="auras_source_picker_search">Search catalogs</string>
+    <string name="auras_source_picker_no_results">No catalogs match that search.</string>
     <string name="auras_catalog_more">More</string>
+    <string name="auras_catalog_empty_shelf">No titles are available in this catalog right now.</string>
     <string name="auras_catalog_retry">Retry</string>
     <string name="auras_catalog_loading_more">Loading…</string>
     <string name="auras_catalog_page_error">Could not load this catalog page: %1$s</string>
+    <string name="auras_catalog_list_title">Catalog</string>
+    <string name="auras_catalog_list_subtitle">Titles from %1$s, kept in catalog order.</string>
+    <string name="auras_catalog_list_back">Back to Catalogs</string>
+    <string name="auras_catalog_scroll_hint">Scroll to keep browsing this catalog.</string>
+    <string name="auras_catalog_load_more">Load more</string>
+    <string name="auras_catalog_list_end">You’ve reached the end of this catalog.</string>
+    <string name="auras_catalog_changed_title">The selected catalog changed</string>
+    <string name="auras_catalog_changed_body">Return to Catalogs and reopen More for the active source.</string>
+    <string name="auras_catalog_unavailable_title">This catalog is unavailable</string>
+    <string name="auras_catalog_unavailable_body">The source may have changed or the catalog may no longer be available.</string>
+    <string name="auras_catalog_list_back_to_catalogs">Back to Catalogs</string>
+    <string name="auras_setup_language_title">App language</string>
+    <string name="auras_setup_language_description">Choose the language for menus and help.</string>
+    <string name="auras_welcome_title">Welcome to Auras Orbit</string>
+    <string name="auras_welcome_body">Choose a catalog source to bring its collections into your Orbit. You can connect one now, or explore later.</string>
+    <string name="auras_welcome_connect">Connect a catalog</string>
+    <string name="auras_welcome_later">Do this later</string>
+    <string name="auras_welcome_help">Help &amp; Manual</string>
+    <string name="auras_trending_title">Trending</string>
+    <string name="auras_trending_section_title">Trending</string>
+    <string name="auras_trending_see_all">See all trending</string>
+    <string name="auras_collection_see_all">See full list</string>
+    <string name="auras_trending_back">Back to Explore</string>
+    <string name="auras_collection_full_subtitle" formatted="true">All titles from %1$s</string>
+    <string name="auras_trending_default_source">this catalog</string>
+    <string name="auras_collection_empty_title">This collection is unavailable</string>
+    <string name="auras_collection_empty_body" formatted="true">The active source does not currently provide the %1$s collection.</string>
+    <string name="auras_trending_source_changed_title">The active catalog changed</string>
+    <string name="auras_trending_source_changed_body">Return to Explore and open Trending for the currently selected catalog.</string>
+    <string name="auras_trending_loading">Loading more trending titles…</string>
+    <string name="auras_trending_scroll_hint">Scroll to continue browsing</string>
+    <string name="auras_trending_continue_loading">Continue loading</string>
+    <string name="auras_trending_end">You’re all caught up</string>
     <string name="search_hint_site" formatted="true">Search %s…</string>
     <string name="speech_recognition_unavailable">Speech recognition is not available</string>
     <string name="begin_speaking">Begin Speaking…</string>
@@ -133,7 +216,6 @@
     <string name="popup_resume_download">Resume Download</string>
     <string name="popup_pause_download">Pause Download</string>
     <string name="home_more_info">More info</string>
-    <string name="home_expanded_hide">Hide</string>
     <string name="home_play">Play</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Filter Bookmarks</string>
@@ -163,7 +245,7 @@
     <string name="subs_font_size">Font Size</string>
     <string name="search_provider_text_providers">Search using providers</string>
     <string name="search_provider_text_types">Search using types</string>
-    <string name="benene_count_text">%d Benenes given to devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benene given to devs</item><item quantity="other">%d Benenes given to devs</item></plurals>
     <string name="benene_count_text_none">No Benenes given</string>
     <string name="subs_auto_select_language">Auto-Select Language</string>
     <string name="subs_download_languages">Download Languages</string>
@@ -171,6 +253,13 @@
     <string name="subs_hold_to_reset_to_default">Hold to reset to default</string>
     <string name="subs_import_text" formatted="true">Import fonts by placing them in %s</string>
     <string name="continue_watching">Continue Watching</string>
+    <string name="person_people">People</string>
+    <string name="person_search_people">Search people</string>
+    <string name="person_finding_people">Finding people…</string>
+    <string name="person_no_search_matches">No people match “%1$s”.</string>
+    <string name="person_search_results">Search results</string>
+    <string name="person_view_all">View all</string>
+    <string name="person_search_unavailable">People search is unavailable right now.</string>
     <string name="action_remove_watching">Remove</string>
     <string name="action_open_watching">More Info</string>
     <string name="action_open_play">@string/home_play </string>
@@ -212,7 +301,7 @@
         overlay
     </string>
     <string name="extra_brightness_settings">Extra brightness</string>
-    <string name="extra_brightness_settings_des">Enable brightness filter when 100% display brightness is exceeded</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Enable brightness filter when 100% display brightness is exceeded</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="episode_sync_settings">Update watch progress</string>
     <string name="episode_sync_settings_des">Automatically sync your current episode progress</string>
@@ -247,9 +336,6 @@
     <string name="updates_settings">Show app updates</string>
     <string name="updates_settings_des">Automatically search for new updates after starting the app.</string>
     <string name="redo_setup_process">Redo setup process</string>
-    <string name="install_prerelease">Install pre-release version</string>
-    <string name="prerelease_already_installed">Pre-release is already installed.</string>
-    <string name="prerelease_install_failed">Failed to install pre-release.</string>
     <string name="apk_installer_settings">APK Installer</string>
     <string name="apk_installer_settings_des">Some devices do not support the new package installer. Try the legacy option if updates do not install.</string>
     <string name="github">Github</string>
@@ -261,6 +347,23 @@
     <string name="app_language">App Language</string>
     <string name="no_chromecast_support_toast">This provider has no Chromecast support</string>
     <string name="no_links_found_toast">No Links Found</string>
+    <string name="auras_playback_sources">Playback sources</string>
+    <string name="retry_sources">Retry source search</string>
+    <string name="searching_sources">Finding available links…</string>
+    <string name="sources_for_episode">For %1$s</string>
+    <plurals name="show_all_source_results"><item quantity="one">See all %1$d source result</item><item quantity="other">See all %1$d source results</item></plurals>
+    <string name="show_fewer_source_results">Show fewer source results</string>
+    <string name="source_row_play">PLAY</string>
+    <string name="source_row_view">VIEW</string>
+    <string name="no_playable_sources_found">No playable sources found.</string>
+    <plurals name="source_links_count">
+        <item quantity="one">1 link</item>
+        <item quantity="other">%1$d links</item>
+    </plurals>
+    <plurals name="source_count">
+        <item quantity="one">1 source</item>
+        <item quantity="other">%1$d sources</item>
+    </plurals>
     <string name="copy_link_toast">Link copied to clipboard</string>
     <string name="play_episode_toast">Play Episode</string>
     <string name="subs_default_reset_toast">Reset to default value</string>
@@ -545,6 +648,20 @@
     <string name="setup_done">Done</string>
     <string name="extensions">Extensions</string>
     <string name="catalogs_and_providers">Catalogs &amp; providers</string>
+    <string name="catalog_repository_description">Connect a trusted repository to browse its catalogs and providers.</string>
+    <string name="repositories_section_title">CATALOG REPOSITORIES</string>
+    <string name="add_repository_subtitle">Connect a compatible source</string>
+    <string name="repositories_empty_title">Your list is empty</string>
+    <string name="repositories_empty_message">Add a repository to see catalogs and providers here.</string>
+    <string name="installed_providers_title">Installed providers</string>
+    <string name="manage_installed_providers">Manage</string>
+    <string name="installed_providers_empty_title">No providers installed</string>
+    <string name="installed_providers_empty_message">Providers you install from your catalogs will appear here.</string>
+    <string name="repository_connection_unavailable">Connection unavailable</string>
+    <plurals name="repository_connected_provider_count">
+        <item quantity="one">Connected · %d provider</item>
+        <item quantity="other">Connected · %d providers</item>
+    </plurals>
     <string name="setup_catalogs_title">Connect a catalog</string>
     <string name="setup_catalogs_subtext">Choose a compatible source now, or connect one later in Settings.</string>
     <string name="auras_sources_label">AURAS ORBIT · SOURCES</string>
@@ -583,7 +700,7 @@
     <string name="plugins_downloaded" formatted="true">Downloaded: %d</string>
     <string name="plugins_disabled" formatted="true">Disabled: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Not downloaded: %d</string>
-    <string name="plugins_updated" formatted="true">Updated %d plugins</string>
+    <plurals name="plugins_updated"><item quantity="one">Updated %d plugin</item><item quantity="other">Updated %d plugins</item></plurals>
     <string name="blank_repo_message">No catalogs are connected yet. You can continue setup and connect one later in Settings.</string>
     <string name="view_public_repositories_button">View community repositories</string>
     <string name="view_public_repositories_button_short">Public list</string>
@@ -666,9 +783,6 @@
     <string name="sort_episodes_rating_low_high">Rating (Lowest)</string>
     <string name="sort_episodes_date_newest">Air Date (Newest)</string>
     <string name="sort_episodes_date_oldest">Air Date (Oldest)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Rating %s</string>
-    <string name="sort_button_date">Date %s</string>
     <string name="select_library">Select Library</string>
     <string name="open_with">Open with</string>
     <string name="empty_library_no_accounts_message">Your library is empty :(
@@ -680,7 +794,7 @@
     <string name="subscription_list_name">Subscribed</string>
     <string name="subscription_new">Subscribed to %s</string>
     <string name="subscription_deleted">Unsubscribed from %s</string>
-    <string name="subscription_episode_released">Episode %d released!</string>
+    <string name="subscription_episode_released" tools:ignore="PluralsCandidate">Episode %d released!</string>
     <string name="action_subscribe">Subscribe</string>
     <string name="action_unsubscribe">Unsubscribe</string>
     <string name="profile_number">Profile %d</string>
@@ -787,13 +901,13 @@
     <string name="torrent_not_accepted">Restart app and accept Stream Torrent pop-up to proceed.</string>
     <string name="software_decoding">Software decoding</string>
     <string name="software_decoding_desc">Software decoding enables the player to play video files not supported by your device, but may cause laggy or unstable playback on high resolution.</string>
-    <string name="volume_exceeded_100">Volume has exceeded 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Volume has exceeded 100%</string>
     <string name="slide_up_again_to_exceed_100">Slide up again to go beyond 100%</string>
     <string name="update_plugins">Update Plugins</string>
     <!--Manual Update Button-->
     <string name="update_plugins_manually">Update plugins manually</string>
     <string name="starting_plugin_update_manually">Starting plugin update process!</string>
-    <string name="plugins_updated_manually">Successfully updated %d plugin(s)</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Successfully updated %d plugin</item><item quantity="other">Successfully updated %d plugins</item></plurals>
     <string name="no_plugins_updated_manually">No plugins were updated.</string>
     <string name="player_notification_channel_name">Player notifications</string>
     <string name="player_notification_channel_description">The player notification for controlling the playback from the background</string>

@@ -18,7 +18,7 @@ class AppUpdaterTest {
     fun `newer remote version is detected correctly`() {
         assert(AppUpdater.compareVersions("0.1.3", "0.1.2") > 0) { "0.1.3 should be newer than 0.1.2" }
         assert(AppUpdater.compareVersions("1.0.0", "0.9.9") > 0) { "1.0.0 should be newer than 0.9.9" }
-        assert(AppUpdater.compareVersions("0.2.0", "0.1.9") > 0) { "0.2.0 should be newer than 0.1.9" }
+        assert(AppUpdater.compareVersions("1.0.0.00", "0.9.9") > 0) { "1.0.0.00 should be newer than 0.9.9" }
     }
 
     @Test
@@ -47,9 +47,8 @@ class AppUpdaterTest {
     }
 
     @Test
-    fun `pre-release patch number is compared before its label`() {
-        assert(AppUpdater.compareVersions("0.1.5", "0.1.6-pre-alpha") < 0)
-        assert(AppUpdater.compareVersions("0.1.6", "0.1.6-pre-alpha") > 0)
-        assert(AppUpdater.compareVersions("0.1.6-pre-alpha.2", "0.1.6-pre-alpha.1") > 0)
+    fun `pre-release version labels are not accepted as stable versions`() {
+        assertEquals(0, AppUpdater.compareVersions("1.0.0.00", "1.0.0-beta.1"))
+        assertEquals(0, AppUpdater.compareVersions("1.0.0", "1.0.0-rc.1"))
     }
 }

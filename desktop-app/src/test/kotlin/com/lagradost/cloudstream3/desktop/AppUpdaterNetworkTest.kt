@@ -21,7 +21,7 @@ class AppUpdaterNetworkTest {
             val checker = checker(fixture.address.port)
 
             checker.checkForUpdates()
-            assertEquals("v0.3.0", checker.latestRelease.value?.tag_name)
+            assertEquals("v1.0.1", checker.latestRelease.value?.tag_name)
             assertNull(checker.lastError.value)
 
             response.set(404 to "not found")
@@ -67,7 +67,6 @@ class AppUpdaterNetworkTest {
             .callTimeout(1, TimeUnit.SECONDS)
             .build(),
         endpoint = { "http://127.0.0.1:$port/releases" },
-        includePrereleases = { false },
         currentVersion = { AppConfig.APP_VERSION },
     )
 
@@ -86,14 +85,14 @@ class AppUpdaterNetworkTest {
     private companion object {
         const val releaseJson = """
             [{
-              "tag_name":"v0.3.0",
-              "name":"Auras Orbit 0.3.0",
+              "tag_name":"v1.0.1",
+              "name":"Auras Orbit 1.0.1",
               "body":"Fixture release",
               "html_url":"https://example.invalid/release",
               "published_at":"2026-09-27T00:00:00Z",
               "prerelease":false,
               "draft":false,
-              "assets":[{"name":"Auras-Orbit-Portable-0.3.0.zip","browser_download_url":"https://example.invalid/app.zip"}]
+              "assets":[{"name":"Auras-Orbit-Portable-1.0.1.zip","browser_download_url":"https://example.invalid/app.zip"}]
             }]
         """
     }

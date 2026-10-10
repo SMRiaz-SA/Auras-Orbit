@@ -39,7 +39,7 @@
     <string name="episode_more_options_des">Daugiau parinkčių</string>
     <string name="play_episode">Paleisti seriją</string>
     <string name="player_speed">Grotuvo greitis</string>
-    <string name="benene_count_text">%d Bananai duoti kūrėjams</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Bananai duoti kūrėjams</item><item quantity="other">%d Bananai duoti kūrėjams</item><item quantity="few">%d Bananai duoti kūrėjams</item><item quantity="many">%d Bananai duoti kūrėjams</item></plurals>
     <string name="type_watching">Žiūrima</string>
     <string name="pause">Pauzė</string>
     <string name="result_tags">Žanrai</string>
@@ -71,7 +71,6 @@
     <string name="empty_library_logged_in_message">Tuščias sąrašas. Pabandykite pasirinkti kitą sąrašą.</string>
     <string name="chromecast_subtitles_settings">Chromecast subtitrai</string>
     <string name="rated_format" formatted="true">Įvertinimas: %.1f</string>
-    <string name="home_expanded_hide">Slėpti</string>
     <string name="sort_apply">Pritaikyti</string>
     <string name="browser">Naršyklė</string>
     <string name="pick_subtitle">Subtitrai</string>

@@ -17,7 +17,6 @@ import com.mihon.presentation.settings.Preference
 import com.mihon.presentation.settings.SearchableSettings
 import kotlinx.collections.immutable.persistentListOf
 
-@Deprecated("This setting was merged into other places")
 object SettingsProvidersScreen : SearchableSettings {
     @Composable
     override fun getTitleRes(): String = stringResource(R.string.category_providers)

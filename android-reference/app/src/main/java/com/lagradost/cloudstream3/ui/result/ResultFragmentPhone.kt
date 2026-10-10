@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
@@ -11,11 +12,14 @@ import android.os.Bundle
 import android.text.Editable
 import android.view.View
 import android.view.ViewGroup
+import android.view.Gravity
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.view.animation.DecelerateInterpolator
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isGone
@@ -29,10 +33,13 @@ import androidx.navigation.fragment.findNavController
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
 import com.discord.panels.PanelsChildGestureRegionObserver
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.DubStatus
@@ -62,6 +69,8 @@ import com.lagradost.cloudstream3.ui.download.DOWNLOAD_ACTION_LONG_CLICK
 import com.lagradost.cloudstream3.ui.download.DownloadButtonSetup
 import com.lagradost.cloudstream3.ui.player.CS3IPlayer
 import com.lagradost.cloudstream3.ui.player.CSPlayerEvent
+import com.lagradost.cloudstream3.ui.player.ExtractorLinkGenerator
+import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
 import com.lagradost.cloudstream3.ui.player.IPlayer
 import com.lagradost.cloudstream3.ui.player.PlayerView
 import com.lagradost.cloudstream3.ui.player.source_priority.QualityProfileDialog
@@ -85,6 +94,7 @@ import com.lagradost.cloudstream3.utils.BatteryOptimizationChecker.openBatteryOp
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialog
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialogInstant
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showDialog
@@ -198,6 +208,10 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
     protected open var lockRotation: Boolean = true
     protected var playerBinding: TrailerCustomLayoutBinding? = null
     protected var isShowing: Boolean = false
+    private var inlineSourceEpisode: ResultEpisode? = null
+    private var inlineSourceEpisodeIsResume = false
+    private var inlineSourceResults: Pair<ResultEpisode, LinkLoadingResult>? = null
+    private var inlineSourceShowAll = false
 
     protected var playerHostView: PlayerView? = null
 
@@ -344,6 +358,9 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         playerHostView?.release()
         playerBinding = null
         resultBinding?.resultScroll?.setOnClickListener(null)
+        viewModel.cancelInlineSourceSearch()
+        inlineSourceEpisode = null
+        inlineSourceResults = null
         resultBinding = null
         syncBinding = null
         recommendationBinding = null
@@ -492,6 +509,9 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         }
 
         resultBinding?.apply {
+            resultRetrySources.setOnClickListener {
+                findInlineSources(forceReload = true)
+            }
             resultReloadConnectionerror.setOnClickListener {
                 viewModel.load(
                     activity,
@@ -727,6 +747,11 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         }*/
 
         observeNullable(viewModel.resumeWatching) { resume ->
+            if (resume != null && !resume.isMovie) {
+                setInlineSourcesEpisode(resume.result, fromResume = true)
+            } else if (resume == null) {
+                inlineSourceEpisodeIsResume = false
+            }
             resultBinding?.apply {
                 if (resume == null) {
                     resultResumeParent.isVisible = false
@@ -816,6 +841,9 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     episodes is Resource.Success && episodes.value.isNotEmpty()
 
                 if (episodes is Resource.Success) {
+                    if (!inlineSourceEpisodeIsResume) {
+                        setInlineSourcesEpisode(episodes.value.firstOrNull())
+                    }
                     (resultEpisodes.adapter as? EpisodeAdapter)?.submitList(episodes.value)
 
                     // Show quality dialog with all sources
@@ -875,6 +903,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     data is Resource.Success && viewModel.currentRepo?.api?.hasDownloadSupport == true
 
                 (data as? Resource.Success)?.value?.let { (text, ep) ->
+                    setInlineSourcesEpisode(ep)
                     resultPlayMovie.setText(text)
                     resultPlayMovie.setOnClickListener {
                         viewModel.handleAction(
@@ -946,17 +975,14 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     resultMetaRating.setText(d.ratingText)
                     resultMetaStatus.setText(d.onGoingText)
                     resultMetaContentRating.setText(d.contentRatingText)
+                    resultMetaYear.isVisible = d.yearText != null
+                    resultMetaDuration.isVisible = d.durationText != null
+                    resultMetaRating.isVisible = d.ratingText != null
+                    resultMetaStatus.isVisible = d.onGoingText != null
+                    resultMetaContentRating.isVisible = d.contentRatingText != null
                     resultCastText.setText(d.actorsText)
                     resultNextAiring.setText(d.nextAiringEpisode)
                     resultNextAiringTime.setText(d.nextAiringDate)
-                    resultPoster.loadImage(d.posterImage, headers = d.posterHeaders) {
-                        error {
-                            getImageFromDrawable(
-                                context ?: return@error null,
-                                R.drawable.default_cover
-                            )
-                        }
-                    }
                     resultPosterBackground.loadImage(
                         d.posterBackgroundImage,
                         headers = d.posterHeaders
@@ -983,7 +1009,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                             isExpanded = !isExpanded
                             maxLines = if (isExpanded) {
                                 Integer.MAX_VALUE
-                            } else 10
+                            } else 5
                         }
                     }
 
@@ -1002,10 +1028,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     resultCastItems.isGone = !showCast || d.actors.isNullOrEmpty()
                     (resultCastItems.adapter as? ActorAdaptor)?.submitList(if (showCast) d.actors else emptyList())
 
-                    if (d.contentRatingText == null) {
-                        // If there is no rating to display, we don't want an empty gap
-                        resultMetaContentRating.width = 0
-                    }
+                    resultInlineSources.isVisible = !d.comingSoon && inlineSourceEpisode != null
 
                     if (syncModel.addSyncs(d.syncData)) {
                         syncModel.updateMetaAndUser()
@@ -1449,6 +1472,303 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                 resume.result
             )
         )
+    }
+
+    private fun setInlineSourcesEpisode(
+        episode: ResultEpisode?,
+        fromResume: Boolean = false
+    ) {
+        if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
+            if (fromResume && episode != null) inlineSourceEpisodeIsResume = true
+            return
+        }
+
+        viewModel.cancelInlineSourceSearch()
+        inlineSourceEpisode = episode
+        inlineSourceEpisodeIsResume = fromResume && episode != null
+        inlineSourceResults = null
+        inlineSourceShowAll = false
+
+        resultBinding?.apply {
+            resultInlineSources.isVisible = episode != null
+            resultSourceOptions.removeAllViews()
+            resultSourceOptions.isGone = true
+            resultSourceCount.isGone = true
+            resultSourceShowAll.isGone = true
+            resultRetrySources.isGone = true
+            resultSourcesStatusPanel.isVisible = episode != null
+            resultSourcesProgress.isVisible = episode != null
+            resultSourcesEpisode.isVisible = episode?.let { it.season != null || it.episode > 0 } == true
+            resultSourcesEpisode.text = episode
+                ?.takeIf { it.season != null || it.episode > 0 }
+                ?.let { value ->
+                    val label = context?.getNameFull(
+                        value.name ?: value.headerName,
+                        value.episode,
+                        value.season
+                    ) ?: value.headerName
+                    getString(R.string.sources_for_episode, label)
+                }
+            resultSourcesStatus.apply {
+                text = if (episode == null) null else context.getString(R.string.searching_sources)
+                isVisible = episode != null
+            }
+        }
+
+        if (episode != null) findInlineSources()
+    }
+
+    private fun findInlineSources(forceReload: Boolean = false) {
+        val episode = inlineSourceEpisode ?: return
+        val binding = resultBinding ?: return
+
+        inlineSourceResults?.takeIf {
+            isSameInlineSourceEpisode(it.first, episode) && !forceReload
+        }?.let { (_, result) ->
+            showInlineSourceOptions(episode, result)
+            return
+        }
+
+        inlineSourceResults = null
+        binding.resultRetrySources.isGone = true
+        binding.resultSourceCount.isGone = true
+        binding.resultSourceShowAll.isGone = true
+        binding.resultSourcesStatus.apply {
+            text = context.getString(R.string.searching_sources)
+            isVisible = true
+        }
+        binding.resultSourcesStatusPanel.isVisible = true
+        binding.resultSourcesProgress.isVisible = true
+        binding.resultSourceOptions.isGone = true
+        binding.resultSourceOptions.removeAllViews()
+
+        viewModel.loadInlineSources(episode, forceReload = forceReload) { result ->
+            if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return@loadInlineSources
+            inlineSourceResults = episode to result
+            showInlineSourceOptions(episode, result)
+        }
+    }
+
+    private fun showInlineSourceOptions(episode: ResultEpisode, result: LinkLoadingResult) {
+        val binding = resultBinding ?: return
+        if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return
+
+        val links = result.links
+        binding.resultSourceOptions.removeAllViews()
+        if (links.isEmpty()) {
+            binding.resultSourceOptions.isGone = true
+            binding.resultSourceCount.isGone = true
+            binding.resultSourceShowAll.isGone = true
+            binding.resultSourcesProgress.isGone = true
+            binding.resultSourcesStatusPanel.isVisible = true
+            binding.resultSourcesStatus.apply {
+                text = context.getString(R.string.no_playable_sources_found)
+                isVisible = true
+            }
+            binding.resultRetrySources.apply {
+                setText(R.string.retry_sources)
+                isEnabled = true
+                isVisible = true
+            }
+            return
+        }
+
+        binding.resultSourcesStatusPanel.isGone = true
+        binding.resultSourcesProgress.isGone = true
+        binding.resultSourcesStatus.isGone = true
+        binding.resultRetrySources.isGone = true
+        binding.resultSourceCount.apply {
+            text = context.resources.getQuantityString(
+                R.plurals.source_links_count,
+                links.size,
+                links.size
+            )
+            isVisible = true
+        }
+        binding.resultSourceOptions.isVisible = true
+        val ctx = context ?: return
+
+        val qualityGroups = links.groupBy { it.quality }
+            .toList()
+            .sortedByDescending { (quality, _) -> quality }
+        val visibleGroups = if (inlineSourceShowAll) qualityGroups else qualityGroups.take(2)
+        visibleGroups.forEach { (quality, groupLinks) ->
+            addInlineSourceQualityGroup(
+                ctx,
+                binding.resultSourceOptions,
+                quality,
+                groupLinks,
+                result,
+                inlineSourceShowAll
+            )
+        }
+
+        binding.resultSourceShowAll.apply {
+            isVisible = links.size > 2
+            text = if (inlineSourceShowAll) {
+                getString(R.string.show_fewer_source_results)
+            } else {
+                resources.getQuantityString(
+                    R.plurals.show_all_source_results,
+                    links.size,
+                    links.size
+                )
+            }
+            setOnClickListener {
+                inlineSourceShowAll = !inlineSourceShowAll
+                showInlineSourceOptions(episode, result)
+            }
+        }
+    }
+
+    private fun addInlineSourceQualityGroup(
+        ctx: android.content.Context,
+        container: LinearLayout,
+        quality: Int,
+        links: List<ExtractorLink>,
+        result: LinkLoadingResult,
+        expanded: Boolean
+    ) {
+        val density = ctx.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        val group = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        }
+        val card = MaterialCardView(ctx).apply {
+            radius = dp(11).toFloat()
+            strokeWidth = dp(1)
+            strokeColor = ctx.colorFromAttribute(R.attr.iconColor)
+            setCardBackgroundColor(ctx.colorFromAttribute(R.attr.primaryGrayBackground))
+            isClickable = true
+            isFocusable = true
+        }
+        val row = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(9), dp(8), dp(10), dp(8))
+        }
+        val qualityBadge = TextView(ctx).apply {
+            text = Qualities.getStringByInt(quality)
+            gravity = Gravity.CENTER
+            textSize = 11f
+            setTextColor(ctx.colorFromAttribute(R.attr.colorPrimary))
+            background = GradientDrawable().apply {
+                setColor(ctx.colorFromAttribute(R.attr.boxItemBackground))
+                cornerRadius = dp(8).toFloat()
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(36)).apply {
+                marginEnd = dp(9)
+            }
+        }
+        val sourceCopy = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val sourceNames = links.map { it.name.trim() }.filter(String::isNotBlank).distinct()
+        val sourceTitle = TextView(ctx).apply {
+            text = if (links.size == 1) {
+                sourceNames.firstOrNull() ?: ctx.getString(R.string.source_name)
+            } else {
+                ctx.resources.getQuantityString(R.plurals.source_count, links.size, links.size)
+            }
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 14f
+            setTextColor(ctx.colorFromAttribute(R.attr.textColor))
+        }
+        val sourceMeta = TextView(ctx).apply {
+            text = if (links.size == 1) {
+                ctx.resources.getQuantityString(R.plurals.source_links_count, 1, 1)
+            } else {
+                val shownNames = sourceNames.take(2)
+                val remaining = (links.size - shownNames.size).coerceAtLeast(0)
+                shownNames.joinToString(" · ") + if (remaining > 0) " +$remaining" else ""
+            }
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 12f
+            setTextColor(ctx.colorFromAttribute(R.attr.grayTextColor))
+        }
+        val action = TextView(ctx).apply {
+            text = ctx.getString(if (links.size == 1) R.string.source_row_play else R.string.source_row_view)
+            gravity = Gravity.CENTER_VERTICAL
+            textSize = 11f
+            setTextColor(ctx.colorFromAttribute(R.attr.colorPrimary))
+            setPadding(dp(9), 0, 0, 0)
+        }
+
+        sourceCopy.addView(sourceTitle)
+        sourceCopy.addView(sourceMeta)
+        row.addView(qualityBadge)
+        row.addView(sourceCopy)
+        row.addView(action)
+        card.addView(row)
+        group.addView(card)
+
+        val detailChips = ChipGroup(ctx).apply {
+            isGone = !expanded || links.size < 2
+            setChipSpacingHorizontal(dp(5))
+            setChipSpacingVertical(dp(2))
+            links.forEach { link ->
+                addView(createInlineSourceChip(ctx, link.name, link, result))
+            }
+        }
+        if (links.size > 1) group.addView(detailChips)
+
+        card.setOnClickListener {
+            if (links.size == 1) {
+                playInlineSource(links.first(), result)
+            } else {
+                detailChips.isVisible = !detailChips.isVisible
+            }
+        }
+        container.addView(group)
+    }
+
+    private fun createInlineSourceChip(
+        ctx: android.content.Context,
+        name: String,
+        link: ExtractorLink,
+        result: LinkLoadingResult
+    ): Chip = Chip(ctx).apply {
+        text = name.ifBlank { ctx.getString(R.string.source_name) }
+        isCheckable = false
+        chipBackgroundColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.boxItemBackground))
+        chipStrokeColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.iconColor))
+        chipStrokeWidth = ctx.resources.displayMetrics.density
+        setTextColor(ctx.colorFromAttribute(R.attr.textColor))
+        setOnClickListener { playInlineSource(link, result) }
+    }
+
+    private fun playInlineSource(link: ExtractorLink, result: LinkLoadingResult) {
+        findNavController().navigate(
+            R.id.global_to_navigation_player,
+            GeneratorPlayer.newInstance(
+                ExtractorLinkGenerator(
+                    listOf(link),
+                    result.subs,
+                    result.episode,
+                    result.nextEpisode
+                ),
+                0,
+                result.syncData
+            )
+        )
+    }
+
+    private fun isSameInlineSourceEpisode(
+        first: ResultEpisode?,
+        second: ResultEpisode?
+    ): Boolean = when {
+        first == null || second == null -> first == second
+        else -> first.id == second.id && first.parentId == second.parentId && first.apiName == second.apiName
     }
 
     override fun onPause() {

@@ -61,6 +61,7 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixPaddingStatusbarView
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
 import androidx.core.graphics.toColorInt
 import com.lagradost.cloudstream3.ui.setRecycledViewPool
+import java.util.Locale
 
 class HomeParentItemAdapterPreview(
     private val viewModel: HomeViewModel,
@@ -84,8 +85,6 @@ class HomeParentItemAdapterPreview(
         ) else FragmentHomeHeadBinding.inflate(inflater, parent, false)
 
         if (binding is FragmentHomeHeadTvBinding && isLayout(EMULATOR)) {
-            binding.homeBookmarkParentItemMoreInfo.isVisible = true
-
             val marginInDp = 50
             val density = binding.horizontalScrollChips.context.resources.displayMetrics.density
             val marginInPixels = (marginInDp * density).toInt()
@@ -93,15 +92,6 @@ class HomeParentItemAdapterPreview(
             val params = binding.horizontalScrollChips.layoutParams as ViewGroup.MarginLayoutParams
             params.marginEnd = marginInPixels
             binding.horizontalScrollChips.layoutParams = params
-            binding.homeWatchParentItemTitle.setCompoundDrawablesWithIntrinsicBounds(
-                null,
-                null,
-                ContextCompat.getDrawable(
-                    parent.context,
-                    R.drawable.ic_baseline_arrow_forward_24
-                ),
-                null
-            )
         }
 
         return HeaderViewHolder(binding, viewModel, accountViewModel)
@@ -362,7 +352,7 @@ class HomeParentItemAdapterPreview(
                 homePreviewScore.isGone = scoreText == null
 
                 item.year?.let { year ->
-                    homePreviewYear.text = year.toString()
+                    homePreviewYear.text = String.format(Locale.getDefault(), "%d", year)
                 }
                 homePreviewYear.isGone = item.year == null
 

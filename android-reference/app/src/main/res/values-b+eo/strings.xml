@@ -142,7 +142,6 @@
     <string name="popup_resume_download">Daŭrigi Elŝuton</string>
     <string name="popup_pause_download">Paŭzigi Elŝuton</string>
     <string name="home_more_info">Pli da informoj</string>
-    <string name="home_expanded_hide">Kaŝi</string>
     <string name="filter_bookmarks">Filtri Legosignojn</string>
     <string name="error_bookmarks_text">Legosignoj</string>
     <string name="repo_copy_label">Nomo kaj URL de la deponejo</string>

@@ -76,7 +76,6 @@
     <string name="popup_resume_download">Continuar Descarga</string>
     <string name="popup_pause_download">Pausar Descarga</string>
     <string name="home_more_info">Máis información</string>
-    <string name="home_expanded_hide">Agochar</string>
     <string name="home_play">Reproducir</string>
     <string name="subs_edge_type">Tipo de Borde</string>
     <string name="subs_font">Fonte</string>
@@ -112,7 +111,7 @@
     <string name="home_info">Info</string>
     <string name="subs_subtitle_elevation">Elevación de Subtítulo</string>
     <string name="search_provider_text_providers">Procurar usando proveedores</string>
-    <string name="benene_count_text">%d Bananas dadas aos desenvolvedores</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Bananas dadas aos desenvolvedores</item><item quantity="other">%d Bananas dadas aos desenvolvedores</item></plurals>
     <string name="search_provider_text_types">Procurar por tipos</string>
     <string name="picture_in_picture">Imaxe en Imaxe</string>
     <string name="player_subtitles_settings_des">Configuración de subtítulos do reprodutor</string>

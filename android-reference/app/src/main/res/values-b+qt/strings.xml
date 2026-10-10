@@ -39,7 +39,6 @@
     <string name="popup_delete_file">ouuhhh</string>
     <string name="popup_play_file">ahhaauugghh</string>
     <string name="home_more_info">ahooo a aaaghhouuhhh</string>
-    <string name="home_expanded_hide">oh ahhh</string>
     <string name="home_main_poster_img_des">ahhhahaaaaaahhhaaaghh</string>
     <string name="home_play">ooo-ahahouuhhh</string>
     <string name="home_info">aauugghh</string>
@@ -61,7 +60,7 @@
     <string name="subs_font">ooo-ahah</string>
     <string name="search_provider_text_providers">aauuhaauugghhahhh ohaauugghhouuhhh</string>
     <string name="search_provider_text_types">ahhhahoooohhaa ahhhoohahh</string>
-    <string name="benene_count_text">%d ooo-ahah ooooo ahhhahooo aauuhah ouuhhh</string>
+    <plurals name="benene_count_text"><item quantity="one">%d ooo-ahah ooooo ahhhahooo aauuhah ouuhhh</item><item quantity="other">%d ooo-ahah ooooo ahhhahooo aauuhah ouuhhh</item></plurals>
     <string name="benene_count_text_none">oouuhoooooahhaaahhu</string>
     <string name="subs_auto_select_language">oooohhaaaaa ahhhahh oooohh</string>
     <string name="subs_download_languages">ahaaahhu aahoooaauugghh aaaghhoha</string>
@@ -191,7 +190,7 @@
     <string name="next_episode_format" formatted="true">aaaaaaugh ouh %d uuoogahaaah ooua-h-ha</string>
     <string name="next_episode_time_day_format" formatted="true">%1$daaa %2$duuu %3$dhhhg</string>
     <string name="next_episode_time_hour_format" formatted="true">%1$daaaaaaauuhh %2$doouuahaaha</string>
-    <string name="next_episode_time_min_format" formatted="true">%dmmmm...</string>
+    <string name="next_episode_time_min_format" formatted="true">%dmmmm…</string>
     <string name="player_speed_text_format" formatted="true">aaaaaaaaaaaaahh (%.2foouo)</string>
     <string name="rated_format" formatted="true">aghaaaooo-ough %.1f</string>
     <string name="filler" formatted="true">aaaaaaaaaaaaaaaaaaaaaaaaaaaaaooooohhuhuhuhuhuhhuhuhhhaaagaha-agagaoooo</string>
@@ -245,7 +244,7 @@
     <string name="safe_mode_crash_info">aahh ooogg aahh</string>
     <string name="extension_size">oogg</string>
     <string name="uppercase_all_subtitles">uuuuhhhoh ooh uuuuhhhag</string>
-    <string name="plugins_updated" formatted="true">eeeeeek %d ooooggg</string>
+    <plurals name="plugins_updated"><item quantity="one">eeeeeek %d ooooggg</item><item quantity="other">eeeeeek %d ooooggg</item></plurals>
     <string name="player_pref">aaaagggah uuugg uuuugg</string>
     <string name="backup_success">aaak oooohh</string>
     <string name="backup_failed">uuuuggg aaaahhhaahh uuuuhhh aaaagg aag uuuhh</string>

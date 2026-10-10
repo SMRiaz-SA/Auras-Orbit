@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.integerArrayResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -145,7 +146,7 @@ object SettingsGeneralScreen : SearchableSettings {
                         it.ordinal.toString() to stringResource(it.toStringRes())
                     }
                         // Ok this looks strange af, but we do this to avoid double movie
-                        .toPersistentMap().remove(TvType.AnimeMovie.ordinal.toString()), onValueChanged = { diff ->
+                        .toPersistentMap().removing(TvType.AnimeMovie.ordinal.toString()), onValueChanged = { diff ->
                         if(diff.contains(TvType.Movie.ordinal.toString())) {
                             settings.provider.preferredMedia.set(diff + TvType.AnimeMovie.ordinal.toString())
                         } else {
@@ -170,14 +171,12 @@ object SettingsGeneralScreen : SearchableSettings {
                         },
                     ),
                     Preference.PreferenceItem.SliderPreference(
-                        icon = painterResource(R.drawable.arrow_or_edge_24px),
                         preference = settings.general.parallelDownloads,
                         valueRange = 1..10,
                         title = stringResource(R.string.parallel_downloads),
                         subtitle = stringResource(R.string.download_parallel_settings_des),
                     ),
                     Preference.PreferenceItem.SliderPreference(
-                        icon = painterResource(R.drawable.arrow_and_edge_24px),
                         preference = settings.general.concurrentConnections,
                         valueRange = 1..10,
                         title = stringResource(R.string.concurrent_connections),
@@ -266,7 +265,7 @@ object SettingsGeneralScreen : SearchableSettings {
                 subtitle = if (bananas == 0) {
                     stringResource(R.string.benene_count_text_none)
                 } else {
-                    stringResource(R.string.benene_count_text, bananas)
+                    pluralStringResource(R.plurals.benene_count_text, bananas, bananas)
                 },
                 onClick = {
                     settings.general.bananas.set(bananas + 1)

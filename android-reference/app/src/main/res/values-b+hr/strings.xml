@@ -71,7 +71,6 @@
     <string name="popup_resume_download">Nastavi preuzimanje</string>
     <string name="popup_pause_download">Pauziraj preuzimanje</string>
     <string name="home_more_info">Više informacija</string>
-    <string name="home_expanded_hide">Sakrij</string>
     <string name="home_play">Pokreni</string>
     <string name="home_info">Informacije</string>
     <string name="filter_bookmarks">Filtriraj oznake</string>
@@ -95,7 +94,7 @@
     <string name="subs_font_size">Veličina fonta</string>
     <string name="search_provider_text_providers">Traži koristeći pružatelje usluga</string>
     <string name="search_provider_text_types">Traži koristeći vrste</string>
-    <string name="benene_count_text">%d banana dano programerima</string>
+    <plurals name="benene_count_text"><item quantity="one">%d banana dano programerima</item><item quantity="other">%d banana dano programerima</item><item quantity="few">%d banana dano programerima</item></plurals>
     <string name="benene_count_text_none">Nisi dao ni jednu bananu</string>
     <string name="subs_auto_select_language">Automatski odabir jezika</string>
     <string name="subs_download_languages">Preuzmi jezike</string>
@@ -447,7 +446,7 @@
     <string name="no">Ne</string>
     <string name="update_notification_installing">Instaliranje ažuriranja aplikacije …</string>
     <string name="update_notification_failed">Nije moguće instalirati novu verziju aplikacije</string>
-    <string name="plugins_updated" formatted="true">Ažurirani dodaci: %d</string>
+    <plurals name="plugins_updated"><item quantity="one">Ažurirani dodaci: %d</item><item quantity="other">Ažurirani dodaci: %d</item><item quantity="few">Ažurirani dodaci: %d</item></plurals>
     <string name="skip_type_mixed_op">Mješoviti uvod</string>
     <string name="skip_type_intro">Uvod</string>
     <string name="pref_category_links">Poveznice</string>
@@ -656,20 +655,17 @@
     <string name="sort_episodes_rating_low_high">Ocjena (Najniža)</string>
     <string name="sort_episodes_date_newest">Datum emitiranja (Najnovije)</string>
     <string name="sort_episodes_date_oldest">Datum emitiranja (Najstarije)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Ocjena %s</string>
-    <string name="sort_button_date">Datum %s</string>
     <string name="update_plugins">Ažuriraj dodatke</string>
     <string name="no_plugins_updated_manually">Nijedan dodatak nije ažuriran.</string>
     <string name="update_plugins_manually">Ažuriraj podatke ručno</string>
     <string name="starting_plugin_update_manually">Pokreće se postupak ažuriranja dodataka!</string>
     <string name="player_notification_channel_name">Obavijesti reproduktora</string>
-    <string name="plugins_updated_manually">Uspješno ažuriranih dodataka: %d!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Uspješno ažuriranih dodataka: %d!</item><item quantity="other">Uspješno ažuriranih dodataka: %d!</item><item quantity="few">Uspješno ažuriranih dodataka: %d!</item></plurals>
     <string name="player_notification_channel_description">Obavijest reproduktora za upravljanje reprodukcijom iz pozadine</string>
     <string name="all_subtitles_italic">Ukosite sve titlove</string>
     <string name="all_subtitles_bold">Podebljajte sve titlove</string>
     <string name="background_radius">Radijus pozadine</string>
-    <string name="volume_exceeded_100">Glasnoća je premašila 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Glasnoća je premašila 100%</string>
     <string name="slide_up_again_to_exceed_100">Ponovno kliznite prema gore da biste prešli preko 100%</string>
     <string name="subtitles_from_embedded">Ugrađen</string>
     <string name="subtitles_from_online">Online</string>
@@ -703,9 +699,6 @@
     <string name="action_reload">Ponovo učitano</string>
     <string name="reload_provider">Usluga ponovnog učitavanja</string>
     <string name="play_full_series_button">Reproduciraj cijelu seriju</string>
-    <string name="install_prerelease">Instaliraj predizdanje</string>
-    <string name="prerelease_already_installed">Predizdanje je već instalirano.</string>
-    <string name="prerelease_install_failed">Instalacija predizdanja nije uspjela.</string>
     <string name="episode_action_play_mirror">Pokreni duplikat</string>"
     <string name="show_episode_text">Tekst epizode</string>
     <string name="name">Ime</string>
@@ -721,7 +714,7 @@
     <string name="top_center">Gore u sredini</string>
     <string name="top_right">Gore desno</string>
     <string name="extra_brightness_settings">Dodatna svjetlina</string>
-    <string name="extra_brightness_settings_des">Uključi filtar svjetline kada se prekorači 100 % svjetline ekrana</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Uključi filtar svjetline kada se prekorači 100 % svjetline ekrana</string>
     <string name="extra_brightness_key">dodatna_svjetlina_uključena</string>
     <string name="search_suggestions">Prijedlozi za pretraživanje</string>
     <string name="search_suggestions_des">Prikaži prijedloge za pretraživanje tijekom tipkanja</string>

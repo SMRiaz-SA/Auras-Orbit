@@ -69,7 +69,6 @@
     <string name="subtitles_settings">تنظیمات زیرنویس</string>
     <string name="subs_window_color">رنگ پنجره</string>
     <string name="download_canceled">دانلود لغو شد</string>
-    <string name="home_expanded_hide">پنهان کردن</string>
     <string name="sort_apply">اعمال کردن</string>
     <string name="normal_no_plot">پیرنگی یافت نشد</string>
     <string name="download_paused">دانلود متوقف شده</string>
@@ -226,7 +225,7 @@
     <string name="offline_file">در دسترس برای تماشای آفلاین</string>
     <string name="select_all">انتخاب همه</string>
     <string name="deselect_all">انتخاب نکردن همه</string>
-    <string name="benene_count_text">%d Benenes به توسعه دهندگان داده می‌شود</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes به توسعه دهندگان داده می‌شود</item><item quantity="other">%d Benenes به توسعه دهندگان داده می‌شود</item></plurals>
     <string name="benene_count_text_none">بدون Benenes</string>
     <string name="chromecast_subtitles_settings">زیرنویس Chromecast</string>
     <string name="torrent_info">این ویدیو یک تورنت است، این بدان معنی است که فعالیت ویدیویی شما قابل ردیابی است. \nقبل از ادامه، مطمئن شوید که تورنت را درک کرده اید.</string>

@@ -68,7 +68,6 @@
     <string name="popup_resume_download">Continuați descărcarea</string>
     <string name="popup_pause_download">Opriți descărcarea</string>
     <string name="home_more_info">Mai multe informații</string>
-    <string name="home_expanded_hide">Ascunde</string>
     <string name="home_play">Începe</string>
     <string name="home_info">Informații</string>
     <string name="filter_bookmarks">Filtrează marcajele</string>
@@ -92,7 +91,7 @@
     <string name="subs_font_size">Dimensiune</string>
     <string name="search_provider_text_providers">Căutare în funcție de furnizor</string>
     <string name="search_provider_text_types">Căutare în funcție de tip</string>
-    <string name="benene_count_text">%d banane oferite dezvoltatorilor</string>
+    <plurals name="benene_count_text"><item quantity="one">%d banane oferite dezvoltatorilor</item><item quantity="other">%d banane oferite dezvoltatorilor</item><item quantity="few">%d banane oferite dezvoltatorilor</item></plurals>
     <string name="benene_count_text_none">Nu s-au oferit banane</string>
     <string name="subs_auto_select_language">Selectare automată a limbii</string>
     <string name="subs_download_languages">Descarcă limbi străine</string>
@@ -440,7 +439,7 @@
     <string name="safe_mode_crash_info">Vezi informații despre accident</string>
     <string name="open_with">Deschideți cu</string>
     <string name="subtitles_remove_bloat">Eliminați bloat din subtitrări</string>
-    <string name="plugins_updated" formatted="true">S-au actualizat %d plugin-uri</string>
+    <plurals name="plugins_updated"><item quantity="one">S-au actualizat %d plugin-uri</item><item quantity="other">S-au actualizat %d plugin-uri</item><item quantity="few">S-au actualizat %d plugin-uri</item></plurals>
     <string name="sort_rating_asc">Evaluare (Scăzut la Ridicat)</string>
     <string name="setup_done">Terminat</string>
     <string name="extension_version">Versiune</string>
@@ -638,7 +637,4 @@
     <string name="download_time_left_min_sec_format" formatted="true">%1$dm %2$ds</string>
     <string name="download_time_left_sec_format" formatted="true">%1$ds</string>
     <string name="play_full_series_button">Redă întregul serial</string>
-    <string name="install_prerelease">Instalează versiunea preliminară</string>
-    <string name="prerelease_already_installed">Versiunea preliminară este deja instalată.</string>
-    <string name="prerelease_install_failed">Instalarea versiunii preliminare a eșuat.</string>
 </resources>

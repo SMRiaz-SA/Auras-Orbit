@@ -63,7 +63,6 @@
     <string name="popup_resume_download">متابعة التنزيل</string>
     <string name="popup_pause_download">إيقاف التنزيل مؤقتًا</string>
     <string name="home_more_info">مزيد من المعلومات</string>
-    <string name="home_expanded_hide">إخفاء</string>
     <string name="home_play">تشغيل</string>
     <string name="home_info">معلومات</string>
     <string name="filter_bookmarks">تصفية الاشارات المرجعية</string>
@@ -87,7 +86,7 @@
     <string name="subs_font_size">حجم الخط</string>
     <string name="search_provider_text_providers">البحث باستخدام المصادر</string>
     <string name="search_provider_text_types">البحث باستخدام الأنواع</string>
-    <string name="benene_count_text">%d الموزات المعطاة الى المطورين</string>
+    <plurals name="benene_count_text"><item quantity="one">%d الموزات المعطاة الى المطورين</item><item quantity="other">%d الموزات المعطاة الى المطورين</item><item quantity="few">%d الموزات المعطاة الى المطورين</item><item quantity="many">%d الموزات المعطاة الى المطورين</item><item quantity="two">%d الموزات المعطاة الى المطورين</item><item quantity="zero">%d الموزات المعطاة الى المطورين</item></plurals>
     <string name="benene_count_text_none">لم يتم إعطاء موز</string>
     <string name="subs_auto_select_language">تحديد اللغة تلقائيًا</string>
     <string name="subs_download_languages">لغات التحميل</string>
@@ -430,7 +429,7 @@
     <string name="filler" formatted="true">الفيلير</string>
     <string name="action_open_play">فتح(تشغيل)</string>
     <string name="season_format">%1$s %2$d%3$s</string>
-    <string name="plugins_updated" formatted="true">المكونات الإضافية المحدثة %d</string>
+    <plurals name="plugins_updated"><item quantity="one">المكونات الإضافية المحدثة %d</item><item quantity="other">المكونات الإضافية المحدثة %d</item><item quantity="few">المكونات الإضافية المحدثة %d</item><item quantity="many">المكونات الإضافية المحدثة %d</item><item quantity="two">المكونات الإضافية المحدثة %d</item><item quantity="zero">المكونات الإضافية المحدثة %d</item></plurals>
     <string name="skip_type_format" formatted="true">تخطي %s</string>
     <string name="skip_type_op">الافتتاح</string>
     <string name="skip_type_ed">النهاية</string>
@@ -651,11 +650,8 @@
     <string name="software_decoding">فك الترميز البرمجي</string>
     <string name="sort_episodes_rating_high_low">تقييم (الأعلى)</string>
     <string name="sort_episodes_rating_low_high">تقييم (الأقل)</string>
-    <string name="sort_button_episode">ح %s</string>
-    <string name="sort_button_rating">تقييم %s</string>
-    <string name="sort_button_date">تاريخ %s</string>
     <string name="update_plugins">تحديث الإضافات</string>
-    <string name="plugins_updated_manually">تم تحديث %d إضافات بنجاح!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">تم تحديث %d إضافات بنجاح!</item><item quantity="other">تم تحديث %d إضافات بنجاح!</item><item quantity="few">تم تحديث %d إضافات بنجاح!</item><item quantity="many">تم تحديث %d إضافات بنجاح!</item><item quantity="two">تم تحديث %d إضافات بنجاح!</item><item quantity="zero">تم تحديث %d إضافات بنجاح!</item></plurals>
     <string name="no_plugins_updated_manually">لم يتم تحديث الإضافات.</string>
     <string name="update_plugins_manually">تحديث الإضافات يدوياً</string>
     <string name="sort_episodes_number_asc">حلقة (تصاعدي)</string>
@@ -669,7 +665,7 @@
     <string name="begin_speaking">بدأ التحدث…</string>
     <string name="subtitles_from_online">اونلاين</string>
     <string name="subtitles_from_embedded">داخلياً</string>
-    <string name="volume_exceeded_100">لقد تجاوز مستوى الصوت 100٪</string>
+    <string  name="volume_exceeded_100" formatted="false">لقد تجاوز مستوى الصوت 100٪</string>
     <string name="all_subtitles_bold">جعل جميع العناوين الفرعية عريضة</string>
     <string name="slide_up_again_to_exceed_100">اسحب لأعلى مرة أخرى لتتجاوز 100%</string>
     <string name="all_subtitles_italic">جعل كل العناوين الفرعية مائلة</string>
@@ -716,15 +712,12 @@
     <string name="top_right">اعلى يمين</string>
     <string name="play_full_series_button">شاهد المسلسل كاملاً</string>
     <string name="extra_brightness_settings">سطوع إضافي</string>
-    <string name="extra_brightness_settings_des">تفعيل فلتر السطوع عند تجاوز سطوع الشاشة 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">تفعيل فلتر السطوع عند تجاوز سطوع الشاشة 100%</string>
     <string name="extra_brightness_key">تفعيل فلتر السطوع الإضافي</string>
     <string name="search_suggestions">اقتراحات البحث</string>
     <string name="search_suggestions_des">عرض اقتراحات البحث أثناء الكتابة</string>
     <string name="clear_suggestions">مسح الاقتراحات</string>
     <string name="show_cast_in_details">عرض لوحة فريق التمثيل</string>
-    <string name="install_prerelease">تثبيت الإصدار التجريبي</string>
-    <string name="prerelease_already_installed">تم تثبيت الإصدار التجريبي بالفعل.</string>
-    <string name="prerelease_install_failed">فشل تثبيت الإصدار التجريبي.</string>
     <string name="show_episode_text">نص الحلقة</string>
     <string name="video_info">معلومات الوسائط</string>
     <string name="source_name">اسم المصدر</string>

@@ -80,11 +80,6 @@ fun rememberFullscreenHelper(): FullscreenHelperState {
             } else if (keyEvent.key == Key.F11 && keyEvent.type == KeyEventType.KeyDown) {
                 toggleFunc()
                 true
-            } else if (keyEvent.key == Key.F12 && keyEvent.type == KeyEventType.KeyDown) {
-                if (com.lagradost.cloudstream3.desktop.utils.DeveloperModeManager.isEnabled) {
-                    com.lagradost.cloudstream3.desktop.ui.screens.dev.DevStudioState.toggle()
-                }
-                true
             } else if (keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyDown) {
                 if (com.lagradost.cloudstream3.desktop.ui.components.GlobalContextMenuState.isActive) {
                     com.lagradost.cloudstream3.desktop.ui.components.GlobalContextMenuState.dismiss()

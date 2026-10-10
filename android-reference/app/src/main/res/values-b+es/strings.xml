@@ -120,7 +120,6 @@
     <string name="result_share">Compartir</string>
     <string name="result_open_in_browser">Abrir en navegador</string>
     <string name="loading">Cargando…</string>
-    <string name="home_expanded_hide">Ocultar</string>
     <string name="sort_apply">Aplicar</string>
     <string name="pick_subtitle">Subtítulos</string>
     <string name="player_speed">Velocidad del reproductor</string>
@@ -176,7 +175,7 @@
     <string name="subs_subtitle_languages">Idioma del subtítulo</string>
     <string name="picture_in_picture">Imagen en Imagen (PIP)</string>
     <string name="search_provider_text_types">Buscar por tipos</string>
-    <string name="benene_count_text">%d bananas otorgadas a los desarrolladores</string>
+    <plurals name="benene_count_text"><item quantity="one">%d bananas otorgadas a los desarrolladores</item><item quantity="other">%d bananas otorgadas a los desarrolladores</item><item quantity="many">%d bananas otorgadas a los desarrolladores</item></plurals>
     <string name="benene_count_text_none">No se otorgaron bananas</string>
     <string name="subs_hold_to_reset_to_default">Mantenga pulsado para restablecer los valores predeterminados</string>
     <string name="subs_import_text" formatted="true">Importar fuentes colocándolas en %s</string>
@@ -432,7 +431,7 @@
     <string name="batch_download">Descarga por lotes</string>
     <string name="plugin_singular">plugin</string>
     <string name="plugin">plugins</string>
-    <string name="plugins_updated" formatted="true">%d plugins actualizados</string>
+    <plurals name="plugins_updated"><item quantity="one">%d plugins actualizados</item><item quantity="other">%d plugins actualizados</item><item quantity="many">%d plugins actualizados</item></plurals>
     <string name="view_public_repositories_button">Ver repositorios de la comunidad</string>
     <string name="view_public_repositories_button_short">Lista pública</string>
     <string name="tracks">Pistas</string>
@@ -530,11 +529,11 @@
     <string name="duplicate_title">Posible duplicado encontrado</string>
     <string name="lock_profile">Bloquear perfil</string>
     <string name="action_add_to_favorites">Añadido a favoritos</string>
-    <string name="duplicate_replace_all">Remplazar todo</string>
+    <string name="duplicate_replace_all">Reemplazar todo</string>
     <string name="pin_error_incorrect">PIN incorrecto. Por favor, inténtelo de nuevo.</string>
     <string name="action_unsubscribe">Cancelar la suscripción</string>
     <string name="pin_error_length">El PIN debe tener 4 caracteres</string>
-    <string name="duplicate_replace">Remplazar</string>
+    <string name="duplicate_replace">Reemplazar</string>
     <string name="duplicate_add">Añadir</string>
     <string name="action_subscribe">Suscríbase</string>
     <string name="action_remove_from_favorites">Eliminar de favoritos</string>
@@ -646,20 +645,17 @@
     <string name="player_notification_channel_name">Notificaciones del reproductor</string>
     <string name="update_plugins">Actualizar complementos</string>
     <string name="sort_episodes_date_oldest">Fecha de emisión (más antigua)</string>
-    <string name="sort_button_rating">Puntuar %s</string>
-    <string name="plugins_updated_manually">%d complemento(s) actualizados correctamente</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d complemento(s) actualizados correctamente</item><item quantity="other">%d complemento(s) actualizados correctamente</item><item quantity="many">%d complemento(s) actualizados correctamente</item></plurals>
     <string name="no_plugins_updated_manually">No se actualizó ningún complemento.</string>
     <string name="sort_episodes_number_asc">Episodio (Ascendente)</string>
     <string name="speech_recognition_unavailable">Reconocimiento de habla no disponible</string>
     <string name="begin_speaking">Empiece a hablar…</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_date">Fecha %s</string>
     <string name="subtitles_from_embedded">Integrado</string>
     <string name="subtitles_from_online">En línea</string>
     <string name="all_subtitles_italic">Poner todos los subtítulos en cursiva</string>
     <string name="all_subtitles_bold">Poner todos los subtítulos en negrita</string>
     <string name="background_radius">Radio del fondo</string>
-    <string name="volume_exceeded_100">El volumen ha excedido 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">El volumen ha excedido 100%</string>
     <string name="slide_up_again_to_exceed_100">Desliza hacia arriba otra vez para sobrepasar 100%</string>
     <string name="download_parallel_settings_des">Cuántos elementos diferentes pueden descargarse en paralelo</string>
     <string name="player_settings_always_ask">Preguntar siempre</string>
@@ -697,9 +693,6 @@
     <string name="top_center">Arriba centrado</string>
     <string name="top_right">Arriba derecha</string>
     <string name="play_full_series_button">Reproducir toda la serie</string>
-    <string name="install_prerelease">Instalar version pre-lanzamiento</string>
-    <string name="prerelease_already_installed">Pre-lanzamiento ya está instalada.</string>
-    <string name="prerelease_install_failed">La instalación pre-lanzamiento ha fallado.</string>
     <string name="show_episode_text">Texto del episodio</string>
     <string name="speedup_title">Alternar velocidad de pulsación larga</string>
     <string name="middle_left">Medio izquierda</string>
@@ -711,7 +704,7 @@
     <string name="clear_suggestions">Borrar Sugerencias</string>
     <string name="show_cast_in_details">Mostrar panel de reparto</string>
     <string name="extra_brightness_settings">Atenuación extra</string>
-    <string name="extra_brightness_settings_des">Active el filtro de atenuación cuando se supere el 100 % de brillo de la pantalla</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Active el filtro de atenuación cuando se supere el 100 % de brillo de la pantalla</string>
     <string name="extra_brightness_key">atenuación_extra_activado</string>
     <string name="video_info">Información del archivo multimedia</string>
     <string name="source_name">Nombre de origen</string>

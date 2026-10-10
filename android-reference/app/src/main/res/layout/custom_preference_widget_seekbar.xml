@@ -30,7 +30,7 @@
     android:clipToPadding="false"
     android:baselineAligned="false">
 
-    <include layout="@layout/image_frame"/>
+    <include layout="@layout/custom_preference_image_frame"/>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -66,7 +66,7 @@
                 android:textAlignment="viewStart"
                 android:textColor="?android:attr/textColorSecondary"
                 android:maxLines="4"
-                style="@style/PreferenceSummaryTextStyle"/>
+                android:textAppearance="?android:attr/textAppearanceSmall"/>
 
         </RelativeLayout>
 
@@ -96,10 +96,10 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:paddingStart="@dimen/preference_seekbar_padding_horizontal"
-                android:paddingEnd="@dimen/preference_seekbar_padding_horizontal"
-                android:paddingTop="@dimen/preference_seekbar_padding_vertical"
-                android:paddingBottom="@dimen/preference_seekbar_padding_vertical"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:paddingTop="15dp"
+                android:paddingBottom="15dp"
                 android:background="@null"/>
 
             <!-- If the value is shown, we reserve a minimum width of 36dp to allow for consistent
@@ -107,7 +107,7 @@
             into the seekbar width. -->
             <TextView
                 android:id="@+id/seekbar_value"
-                android:minWidth="@dimen/preference_seekbar_value_minWidth"
+                android:minWidth="36dp"
                 android:paddingStart="8dp"
                 android:paddingEnd="0dp"
                 android:layout_width="wrap_content"

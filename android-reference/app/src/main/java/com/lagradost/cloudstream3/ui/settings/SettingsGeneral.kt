@@ -425,11 +425,12 @@ class SettingsGeneral : BasePreferenceFragmentCompat() {
                 settingsManager.getInt(getString(R.string.benene_count), 0)
             getPref(R.string.benene_count)?.let { pref ->
                 pref.summary =
-                    if (beneneCount <= 0) getString(R.string.benene_count_text_none) else getString(
-                        R.string.benene_count_text
-                    ).format(
-                        beneneCount
-                    )
+                    if (beneneCount <= 0) getString(R.string.benene_count_text_none) else resources
+                        .getQuantityString(
+                            R.plurals.benene_count_text,
+                            beneneCount,
+                            beneneCount
+                        )
 
                 pref.setOnPreferenceClickListener {
                     try {
@@ -443,7 +444,11 @@ class SettingsGeneral : BasePreferenceFragmentCompat() {
                                 beneneCount
                             )
                         }
-                        it.summary = getString(R.string.benene_count_text).format(beneneCount)
+                        it.summary = resources.getQuantityString(
+                            R.plurals.benene_count_text,
+                            beneneCount,
+                            beneneCount
+                        )
                     } catch (e: Exception) {
                         logError(e)
                     }

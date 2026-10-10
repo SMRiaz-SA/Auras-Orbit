@@ -19,9 +19,7 @@
         <ImageView
             android:layout_width="52dp"
             android:layout_height="52dp"
-            android:background="@drawable/auras_catalog_icon_background"
             android:contentDescription="@null"
-            android:padding="10dp"
             android:src="@drawable/auras_orbit_mark" />
 
         <LinearLayout

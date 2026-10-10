@@ -326,11 +326,11 @@ fun DesktopAppShell(
                     }
                 }
 
-                // Keep the development watermark inside the usable content area.
+                // Keep the version watermark inside the usable content area.
                 // The old absolute bottom-left position covered the navigation rail
                 // footer and made its tagline/version text overlap.
                 val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
-                GlobalDevelopmentWatermark(
+                GlobalVersionWatermark(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(

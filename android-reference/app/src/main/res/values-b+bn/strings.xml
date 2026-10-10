@@ -62,7 +62,6 @@
     <string name="popup_play_file">ফাইল চালান</string>
     <string name="popup_pause_download">ডাউনলোড থামান</string>
     <string name="home_more_info">আরো তথ্য</string>
-    <string name="home_expanded_hide">বন্ধ করুন</string>
     <string name="home_play">চালান</string>
     <string name="home_info">তথ্য</string>
     <string name="error_bookmarks_text">বুকমার্কসমূহ</string>
@@ -79,7 +78,7 @@
     <string name="subs_subtitle_elevation">সাবটাইটেল এর উচ্চতা</string>
     <string name="search_provider_text_providers">প্রভাইডার অনুযায়ি খুঁজুন</string>
     <string name="search_provider_text_types">ধরণ অনুযায়ি খুঁজুন</string>
-    <string name="benene_count_text">%d টা বেনেনা ডেভদের দেয়া হয়েছে</string>
+    <plurals name="benene_count_text"><item quantity="one">%d টা বেনেনা ডেভদের দেয়া হয়েছে</item><item quantity="other">%d টা বেনেনা ডেভদের দেয়া হয়েছে</item></plurals>
     <string name="benene_count_text_none">কোন বেনেনা দেয়া হয়নি</string>
     <string name="subs_download_languages">ভাষা ডাউনলোড</string>
     <string name="subs_subtitle_languages">সাবটাইটেল ভাষা</string>
@@ -364,15 +363,12 @@
     <string name="deselect_all">সব ডিসিলেক্ট করুন</string>
     <string name="open_local_video">লোকাল ভিডিও খুলুন</string>
     <string name="extra_brightness_settings">অতিরিক্ত ব্রাইটনেস</string>
-    <string name="extra_brightness_settings_des">ডিসপ্লে ব্রাইটনেস ১০০% ছাড়িয়ে গেলে ব্রাইটনেস ফিল্টার চালু করুন</string>
+    <string  name="extra_brightness_settings_des" formatted="false">ডিসপ্লে ব্রাইটনেস ১০০% ছাড়িয়ে গেলে ব্রাইটনেস ফিল্টার চালু করুন</string>
     <string name="search_suggestions">সার্চ সাজেশন</string>
     <string name="search_suggestions_des">টাইপ করার সময় সার্চ সাজেশন দেখান</string>
     <string name="clear_suggestions">সাজেশন মুছে ফেলুন</string>
     <string name="show_player_metadata_overlay">প্লেয়ার মেটাডেটা ওভারলে প্রদর্শন</string>
     <string name="show_cast_in_details">কাস্ট প্যানেল প্রদর্শন</string>
-    <string name="install_prerelease">প্রাক-মুক্তি সংস্করণ ইনস্টলেশন</string>
-    <string name="prerelease_already_installed">প্রাক-মুক্তি সংস্করণ ইতোমধ্যে ইনস্টল রয়েছে।</string>
-    <string name="prerelease_install_failed">প্রাক-মুক্তি সংস্করণ ইনস্টল করতে সমস্যা হয়েছে।</string>
     <string name="delete_format" formatted="true">(%1$d | %2$s) মুছুন</string>
     <string name="test_warning">সাবধান</string>
     <string name="delete_message_multiple" formatted="true">আপনি কি নিম্নলিখিত আইটেমগুলো স্থায়ীভাবে মুছতে চান?\n\n%s</string>

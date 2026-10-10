@@ -49,7 +49,7 @@
     <string name="subs_font">ဖောင့်</string>
     <string name="subs_font_size">ဖောင့် အရွယ်အစား</string>
     <string name="search_provider_text_types">အမျိုးအစားများအသုံးပြု၍ရှာရန်</string>
-    <string name="benene_count_text">%d အက်ပ်ဖန်တီးသူတွေကိုကျေးဇူးတင်ကြောင်းပို့မည်</string>
+    <plurals name="benene_count_text"><item quantity="other">%d အက်ပ်ဖန်တီးသူတွေကိုကျေးဇူးတင်ကြောင်းပို့မည်</item></plurals>
     <string name="subs_auto_select_language">အလိုအလျောက် ဘာသာစကားရွေးချယ်ခြင်း</string>
     <string name="subs_download_languages">ဒေါင်းလုဒ် လုပ်ထားသော ဘာသာစကားများ</string>
     <string name="subs_hold_to_reset_to_default">မူရင်းပုံစံအတိုင်းပြန်ထားရန်ဖိထားပါ</string>
@@ -237,7 +237,6 @@
     <string name="popup_pause_download">ဒေါင်းလုဒ် ရပ်ရန်</string>
     <string name="home_more_info">ပိုမို၍</string>
     <string name="search_provider_text_providers">ပ့ံပိုးပေးသောဝန်ဆောင်မှုများအသုံးပြု၍ရှာရန်</string>
-    <string name="home_expanded_hide">ဝုက်ရန်</string>
     <string name="benene_count_text_none">ကျေးဇူးတင်ကြောင်းမပို့ရသေး</string>
     <string name="home_play">ကြည့်မည်</string>
     <string name="home_info">အချက်အလက်</string>
@@ -325,7 +324,7 @@
     <string name="referer">ရည်ညွှန်းသည်</string>
     <string name="next">ရှေ့သို့</string>
     <string name="previous">နောက်သို့</string>
-    <string name="plugins_updated" formatted="true">အပ်ဒိတ်လုပ်ပြီး %d ဖြည့်စွက်များ</string>
+    <plurals name="plugins_updated"><item quantity="other">အပ်ဒိတ်လုပ်ပြီး %d ဖြည့်စွက်များ</item></plurals>
     <string name="plugins_not_downloaded" formatted="true">ဒေါင်းလုဒ်မလုပ်ရသေး: %d</string>
     <string name="app_not_found_error">အက်ပ်မတွေ့ပါ</string>
     <string name="all_languages_preference">ဘာသာစကားအားလုံး</string>

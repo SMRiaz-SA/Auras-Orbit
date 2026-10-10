@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -235,20 +236,11 @@ internal fun AurasExploreTvScreen(
 @Composable
 private fun BrandHeading() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-        Surface(
-            color = Color(0xFF292437),
-            shape = RoundedCornerShape(13.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.07f)),
-            modifier = Modifier.size(42.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.auras_orbit_mark),
-                    contentDescription = null,
-                    modifier = Modifier.size(29.dp),
-                )
-            }
-        }
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.auras_orbit_mark),
+            contentDescription = null,
+            modifier = Modifier.size(36.dp),
+        )
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = "AURAS ORBIT",
@@ -345,7 +337,11 @@ private fun HeroCopy(
             overflow = TextOverflow.Ellipsis,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryAction(label = "Open catalogs", onClick = onCatalogs, focusRequester = firstActionFocus)
+            PrimaryAction(
+                label = stringResource(R.string.auras_explore_browse_catalog),
+                onClick = onCatalogs,
+                focusRequester = firstActionFocus,
+            )
             QuietAction(label = "Search", onClick = onSearch)
         }
     }
@@ -382,15 +378,11 @@ private fun OrbitArtwork(modifier: Modifier = Modifier, centerMarkSize: Dp) {
                 center = androidx.compose.ui.geometry.Offset(center.x + base * 0.39f, center.y - base * 0.19f),
             )
         }
-        Surface(color = Color(0xFF302A42), shape = CircleShape, modifier = Modifier.size(centerMarkSize + 18.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(R.drawable.auras_orbit_mark),
-                    contentDescription = null,
-                    modifier = Modifier.size(centerMarkSize),
-                )
-            }
-        }
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.auras_orbit_mark),
+            contentDescription = null,
+            modifier = Modifier.size(centerMarkSize),
+        )
     }
 }
 
@@ -441,7 +433,6 @@ private fun ExploreTile(
                         )
                     }
                 }
-                Text("↗", color = AurasExplorePalette.Muted, fontSize = 17.sp)
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(

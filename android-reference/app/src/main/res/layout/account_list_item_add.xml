@@ -11,7 +11,7 @@
     android:layout_margin="10dp"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:defaultFocusHighlightEnabled="false">
+    android:defaultFocusHighlightEnabled="false" tools:targetApi="26">
 
     <androidx.cardview.widget.CardView
         android:id="@+id/card_view"

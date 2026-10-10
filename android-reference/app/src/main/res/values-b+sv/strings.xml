@@ -40,7 +40,6 @@
     <string name="popup_delete_file">Radera fil</string>
     <string name="popup_play_file">Spela upp fil</string>
     <string name="home_more_info">Mer information</string>
-    <string name="home_expanded_hide">Göm</string>
     <string name="home_main_poster_img_des">@string/result_poster_img_des</string>
     <string name="home_play">Spela upp</string>
     <string name="home_info">Info</string>
@@ -62,7 +61,7 @@
     <string name="subs_font">Font</string>
     <string name="search_provider_text_providers">Sök med hjälp av leverantörer</string>
     <string name="search_provider_text_types">Sök med hjälp av typer</string>
-    <string name="benene_count_text">%d bananer donerade till utvecklarna</string>
+    <plurals name="benene_count_text"><item quantity="one">%d bananer donerade till utvecklarna</item><item quantity="other">%d bananer donerade till utvecklarna</item></plurals>
     <string name="benene_count_text_none">Inga bananer givna</string>
     <string name="subs_auto_select_language">Välj språk automatiskt</string>
     <string name="subs_download_languages">Ladda ner språk</string>
@@ -474,7 +473,7 @@
     <string name="poster_image">Affischbild</string>
     <string name="preferred_media_subtext">Vad vill du se</string>
     <string name="add_repository">Lägg till tillägg</string>
-    <string name="plugins_updated" formatted="true">Uppdaterade %d tillägg</string>
+    <plurals name="plugins_updated"><item quantity="one">Uppdaterade %d tillägg</item><item quantity="other">Uppdaterade %d tillägg</item></plurals>
     <string name="batch_download_finish_format" formatted="true">Nedladdat %1$d %2$s</string>
     <string name="plugins_disabled" formatted="true">Inaktiverad: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Ej hämtad: %d</string>
@@ -638,15 +637,12 @@
     <string name="unsupported_error">Stöds ej</string>
     <string name="sort_episodes_number_asc">Avsnitt (Stigande)</string>
     <string name="sort_episodes_number_desc">Avsnitt (Fallande)</string>
-    <string name="volume_exceeded_100">Volymen har överskridit 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Volymen har överskridit 100%</string>
     <string name="sort_episodes_rating_high_low">Betyg (Högsta)</string>
-    <string name="sort_button_date">Datum%s</string>
     <string name="update_plugins_manually">Uppdatera Plugins manuellt</string>
     <string name="speech_recognition_unavailable">Röst igenkänning inte tillgänglig</string>
     <string name="begin_speaking">Börja Prata…</string>
     <string name="sort_episodes_rating_low_high">Betyg (Lägsta)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Betyg%s</string>
     <string name="update_plugins">Uppdatera Plugins</string>
     <string name="go_to_downloads">Gå till Hämtade filer</string>
     <string name="download_parallel_settings_des">Mängden av olika föremål som kan bli nedladdat i parallell</string>
@@ -701,15 +697,12 @@
     <string name="play_full_series_button">Spela hela serierna</string>
     <string name="queue_empty_message">Det finns inga nedladdningar i kö just nu.</string>
     <string name="extra_brightness_settings">Extra ljusstyrka</string>
-    <string name="extra_brightness_settings_des">Aktivera ljusstyrkefiltret när ljusstyrkan överstiger 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Aktivera ljusstyrkefiltret när ljusstyrkan överstiger 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="search_suggestions">Sökförslag</string>
     <string name="search_suggestions_des">Visa sökförslag medan du skriver</string>
     <string name="clear_suggestions">Rensa förslag</string>
     <string name="show_cast_in_details">Visa skådespelarpanelen</string>
-    <string name="install_prerelease">Installera förhandsversionen</string>
-    <string name="prerelease_already_installed">Förhandsversionen är redan installerad.</string>
-    <string name="prerelease_install_failed">Misslyckades med att installera förhandsversionen.</string>
     <string name="episode_action_play_mirror">Spela mirror</string>"
     <string name="show_rating">Graderingstitel</string>
     <string name="show_episode_text">Avsnitt Text</string>
@@ -722,7 +715,7 @@
     <string name="no_account">Inget konto</string>
     <string name="slide_up_again_to_exceed_100">Dra uppåt igen för att gå över 100%</string>
     <string name="starting_plugin_update_manually">Startar plugin uppdateringsprocessen!</string>
-    <string name="plugins_updated_manually">%d plugin(s) har uppdaterats</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d plugin(s) har uppdaterats</item><item quantity="other">%d plugin(s) har uppdaterats</item></plurals>
     <string name="no_plugins_updated_manually">Inga plugins blev uppdaterade.</string>
     <string name="player_notification_channel_name">Spelarnotiser</string>
     <string name="player_notification_channel_description">Spelarnotisen för att styra uppspelningen i bakgrunden</string>

@@ -323,13 +323,6 @@
             android:background="?attr/primaryGrayBackground"
             android:orientation="vertical">
 
-            <ImageView
-                android:paddingTop="5dp"
-                android:layout_width="20dp"
-                android:layout_height="25dp"
-                android:layout_gravity="center"
-                android:src="@drawable/round_keyboard_arrow_up_24" />
-
             <TextView
                 android:id="@+id/download_queue_text"
                 android:layout_width="match_parent"
@@ -370,7 +363,7 @@
             android:contentDescription="@string/open_local_video"
             android:src="@drawable/netflix_play"
             app:tint="?attr/textColor"
-            android:tooltipText="@string/open_local_video" />
+            android:tooltipText="@string/open_local_video" tools:targetApi="26" />
 
         <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
             android:id="@+id/download_stream_button"

@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.desktop.ui.screens.home.isRealProvider
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.FilmographyCategory
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonDetail
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonMediaCredit
+import com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.*
@@ -24,6 +25,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 data class PersonUiState(
     val isLoading: Boolean = true,
     val personDetail: PersonDetail? = null,
+    val personCandidates: List<TmdbPersonCandidate> = emptyList(),
     val selectedCategory: FilmographyCategory = FilmographyCategory.ALL,
     val selectedCreditForMatch: PersonMediaCredit? = null,
     val providerMatches: List<ProviderMatch> = emptyList(),
@@ -53,6 +55,8 @@ class PersonViewModel : BaseMviViewModel<PersonUiState, PersonUiEvent, PersonUiE
     private val searchSemaphore = Semaphore(8)
     private var currentName: String = ""
     private var currentTmdbId: Int? = null
+    private var personLoadJob: Job? = null
+    private var personLoadGeneration = 0L
     private var providerSearchJob: Job? = null
 
     override fun handleEvent(event: PersonUiEvent) {
@@ -67,31 +71,48 @@ class PersonViewModel : BaseMviViewModel<PersonUiState, PersonUiEvent, PersonUiE
 
     fun loadPerson(name: String, tmdbId: Int? = null) {
         if (name.isBlank() && (tmdbId == null || tmdbId <= 0)) return
+        personLoadJob?.cancel()
         currentName = name
         currentTmdbId = tmdbId
+        val generation = ++personLoadGeneration
 
-        viewModelScope.launch {
-            updateState { copy(isLoading = true, error = null) }
+        personLoadJob = viewModelScope.launch {
+            updateState {
+                copy(
+                    isLoading = true,
+                    personDetail = null,
+                    personCandidates = emptyList(),
+                    error = null,
+                )
+            }
             try {
-                val detail = TmdbEnrichmentService.fetchPersonDetail(name, tmdbId)
-                if (detail != null) {
+                if (tmdbId == null || tmdbId <= 0) {
+                    val candidates = TmdbEnrichmentService.searchPeople(name)
+                    if (generation != personLoadGeneration) return@launch
                     updateState {
                         copy(
                             isLoading = false,
-                            personDetail = detail,
-                            error = null,
+                            personCandidates = candidates,
+                            error = if (candidates.isEmpty()) "No people found for \"$name\"" else null,
                         )
                     }
                 } else {
-                    updateState {
-                        copy(
-                            isLoading = false,
-                            personDetail = null,
-                            error = "No details found for $name",
-                        )
+                    val detail = TmdbEnrichmentService.fetchPersonDetail(name, tmdbId)
+                    if (generation != personLoadGeneration) return@launch
+                    if (detail != null) {
+                        updateState {
+                            copy(isLoading = false, personDetail = detail, personCandidates = emptyList(), error = null)
+                        }
+                    } else {
+                        updateState {
+                            copy(isLoading = false, personDetail = null, error = "No details found for $name")
+                        }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (generation != personLoadGeneration) return@launch
                 AppLogger.e("PersonViewModel", "Failed to load person details", e)
                 updateState {
                     copy(

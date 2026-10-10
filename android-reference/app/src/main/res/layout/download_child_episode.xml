@@ -42,7 +42,7 @@
                 android:layout_gravity="center"
                 android:layout_marginStart="5dp">
 
-                <ImageView
+                <ImageView android:contentDescription="@string/play_episode"
                     android:id="@+id/download_child_episode_play"
                     style="@style/ContinueWatchingPlayUnderlayProgress"
                     android:layout_margin="4dp"/>

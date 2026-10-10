@@ -585,7 +585,8 @@ class PlayerView @JvmOverloads constructor(
             context as? Activity,
             isPlaying,
             hasPipModeSupport,
-            player.getAspectRatio()
+            player.getAspectRatio(),
+            exoPlayerView
         )
     }
 

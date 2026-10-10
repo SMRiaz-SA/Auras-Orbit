@@ -27,7 +27,7 @@
             tools:visibility="visible"
             android:contentDescription="@string/title_settings" />
 
-        <ImageView
+        <ImageView android:contentDescription="@string/pinned"
             android:id="@+id/pinicon"
             android:layout_width="50dp"
             android:layout_height="24dp"

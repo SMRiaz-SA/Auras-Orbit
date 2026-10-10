@@ -30,7 +30,7 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
-// import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -113,12 +113,8 @@ import kotlinx.coroutines.delay
 import okhttp3.Interceptor
 import org.chromium.net.CronetEngine
 import java.io.File
-import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.Executors
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSession
 import kotlin.uuid.toJavaUuid
 
 const val TAG = "CS3ExoPlayer"
@@ -134,7 +130,7 @@ const val toleranceBeforeUs = 300_000L
  */
 const val toleranceAfterUs = 300_000L
 
-@OptIn(UnstableApi::class)
+@OptIn(UnstableApi::class, ExperimentalApi::class)
 class CS3IPlayer : IPlayer {
     private var playerListener: Player.Listener? = null
     private var isPlaying = false
@@ -159,7 +155,6 @@ class CS3IPlayer : IPlayer {
             it.isCommandAvailable(Player.COMMAND_GET_CURRENT_MEDIA_ITEM) && it.isCurrentMediaItemSeekable
         } ?: false
 
-    private var ignoreSSL: Boolean = true
     private var playBackSpeed: Float = 1.0f
 
     private var lastMuteVolume: Float = 1.0f
@@ -1897,18 +1892,6 @@ class CS3IPlayer : IPlayer {
             }
 
             currentLink = link
-
-            if (ignoreSSL) {
-                // Disables ssl check
-                val sslContext: SSLContext = SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf(SSLTrustManager()), SecureRandom())
-                sslContext.createSSLEngine()
-                HttpsURLConnection.setDefaultHostnameVerifier { _: String, _: SSLSession ->
-                    true
-                }
-                HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.socketFactory)
-            }
-
 
             val mediaItems = when (link) {
                 is ExtractorLinkPlayList -> link.playlist.map {

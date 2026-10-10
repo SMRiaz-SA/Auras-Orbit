@@ -71,14 +71,14 @@
             android:visibility="gone"
             tools:visibility="visible">
 
-            <ImageView
+            <ImageView android:contentDescription="@null"
                 android:layout_width="30dp"
                 android:layout_height="30dp"
                 android:layout_gravity="center"
-                android:src="@drawable/ic_baseline_arrow_back_24"
+                android:src="@drawable/close_24px"
                 app:tint="@android:color/white" />
 
-            <ImageView
+            <ImageView android:contentDescription="@string/go_back"
                 android:tag="@string/tv_no_focus_tag"
                 android:id="@+id/player_loading_go_back"
                 android:layout_width="70dp"

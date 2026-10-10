@@ -14,7 +14,7 @@
         android:layout_toStartOf="@+id/subtract_button"
         tools:text="hello" />
 
-    <ImageView
+    <ImageView android:contentDescription="@string/decrease_source_priority"
         android:id="@+id/subtract_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -36,7 +36,7 @@
         android:textColor="?attr/textColor"
         tools:text="1" />
 
-    <ImageView
+    <ImageView android:contentDescription="@string/increase_source_priority"
         android:id="@+id/add_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

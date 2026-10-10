@@ -6,11 +6,14 @@ import kotlin.test.assertNull
 
 class UpdateChannelTest {
     @Test
-    fun stableAndPreviewChannelsSelectTheirOwnNewestRelease() {
-        val stable = GitHubRelease("v0.2.0.24", "stable", null, "https://github.com/example", "2026-10-07")
-        val preview = stable.copy(tag_name = "v0.3.0.00", prerelease = true)
-        assertEquals(stable, AppUpdater.selectRelease(listOf(preview, stable), false))
-        assertEquals(preview, AppUpdater.selectRelease(listOf(preview, stable), true))
-        assertNull(AppUpdater.selectRelease(listOf(preview.copy(draft = true)), true))
+    fun onlyTheNewestStableReleaseIsSelected() {
+        val olderStable = GitHubRelease("v0.9.0", "older stable", null, "https://github.com/example", "2026-10-08")
+        val stable = GitHubRelease("v1.0.0.00", "stable", null, "https://github.com/example", "2026-10-10")
+        val prerelease = stable.copy(tag_name = "v1.1.0-beta.1", prerelease = true)
+        val mislabeledPrerelease = stable.copy(tag_name = "v1.1.0-rc.1")
+        val draft = stable.copy(tag_name = "v2.0.0", draft = true)
+
+        assertEquals(stable, AppUpdater.selectRelease(listOf(olderStable, prerelease, mislabeledPrerelease, draft, stable)))
+        assertNull(AppUpdater.selectRelease(listOf(prerelease, mislabeledPrerelease, draft)))
     }
 }

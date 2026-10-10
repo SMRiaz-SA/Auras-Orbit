@@ -86,7 +86,6 @@
     <string name="popup_resume_download">Узнавіць спампоўванне</string>
     <string name="popup_pause_download">Прыпыніць спампоўванне</string>
     <string name="home_more_info">Дадатковыя звесткі</string>
-    <string name="home_expanded_hide">Схаваць</string>
     <string name="home_play">Прайграць</string>
     <string name="home_info">Звесткі</string>
     <string name="filter_bookmarks">Фільтр закладак</string>
@@ -115,7 +114,7 @@
     <string name="subs_font_size">Памер шрыфту</string>
     <string name="search_provider_text_providers">Пошук праз пастаўшчыкоў</string>
     <string name="search_provider_text_types">Пошук праз тыпы</string>
-    <string name="benene_count_text">%d бенена(ў) дадзена распрацоўшчыкам</string>
+    <plurals name="benene_count_text"><item quantity="one">%d бенена(ў) дадзена распрацоўшчыкам</item><item quantity="other">%d бенена(ў) дадзена распрацоўшчыкам</item><item quantity="few">%d бенена(ў) дадзена распрацоўшчыкам</item><item quantity="many">%d бенена(ў) дадзена распрацоўшчыкам</item></plurals>
     <string name="benene_count_text_none">Бененаў не дадзена</string>
     <string name="subs_auto_select_language">Выбраць мову аўтаматычна</string>
     <string name="subs_download_languages">Спампаваць мовы</string>
@@ -191,9 +190,6 @@
     <string name="updates_settings">Паказваць абнаўленні праграмы</string>
     <string name="updates_settings_des">Аўтаматычна правяраць на новыя абнаўленні пасля адкрыцця праграмы.</string>
     <string name="redo_setup_process">Паўтарыць наладжванне</string>
-    <string name="install_prerelease">Усталяваць перадфінальную версію</string>
-    <string name="prerelease_already_installed">Перадфінальная версія ўжо ўсталявана.</string>
-    <string name="prerelease_install_failed">Не ўдалося ўсталяваць перадфінальную версію.</string>
     <string name="apk_installer_settings">Усталёўшчык APK</string>
     <string name="lightnovel">Лёгкая праграма для раманаў ад тых жа распрацоўшчыкаў</string>
     <string name="anim">Праграма для анімэ ад тых жа распрацоўшчыкаў</string>
@@ -288,7 +284,7 @@
     <string name="episode_action_chromecast_episode">Глядзець праз Chromecast</string>
     <string name="episode_action_chromecast_mirror">Люстэрка Chromecast</string>
     <string name="extra_brightness_settings">Дадатковая яркасць</string>
-    <string name="extra_brightness_settings_des">Уключыць фільтр яркасці калі яркасць дысплэя больш за 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Уключыць фільтр яркасці калі яркасць дысплэя больш за 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="episode_action_cast_mirror">Трансляцыя праз люстэрку</string>
     <string name="episode_action_play_in_app">Глядзець у праграме</string>
@@ -499,7 +495,7 @@
     <string name="plugins_downloaded" formatted="true">Спампавана: %d</string>
     <string name="plugins_disabled" formatted="true">Выключана: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Не спампавана: %d</string>
-    <string name="plugins_updated" formatted="true">Абноўлена %d убудоў</string>
+    <plurals name="plugins_updated"><item quantity="one">Абноўлена %d убудоў</item><item quantity="other">Абноўлена %d убудоў</item><item quantity="few">Абноўлена %d убудоў</item><item quantity="many">Абноўлена %d убудоў</item></plurals>
     <string name="blank_repo_message">Прадвызначана на Auras Orbit няма ўсталяваных вэб-сайтаў. Вам трэба ўсталяваць вэб-сайты з рэпазіторыяў. \n \nДалучыцеся да нашага сервера Discord або пашукайце ў сетцы.</string>
     <string name="view_public_repositories_button">Праглядзець рэпазіторыі ад супольнасці</string>
     <string name="view_public_repositories_button_short">Публічны спіс</string>
@@ -577,9 +573,6 @@
     <string name="sort_episodes_rating_low_high">Рэйтынгу (найніжэйшы)</string>
     <string name="sort_episodes_date_newest">Даце паказу (найноўшыя)</string>
     <string name="sort_episodes_date_oldest">Даце паказу (найстарэйшыя)</string>
-    <string name="sort_button_episode">Сер. %s</string>
-    <string name="sort_button_rating">Рэйтынг %s</string>
-    <string name="sort_button_date">Дата %s</string>
     <string name="select_library">Выбраць бібліятэку</string>
     <string name="open_with">Адкрыць праз</string>
     <string name="empty_library_no_accounts_message">Ваша бібліятэка пустая :( \nУвайдзіце ва ўліковы запіс з бібліятэкай або дадайце праграмы да вашай лакальнай бібліятэкі.</string>
@@ -667,12 +660,12 @@
     <string name="torrent_not_accepted">Перазапусціце праграму і прыміце ўсплывальнае акно «Трансліраваць Torrent», каб працягнуць.</string>
     <string name="software_decoding">Праграмная дэкадзіроўка</string>
     <string name="software_decoding_desc">Праграмная дэкадзіроўка дазваляе прайгравальніку паказваць відэафайлы, якія не падтрымліваюцца на вашай прыладзе, але можа выклікаць затрымкі або рабіць прайграванне нестабільным на высокіх раздзяляльнасцях.</string>
-    <string name="volume_exceeded_100">Гучнасць перавысіла 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Гучнасць перавысіла 100%</string>
     <string name="slide_up_again_to_exceed_100">Правядзіце пальцам уверх яшчэ раз, каб зрабіць гучнасць больш за 100%</string>
     <string name="update_plugins">Абнавіць убудовы</string>
     <string name="update_plugins_manually">Абнавіць убудовы ўручную</string>
     <string name="starting_plugin_update_manually">Пачынаецца абнаўленне ўбудоў!</string>
-    <string name="plugins_updated_manually">Абноўлена %d убудова(ы/ў)!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Абноўлена %d убудова(ы/ў)!</item><item quantity="other">Абноўлена %d убудова(ы/ў)!</item><item quantity="few">Абноўлена %d убудова(ы/ў)!</item><item quantity="many">Абноўлена %d убудова(ы/ў)!</item></plurals>
     <string name="no_plugins_updated_manually">Ніводнай убудовы не было абноўлена.</string>
     <string name="player_notification_channel_name">Апавяшчэнні прайгравальніка</string>
     <string name="player_notification_channel_description">Апавяшчэнне прайгравальніка для кіравання прайграваннем у фонавым рэжыме</string>

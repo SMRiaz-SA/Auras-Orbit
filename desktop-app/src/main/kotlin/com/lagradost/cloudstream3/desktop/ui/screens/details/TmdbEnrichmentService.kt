@@ -51,8 +51,11 @@ object TmdbEnrichmentService {
 
     typealias DesktopActorDetails = TmdbPersonFetcher.DesktopActorDetails
 
-    suspend fun getActorDetails(name: String): DesktopActorDetails? =
-        TmdbPersonFetcher.getActorDetails(name)
+    suspend fun searchPeople(query: String): List<com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate> =
+        TmdbPersonFetcher.searchPeople(query)
+
+    suspend fun getActorDetails(personId: Int): DesktopActorDetails? =
+        TmdbPersonFetcher.getActorDetails(personId)
 
     suspend fun fetchPersonDetail(
         name: String,

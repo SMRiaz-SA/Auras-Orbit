@@ -494,7 +494,6 @@ class HomeViewModel : ViewModel() {
         MainActivity.mainPluginsLoadedEvent -= ::afterMainPluginsLoaded
         MainActivity.reloadHomeEvent -= ::reloadHome
         MainActivity.reloadAccountEvent -= ::reloadAccount
-        super.onCleared()
     }
 
     fun queryTextSubmit(query: String) {

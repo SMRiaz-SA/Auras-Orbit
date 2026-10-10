@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.utils.SubtitleHelper.getNameNextToFlagEmoji
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
 import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
+import java.util.Locale
 
 class PluginDetailsFragment(val data: PluginViewData) : BaseBottomSheetDialogFragment<FragmentPluginDetailsBinding>(
     BaseFragment.BindingCreator.Inflate(FragmentPluginDetailsBinding::inflate)
@@ -61,7 +62,7 @@ class PluginDetailsFragment(val data: PluginViewData) : BaseBottomSheetDialogFra
                 error { getImageFromDrawable(context ?: return@error null , R.drawable.ic_baseline_extension_24) }
             }
             pluginName.text = metadata.name.removeSuffix("Provider")
-            pluginVersion.text = metadata.version.toString()
+            pluginVersion.text = String.format(Locale.getDefault(), "%d", metadata.version)
             pluginDescription.text = metadata.description ?: getString(R.string.no_data)
             pluginSize.text =
                 if (metadata.fileSize == null) getString(R.string.no_data) else formatFileSize(
@@ -137,7 +138,7 @@ class PluginDetailsFragment(val data: PluginViewData) : BaseBottomSheetDialogFra
     private fun updateVoting(value: Int) {
         val metadata = data.pluginWrapper.plugin
         binding?.apply {
-            pluginVotes.text = value.toString()
+            pluginVotes.text = String.format(Locale.getDefault(), "%d", value)
             if (metadata.hasVoted()) {
                 upvote.imageTintList = ColorStateList.valueOf(
                     context?.colorFromAttribute(R.attr.colorPrimary) ?: R.color.colorPrimary

@@ -72,6 +72,7 @@ import com.google.android.material.chip.ChipGroup
 import com.google.android.material.progressindicator.CircularProgressIndicatorSpec
 import com.google.android.material.progressindicator.IndeterminateDrawable
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
 import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.R
@@ -137,13 +138,16 @@ object UIHelper {
     }
 
     fun Activity.requestRW() {
+        val permissions = mutableListOf(
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            permissions += Manifest.permission.MANAGE_EXTERNAL_STORAGE
+        }
         ActivityCompat.requestPermissions(
             this,
-            arrayOf(
-                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.MANAGE_EXTERNAL_STORAGE
-            ),
+            permissions.toTypedArray(),
             1337
         )
     }
@@ -388,12 +392,9 @@ object UIHelper {
             return 0
         }
 
-        var result = 0
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        if (resourceId > 0) {
-            result = resources.getDimensionPixelSize(resourceId)
-        }
-        return result
+        val decorView = getActivity()?.window?.decorView ?: return 0
+        val insets = ViewCompat.getRootWindowInsets(decorView) ?: return 0
+        return insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
     }
 
     fun fixPaddingStatusbarMargin(v: View?) {
@@ -496,15 +497,6 @@ object UIHelper {
 
             WindowInsetsCompat.CONSUMED
         }
-    }
-
-    fun Context.getNavigationBarHeight(): Int {
-        var result = 0
-        val resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-        if (resourceId > 0) {
-            result = resources.getDimensionPixelSize(resourceId)
-        }
-        return result
     }
 
     fun Context?.isBottomLayout(): Boolean {

@@ -36,6 +36,7 @@ import com.lagradost.cloudstream3.desktop.ui.screens.person.dialogs.PersonProvid
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.FilmographyCategory
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonDetail
 import com.lagradost.cloudstream3.desktop.ui.screens.person.model.PersonMediaCredit
+import com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate
 
 @Composable
 fun PersonScreen(
@@ -88,6 +89,12 @@ fun PersonScreen(
                         modifier = Modifier.size(48.dp),
                     )
                 }
+            } else if (uiState.personDetail == null && uiState.personCandidates.isNotEmpty()) {
+                PersonCandidatePicker(
+                    requestedName = name,
+                    candidates = uiState.personCandidates,
+                    onSelect = { candidate -> viewModel.loadPerson(candidate.name, candidate.tmdbId) },
+                )
             } else if (uiState.error != null && uiState.personDetail == null) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -215,6 +222,44 @@ fun PersonScreen(
                     )
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun PersonCandidatePicker(
+    requestedName: String,
+    candidates: List<TmdbPersonCandidate>,
+    onSelect: (TmdbPersonCandidate) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Choose a person",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Select the matching TMDB profile for “$requestedName”.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(candidates, key = { it.tmdbId }) { candidate ->
+                PersonCandidateCard(
+                    candidate = candidate,
+                    onClick = { onSelect(candidate) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

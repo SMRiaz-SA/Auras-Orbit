@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import com.lagradost.cloudstream3.databinding.PlayerPrioritizeItemBinding
 import com.lagradost.cloudstream3.ui.NoStateAdapter
 import com.lagradost.cloudstream3.ui.ViewHolderState
+import java.util.Locale
 
 data class SourcePriority<T>(
     val data: T,
@@ -34,7 +35,7 @@ class PriorityAdapter<T>() :
         binding.priorityText.text = item.name
 
         fun updatePriority() {
-            binding.priorityNumber.text = item.priority.toString()
+            binding.priorityNumber.text = String.format(Locale.getDefault(), "%d", item.priority)
         }
 
         updatePriority()

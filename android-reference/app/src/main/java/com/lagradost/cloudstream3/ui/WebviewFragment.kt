@@ -1,18 +1,16 @@
 package com.lagradost.cloudstream3.ui
 
 import android.os.Bundle
+import android.annotation.SuppressLint
 import android.view.View
-import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.fragment.app.FragmentActivity
 import androidx.navigation.fragment.findNavController
 import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.databinding.FragmentWebviewBinding
 import com.lagradost.cloudstream3.network.WebViewResolver
-import com.lagradost.cloudstream3.utils.AppContextUtils.loadRepository
 
 class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
     BaseFragment.BindingCreator.Inflate(FragmentWebviewBinding::inflate)
@@ -20,6 +18,7 @@ class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
 
     override fun fixLayout(view: View) = Unit
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onBindingCreated(binding: FragmentWebviewBinding) {
         val url = arguments?.getString(WEBVIEW_URL) ?: "".also {
             findNavController().popBackStack()
@@ -44,7 +43,8 @@ class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
         binding.webView.apply {
             WebViewResolver.webViewUserAgent = settings.userAgentString
 
-            addJavascriptInterface(RepoApi(activity), "RepoApi")
+            // This is a read-only fallback browser. JavaScript is needed for normal page
+            // rendering, but arbitrary web content must not receive a native bridge.
             settings.javaScriptEnabled = true
             settings.userAgentString = USER_AGENT
             settings.domStorageEnabled = true
@@ -59,12 +59,5 @@ class WebviewFragment : BaseFragment<FragmentWebviewBinding>(
             Bundle().apply {
                 putString(WEBVIEW_URL, webViewUrl)
             }
-    }
-
-    private class RepoApi(val activity: FragmentActivity?) {
-        @JavascriptInterface
-        fun installRepo(repoUrl: String) {
-            activity?.loadRepository(repoUrl)
-        }
     }
 }

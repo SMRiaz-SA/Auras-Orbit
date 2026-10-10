@@ -276,12 +276,6 @@ object NetworkConfig {
             baseBuilder.addInterceptor(AutoRetryInterceptor(1))
         }
 
-        // Add DevNetworkInterceptor for DevStudio Network Inspector
-        val hasDevNetwork = baseBuilder.interceptors().any { it is DevNetworkInterceptor }
-        if (!hasDevNetwork) {
-            baseBuilder.addInterceptor(DevNetworkInterceptor())
-        }
-
         // Apply to main client
         app.baseClient = baseBuilder.build()
         // CRITICAL: Restore defaultHeaders that NiceHttp uses for ALL requests.
@@ -301,7 +295,7 @@ object NetworkConfig {
         // Build dedicated image loading client derived from app.baseClient
         val imgBuilder = app.baseClient.newBuilder()
             .apply {
-                interceptors().removeAll { it is RateLimitInterceptor || it is DevNetworkInterceptor }
+                interceptors().removeAll { it is RateLimitInterceptor }
             }
             .addInterceptor(
                 okhttp3.Interceptor { chain ->

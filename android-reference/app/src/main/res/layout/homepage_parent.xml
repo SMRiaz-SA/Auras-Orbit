@@ -14,8 +14,6 @@
         android:layout_marginEnd="0dp"
         android:padding="12dp"
         tools:text="@string/continue_watching"
-        app:drawableRightCompat="@drawable/ic_baseline_arrow_forward_24"
-        app:drawableTint="?attr/white"
         android:background="?android:attr/selectableItemBackground"
         android:contentDescription="@string/home_more_info"/>
 

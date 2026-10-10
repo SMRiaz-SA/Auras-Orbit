@@ -957,7 +957,7 @@ object VideoDownloadManager {
         val ranges = if (!hasRangeSupport) {
             // is the equivalent of [0..EOF] as we cant resume, nor can parallelize it
             downloadLength = contentLength
-            LongArray(1) { 0 }
+            LongArray(1)
         } else if (contentLength == null || contentLength < maximumSmallSize) {
             if (contentLength != null) {
                 downloadLength = contentLength - startByte

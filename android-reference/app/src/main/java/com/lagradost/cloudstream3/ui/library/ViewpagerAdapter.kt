@@ -94,8 +94,7 @@ class ViewpagerAdapter(
                 // scrollToPosition(0)
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
                     val diff = scrollY - oldScrollY
 
                     //Expand the top Appbar based on scroll direction up/down, simulate phone behavior
@@ -111,14 +110,6 @@ class ViewpagerAdapter(
                     if (diff == 0) return@setOnScrollChangeListener
 
                     scrollCallback.invoke(diff > 0)
-                }
-            } else {
-                onFlingListener = object : OnFlingListener() {
-                    override fun onFling(velocityX: Int, velocityY: Int): Boolean {
-                        scrollCallback.invoke(velocityY > 0)
-                        return false
-                    }
-                }
             }
         }
     }

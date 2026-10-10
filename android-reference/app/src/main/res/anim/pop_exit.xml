@@ -2,7 +2,7 @@
 <set xmlns:android="http://schemas.android.com/apk/res/android">
     <scale
             android:interpolator="@android:anim/linear_interpolator"
-            android:duration="@integer/config_navAnimTime"
+            android:duration="@integer/auras_navigation_animation_duration"
             android:fromXScale="1.0"
             android:toXScale="0.9"
             android:fromYScale="1.0"
@@ -13,7 +13,7 @@
     </scale>
     <alpha
             android:interpolator="@android:anim/linear_interpolator"
-            android:duration="@integer/config_navAnimTime"
+            android:duration="@integer/auras_navigation_animation_duration"
             android:fromAlpha="1.0"
             android:toAlpha="0.0"/>
 </set>

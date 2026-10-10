@@ -66,7 +66,7 @@ fun SettingsNetwork(viewModel: SettingsViewModel) {
             )
         }
 
-        SettingsGroupCard(title = "Experimental & Scraper Engine") {
+        SettingsGroupCard(title = "Cloudflare & Scraper Engine") {
             Text(
                 "Advanced network resolution options for providers and scraping.",
                 style = MaterialTheme.typography.bodyMedium,

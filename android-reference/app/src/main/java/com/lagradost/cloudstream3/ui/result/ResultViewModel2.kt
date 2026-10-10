@@ -139,12 +139,14 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.txt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /** This starts at 1 */
@@ -398,7 +400,9 @@ data class ResumeWatchingStatus(
 data class LinkLoadingResult(
     val links: List<ExtractorLink>,
     val subs: List<SubtitleData>,
-    val syncData: HashMap<String, String>
+    val syncData: HashMap<String, String>,
+    val episode: ResultEpisode? = null,
+    val nextEpisode: ResultEpisode? = null,
 )
 
 sealed class SelectPopup {
@@ -1262,6 +1266,32 @@ class ResultViewModel2 : ViewModel() {
         currentLoadLinkJob = null
     }
 
+    private var inlineSourceSearchJob: Job? = null
+
+    fun loadInlineSources(
+        result: ResultEpisode,
+        forceReload: Boolean = false,
+        callback: (LinkLoadingResult) -> Unit
+    ) {
+        inlineSourceSearchJob?.cancel()
+        inlineSourceSearchJob = viewModelScope.launch(Dispatchers.IO) {
+            val links = loadLinks(
+                result,
+                isVisible = false,
+                sourceTypes = LOADTYPE_INAPP,
+                clearCache = forceReload
+            )
+            withContext(Dispatchers.Main) {
+                callback(links)
+            }
+        }
+    }
+
+    fun cancelInlineSourceSearch() {
+        inlineSourceSearchJob?.cancel()
+        inlineSourceSearchJob = null
+    }
+
     private suspend fun CoroutineScope.loadLinks(
         result: ResultEpisode,
         isVisible: Boolean,
@@ -1301,13 +1331,19 @@ class ResultViewModel2 : ViewModel() {
         } catch (e: Exception) {
             logError(e)
         } finally {
-            _loadedLinks.postValue(null)
+            if (isVisible) _loadedLinks.postValue(null)
         }
 
+        val episodes = generator?.videos.orEmpty()
+        val episodeIndex = episodes.indexOfFirst { it.id == result.id }
+        val nextEpisode = episodeIndex.takeIf { it >= 0 }?.let { episodes.getOrNull(it + 1) }
+
         return LinkLoadingResult(
-            sortUrls(links),
-            sortSubs(subs),
-            HashMap(currentResponse?.syncData ?: emptyMap())
+            links = sortUrls(links),
+            subs = sortSubs(subs),
+            syncData = HashMap(currentResponse?.syncData ?: emptyMap()),
+            episode = result,
+            nextEpisode = nextEpisode
         )
     }
 
@@ -2133,12 +2169,12 @@ class ResultViewModel2 : ViewModel() {
                 _selectedSortingIndex.postValue(sortIndex)
                 _selectedSorting.postValue(
                     when (correctedSorting) {
-                        EpisodeSortType.NUMBER_ASC -> txt(R.string.sort_button_episode, "↑")
-                        EpisodeSortType.NUMBER_DESC -> txt(R.string.sort_button_episode, "↓")
-                        EpisodeSortType.RATING_HIGH_LOW -> txt(R.string.sort_button_rating, "↓")
-                        EpisodeSortType.RATING_LOW_HIGH -> txt(R.string.sort_button_rating, "↑")
-                        EpisodeSortType.DATE_NEWEST -> txt(R.string.sort_button_date, "↓")
-                        EpisodeSortType.DATE_OLDEST -> txt(R.string.sort_button_date, "↑")
+                        EpisodeSortType.NUMBER_ASC -> txt(R.string.sort_episodes_number_asc)
+                        EpisodeSortType.NUMBER_DESC -> txt(R.string.sort_episodes_number_desc)
+                        EpisodeSortType.RATING_HIGH_LOW -> txt(R.string.sort_rating_desc)
+                        EpisodeSortType.RATING_LOW_HIGH -> txt(R.string.sort_rating_asc)
+                        EpisodeSortType.DATE_NEWEST -> txt(R.string.sort_episodes_date_newest)
+                        EpisodeSortType.DATE_OLDEST -> txt(R.string.sort_episodes_date_oldest)
                     }
                 )
                 _episodes.postValue(Resource.Success(getSortedEpisodes(ret, correctedSorting)))

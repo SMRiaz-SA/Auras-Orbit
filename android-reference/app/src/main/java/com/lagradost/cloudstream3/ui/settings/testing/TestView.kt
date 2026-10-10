@@ -15,6 +15,7 @@ import androidx.core.widget.ContentLoadingProgressBar
 import com.google.android.material.button.MaterialButton
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.utils.AppContextUtils.animateProgressTo
+import java.util.Locale
 
 class TestView @JvmOverloads constructor(
     context: Context,
@@ -88,9 +89,14 @@ class TestView @JvmOverloads constructor(
 
     fun setProgress(passed: Int, failed: Int, total: Int?) {
         val totalProgress = passed + failed
-        mainSectionText?.text = "$totalProgress / ${total?.toString() ?: "?"}"
-        testsPassedSectionText?.text = passed.toString()
-        testsFailedSectionText?.text = failed.toString()
+        mainSectionText?.text = String.format(
+            Locale.getDefault(),
+            context.getString(R.string.test_progress_format),
+            totalProgress,
+            total ?: "?"
+        )
+        testsPassedSectionText?.text = String.format(Locale.getDefault(), "%d", passed)
+        testsFailedSectionText?.text = String.format(Locale.getDefault(), "%d", failed)
 
         totalProgressBar?.max = (total ?: 0) * 1000
         totalProgressBar?.animateProgressTo(totalProgress * 1000)

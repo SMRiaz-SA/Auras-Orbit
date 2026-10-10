@@ -82,7 +82,7 @@
     <string name="subs_font">Font</string>
     <string name="subs_font_size">Daqs tal-font</string>
     <string name="search_provider_text_providers">Fittex bl-użu ta\' fornituri</string>
-    <string name="benene_count_text">%d Benenes mogħtija lil devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes mogħtija lil devs</item><item quantity="other">%d Benenes mogħtija lil devs</item><item quantity="few">%d Benenes mogħtija lil devs</item><item quantity="many">%d Benenes mogħtija lil devs</item><item quantity="two">%d Benenes mogħtija lil devs</item></plurals>
     <string name="benene_count_text_none">Ebda Benenes mogħtija</string>
     <string name="subs_auto_select_language">Agħżel il-Lingwa Awtomatikament</string>
     <string name="subs_download_languages">Niżżel Lingwi</string>
@@ -115,7 +115,6 @@
     <string name="popup_resume_download">Kompli Nizzel</string>
     <string name="popup_pause_download">Ieqaf Nizzel</string>
     <string name="home_more_info">Iktar Informazzjoni</string>
-    <string name="home_expanded_hide">Aħbi</string>
     <string name="filter_bookmarks">Iffiltra l-Bookmarks</string>
     <string name="download_started">Beda t-tniżżil</string>
     <string name="error_bookmarks_text">Bookmarks</string>

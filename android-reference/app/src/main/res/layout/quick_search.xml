@@ -16,14 +16,14 @@
         android:layout_margin="10dp"
         android:visibility="visible">
 
-        <ImageView
+        <ImageView android:contentDescription="@string/go_back"
             android:id="@+id/quick_search_back"
             android:layout_width="25dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:foregroundGravity="center"
-            android:src="@drawable/ic_baseline_arrow_back_24"
+            android:src="@drawable/close_24px"
             android:visibility="gone"
             app:tint="?attr/white"
             tools:visibility="visible" />

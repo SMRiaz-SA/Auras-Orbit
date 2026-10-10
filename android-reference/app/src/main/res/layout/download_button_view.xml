@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- This root overlays the download progress, icon, and foreground state. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MergeRootFrame"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:background="@android:color/holo_blue_light">
@@ -26,7 +28,7 @@
         android:layout_height="match_parent"
         android:background="@drawable/circle_shape_dotted" />
 
-    <ImageView
+    <ImageView android:contentDescription="@null"
         android:scaleX="?attr/download_icon_scale"
         android:scaleY="?attr/download_icon_scale"
         tools:visibility="visible"

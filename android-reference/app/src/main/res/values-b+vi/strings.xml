@@ -72,7 +72,6 @@
     <string name="popup_resume_download">Tiếp tục tải xuống</string>
     <string name="popup_pause_download">Tạm dừng tải xuống</string>
     <string name="home_more_info">Thông tin thêm</string>
-    <string name="home_expanded_hide">Ẩn</string>
     <string name="home_play">Phát</string>
     <string name="home_info">Thông tin</string>
     <string name="filter_bookmarks">Lọc danh sách của tôi</string>
@@ -96,7 +95,7 @@
     <string name="subs_font_size">Kích thước chữ</string>
     <string name="search_provider_text_providers">Tìm kiếm theo nguồn phim</string>
     <string name="search_provider_text_types">Tìm kiếm theo thể loại</string>
-    <string name="benene_count_text">%d lượt ủng hộ đã gửi đến nhà phát triển</string>
+    <plurals name="benene_count_text"><item quantity="other">%d lượt ủng hộ đã gửi đến nhà phát triển</item></plurals>
     <string name="benene_count_text_none">Không có lượt ủng hộ đã nhận</string>
     <string name="subs_auto_select_language">Tự động chọn ngôn ngữ</string>
     <string name="subs_download_languages">Ngôn ngữ tải xuống</string>
@@ -451,7 +450,7 @@
     <string name="pref_category_defaults">Mặc định</string>
     <string name="pref_category_looks">Giao diện</string>
     <string name="pref_category_ui_features">Tính năng</string>
-    <string name="plugins_updated" formatted="true">Đã cập nhật %d plugin</string>
+    <plurals name="plugins_updated"><item quantity="other">Đã cập nhật %d plugin</item></plurals>
     <string name="extension_description">Mô tả</string>
     <string name="extension_status">Trạng thái</string>
     <string name="extension_size">Kích thước</string>
@@ -654,13 +653,10 @@
     <string name="sort_episodes_rating_low_high">Xếp hạng (Thấp nhất)</string>
     <string name="sort_episodes_number_asc">Tập (Tăng dần)</string>
     <string name="sort_episodes_date_newest">Ngày phát sóng (Mới nhất)</string>
-    <string name="sort_button_rating">Xếp hạng %s</string>
-    <string name="sort_button_date">Ngày %s</string>
-    <string name="sort_button_episode">Tập %s</string>
     <string name="update_plugins">Cập nhật tiện ích mở rộng</string>
     <string name="no_plugins_updated_manually">Không có tiện ích mở rộng nào được cập nhật.</string>
     <string name="sort_episodes_date_oldest">Ngày phát sóng (Cũ nhất)</string>
-    <string name="plugins_updated_manually">Đã cập nhật thành công %d tiện ích mở rộng</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">Đã cập nhật thành công %d tiện ích mở rộng</item></plurals>
     <string name="sort_episodes_rating_high_low">Xếp hạng (Cao nhất)</string>
     <string name="update_plugins_manually">Cập nhật tiện ích mở rộng thủ công</string>
     <string name="sort_episodes_number_desc">Tập (Giảm dần)</string>
@@ -671,7 +667,7 @@
     <string name="speech_recognition_unavailable">Tìm kiếm giọng nói không khả dụng</string>
     <string name="subtitles_from_online">Trực tuyến</string>
     <string name="background_radius">Bo tròn nền</string>
-    <string name="volume_exceeded_100">Âm lượng đã vượt quá 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Âm lượng đã vượt quá 100%</string>
     <string name="slide_up_again_to_exceed_100">Vuốt lên lần nữa để vượt quá 100%</string>
     <string name="subtitles_from_embedded">Được nhúng</string>
     <string name="all_subtitles_bold">Làm tất cả phụ đề in đậm</string>
@@ -720,11 +716,8 @@
     <string name="search_suggestions">Gợi ý tìm kiếm</string>
     <string name="search_suggestions_des">Hiển thị gợi ý tìm kiếm khi đang nhập</string>
     <string name="clear_suggestions">Xóa gợi ý</string>
-    <string name="install_prerelease">Cài đặt phiên bản phát hành trước</string>
-    <string name="prerelease_already_installed">Bản phát hành trước đã được cài đặt.</string>
-    <string name="prerelease_install_failed">Cài đặt bản phát hành trước thất bại.</string>
     <string name="show_episode_text">Tập</string>
-    <string name="extra_brightness_settings_des">Bật bộ lọc độ sáng khi độ sáng màn hình vượt quá 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Bật bộ lọc độ sáng khi độ sáng màn hình vượt quá 100%</string>
     <string name="show_cast_in_details">Hiển thị bảng dàn diễn viên</string>
     <string name="video_info">Thông tin video</string>
     <string name="extra_brightness_settings">Độ sáng bổ sung</string>

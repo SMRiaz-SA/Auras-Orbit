@@ -71,7 +71,6 @@
     <string name="popup_resume_download">Download hervatten</string>
     <string name="popup_pause_download">Download pauzeren</string>
     <string name="home_more_info">Meer info</string>
-    <string name="home_expanded_hide">Verberg</string>
     <string name="home_play">Speel</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Bladwijzers filteren</string>
@@ -95,7 +94,7 @@
     <string name="subs_font_size">Lettergrootte</string>
     <string name="search_provider_text_providers">Zoeken met providers</string>
     <string name="search_provider_text_types">Zoeken met types</string>
-    <string name="benene_count_text">%d Bananen gegeven aan ontwikkelaars</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Bananen gegeven aan ontwikkelaars</item><item quantity="other">%d Bananen gegeven aan ontwikkelaars</item></plurals>
     <string name="benene_count_text_none">Geen Bananen gegeven</string>
     <string name="subs_auto_select_language">Taal automatisch selecteren</string>
     <string name="subs_download_languages">Talen downloaden</string>
@@ -490,7 +489,7 @@
     <string name="apk_installer_package_installer">PakketInstallatie</string>
     <string name="subscription_in_progress_notification">Bijwerken geabonneerde shows</string>
     <string name="setup_extensions_subtext">Download de lijst met sites die je wilt gebruiken</string>
-    <string name="plugins_updated" formatted="true">Bijgewerkte %d plugins</string>
+    <plurals name="plugins_updated"><item quantity="one">Bijgewerkte %d plugins</item><item quantity="other">Bijgewerkte %d plugins</item></plurals>
     <string name="clipboard_too_large">Te veel tekst. Kan niet opslaan naar klembord.</string>
     <string name="subscription_episode_released">Aflevering %d uitgebracht!</string>
     <string name="enable_skip_op_from_database_des">Toon skip popups voor openen/einde</string>
@@ -622,9 +621,6 @@
     <string name="sort_episodes_rating_low_high">Beoordeling (Laagste)</string>
     <string name="sort_episodes_date_newest">Uitzenddatum (Nieuwste)</string>
     <string name="sort_episodes_date_oldest">Uitzenddatum (Oudste)</string>
-    <string name="sort_button_episode">Afl %s</string>
-    <string name="sort_button_rating">Beoordeling %s</string>
-    <string name="sort_button_date">Datum %s</string>
     <string name="no_account">Geen account</string>
     <string name="rotate_video_desc">Toon een schakelknop voor schermoriëntatie</string>
     <string name="auto_rotate_video_desc">Activeer automatisch wisselen van schermoriëntatie gebaseerd op video oriëntatie</string>
@@ -640,15 +636,12 @@
     <string name="download_queue">Downloadwachtrij</string>
     <string name="queue_empty_message">Er staan momenteel geen downloads in de wachtrij.</string>
     <string name="extra_brightness_settings">Extra helderheid</string>
-    <string name="extra_brightness_settings_des">Schakel het helderheidsfilter in zodra de schermhelderheid boven 100% komt</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Schakel het helderheidsfilter in zodra de schermhelderheid boven 100% komt</string>
     <string name="extra_brightness_key">extra_helderheid_ingeschakeld</string>
     <string name="search_suggestions">Zoeksuggesties</string>
     <string name="search_suggestions_des">Zoeksuggesties laten zien tijdens het typen</string>
     <string name="clear_suggestions">Suggesties verwijderen</string>
     <string name="show_cast_in_details">Castpaneel weergeven</string>
-    <string name="install_prerelease">Pre-releaseversie installeren</string>
-    <string name="prerelease_already_installed">Pre-releaseversie is al geïnstaleerd.</string>
-    <string name="prerelease_install_failed">Installatie van de pre-release is mislukt.</string>
     <string name="episode_action_cast_mirror">Schermspiegeling</string>
     <string name="episode_action_play_mirror">Spiegeling spelen</string>"
     <string name="show_rating">Beoordelingslabel</string>
@@ -687,7 +680,7 @@
     <string name="preview_seekbar_desc">Zet preview thumbnail aan op seekbar</string>
     <string name="software_decoding">Software decodering</string>
     <string name="software_decoding_desc">Software decodering staat de mogelijkheid toe om de speler videobestanden af te laten spelen op jouw apparaat, maar het kan een haperige of onstabiele kijkervaring zorgen op hoge resolutie.</string>
-    <string name="volume_exceeded_100">Volume heeft de 100% overschreden</string>
+    <string  name="volume_exceeded_100" formatted="false">Volume heeft de 100% overschreden</string>
     <string name="update_plugins">Update Plugins</string>
     <string name="no_plugins_updated_manually">Geen plugins zijn geupdate.</string>
     <string name="player_notification_channel_name">Speler meldingen</string>
