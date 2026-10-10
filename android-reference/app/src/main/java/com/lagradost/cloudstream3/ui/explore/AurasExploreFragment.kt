@@ -25,10 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.observe
 import androidx.navigation.fragment.findNavController
+import com.lagradost.cloudstream3.MainActivity.Companion.afterPluginsLoadedEvent
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.mvvm.Resource
@@ -45,7 +47,7 @@ import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferre
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import java.util.Locale
 
-/** Auras-owned mobile discovery screen backed by the existing provider and watch-progress model. */
+/** Auras-owned discovery screen backed by the existing provider and watch-progress model. */
 class AurasExploreFragment : Fragment() {
     private val homeViewModel: HomeViewModel by activityViewModels()
     private var browseState by mutableStateOf(AurasBrowseState())
@@ -59,20 +61,34 @@ class AurasExploreFragment : Fragment() {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
             AurasMobileTheme {
-                AurasExploreScreen(
-                    state = browseState,
-                    sourcePickerVisible = sourcePickerVisible,
-                    onSourceClick = { sourcePickerVisible = true },
-                    onSourceDismiss = { sourcePickerVisible = false },
-                    onSourceSelect = { option -> selectSource(option) },
-                    onOpenCatalogs = { openCatalogs() },
-                    onOpenSearch = { openDestination(R.id.navigation_search) },
-                    onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
-                    onHelpClick = { openDestination(R.id.navigation_auras_help) },
-                    onOpenTitle = { item, index -> openItem(item, index, SEARCH_ACTION_LOAD) },
-                    onResumeTitle = { item, index -> openItem(item, index, SEARCH_ACTION_PLAY_FILE) },
-                    onExpand = { name -> homeViewModel.expand(name) },
-                )
+                if (isLayout(TV)) {
+                    AurasExploreTvScreen(
+                        isTv = true,
+                        providerCount = browseState.sources.count {
+                            it.key != APIRepository.randomApi.name
+                        },
+                        onCatalogs = { openCatalogs() },
+                        onSearch = { openDestination(R.id.navigation_search) },
+                        onSources = { openDestination(R.id.navigation_settings_extensions) },
+                        onLibrary = { openDestination(R.id.navigation_library) },
+                    )
+                } else {
+                    AurasExploreScreen(
+                        state = browseState,
+                        sourcePickerVisible = sourcePickerVisible,
+                        onSourceClick = { sourcePickerVisible = true },
+                        onSourceDismiss = { sourcePickerVisible = false },
+                        onSourceSelect = { option -> selectSource(option) },
+                        onOpenCatalogs = { openCatalogs() },
+                        onOpenSearch = { openDestination(R.id.navigation_search) },
+                        onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
+                        onHelpClick = { openDestination(R.id.navigation_auras_help) },
+                        onOpenTitle = { item, index -> openItem(item, index, SEARCH_ACTION_LOAD) },
+                        onResumeTitle = { item, index -> openItem(item, index, SEARCH_ACTION_PLAY_FILE) },
+                        onViewContinueWatching = { openDestination(R.id.navigation_library) },
+                        onSeeAllTrending = { name -> openTrending(name) },
+                    )
+                }
             }
         }
     }
@@ -88,6 +104,24 @@ class AurasExploreFragment : Fragment() {
         )
     }
 
+    override fun onStart() {
+        super.onStart()
+        afterPluginsLoadedEvent += ::refreshSourceOptions
+        loadSourceOptions()
+    }
+
+    override fun onStop() {
+        afterPluginsLoadedEvent -= ::refreshSourceOptions
+        super.onStop()
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private fun refreshSourceOptions(forceReload: Boolean) {
+        activity?.runOnUiThread {
+            if (isAdded) loadSourceOptions()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         homeViewModel.reloadStored()
@@ -97,9 +131,9 @@ class AurasExploreFragment : Fragment() {
         homeViewModel.page.observe(viewLifecycleOwner) { resource ->
             browseState = when (resource) {
                 is Resource.Success -> browseState.copy(
-                    shelves = resource.value.values.mapNotNull { expandable ->
+                    shelves = resource.value.values.map { expandable ->
                         expandable.list.let { page ->
-                            if (page.list.isEmpty()) null else AurasShelf(
+                            AurasShelf(
                                 name = page.name,
                                 items = page.list,
                                 hasNext = expandable.hasNext,
@@ -129,12 +163,13 @@ class AurasExploreFragment : Fragment() {
     }
 
     private fun loadSourceOptions() {
-        val sources = requireContext()
+        val context = context ?: return
+        val sources = context
             .filterProviderByPreferredMedia()
             .map { AurasSourceOption(it.name, it.name) }
             .toMutableList()
         if (sources.isNotEmpty()) {
-            sources.add(0, AurasSourceOption(APIRepository.randomApi.name, getString(R.string.auras_surprise_me)))
+            sources.add(0, AurasSourceOption(APIRepository.randomApi.name, context.getString(R.string.auras_surprise_me)))
         }
         browseState = browseState.copy(
             sources = sources,
@@ -144,7 +179,12 @@ class AurasExploreFragment : Fragment() {
 
     private fun selectSource(option: AurasSourceOption) {
         sourcePickerVisible = false
-        browseState = browseState.copy(sourceName = option.key, loading = true, error = null)
+        browseState = browseState.copy(
+            sourceName = option.key,
+            shelves = emptyList(),
+            loading = true,
+            error = null,
+        )
         homeViewModel.loadAndCancel(option.key, forceReload = true, fromUI = true)
     }
 
@@ -162,6 +202,14 @@ class AurasExploreFragment : Fragment() {
             R.id.navigation_auras_catalogs
         }
         openDestination(destination)
+    }
+
+    private fun openTrending(shelfName: String) {
+        val args = Bundle().apply {
+            putString(AURAS_TRENDING_ARGUMENT_SHELF, shelfName)
+            putString(AURAS_TRENDING_ARGUMENT_SOURCE, browseState.sourceName)
+        }
+        findNavController().navigate(R.id.navigation_auras_trending, args)
     }
 
     private fun openDestination(destination: Int) {
@@ -184,11 +232,19 @@ private fun AurasExploreScreen(
     onHelpClick: () -> Unit,
     onOpenTitle: (SearchResponse, Int) -> Unit,
     onResumeTitle: (SearchResponse, Int) -> Unit,
-    onExpand: (String) -> Unit,
+    onViewContinueWatching: () -> Unit,
+    onSeeAllTrending: (String) -> Unit,
 ) {
-    val topTenShelf = state.shelves.firstOrNull { it.isExplicitTopTenShelf() }
-    val discoveryShelf = topTenShelf ?: state.shelves.firstOrNull { it.isPopularShelf() }
-    val remainingShelves = state.shelves.filterNot { it.name == discoveryShelf?.name }
+    val populatedShelves = state.shelves.filter { it.items.isNotEmpty() }
+    val trendingShelf = populatedShelves.firstOrNull { it.isTrendingShelf() }
+    val topTenShelf = populatedShelves.firstOrNull { it.isExplicitTopTenShelf() }
+    val discoveryShelf = trendingShelf
+        ?: topTenShelf
+        ?: populatedShelves.firstOrNull { it.isPopularShelf() }
+    val discoveryTitle = when {
+        discoveryShelf?.isTrendingShelf() == true -> stringResource(R.string.auras_trending_section_title)
+        else -> discoveryShelf?.name.orEmpty()
+    }
     val resumeProgressByUrl = state.resumeItems.mapNotNull { item ->
         val watchPos = (item as? DataStoreHelper.ResumeWatchingResult)?.watchPos
             ?: return@mapNotNull null
@@ -207,22 +263,26 @@ private fun AurasExploreScreen(
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             item {
-                AurasBrandBar(
-                    sourceName = state.sourceName,
-                    sourceLabel = if (state.sources.isEmpty()) "Add source" else "Source",
-                    onHelpClick = onHelpClick,
-                    onSourceClick = {
-                        if (state.sources.isEmpty()) onConnectSource() else onSourceClick()
-                    },
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AurasBrandBar(onHelpClick = onHelpClick)
+                    AurasSourceRow(
+                        sourceName = state.sourceName,
+                        hasSources = state.sources.isNotEmpty(),
+                        onClick = {
+                            if (state.sources.isEmpty()) onConnectSource() else onSourceClick()
+                        },
+                    )
+                }
             }
             if (state.resumeItems.isNotEmpty()) {
                 item {
                     AurasPosterRail(
-                        title = "Pick up where you left off",
+                        title = stringResource(R.string.auras_explore_resume_title),
                         items = state.resumeItems,
                         onOpen = onResumeTitle,
                         progressByUrl = resumeProgressByUrl,
+                        actionLabel = stringResource(R.string.auras_explore_resume_see_all),
+                        onAction = onViewContinueWatching,
                     )
                 }
             }
@@ -231,38 +291,34 @@ private fun AurasExploreScreen(
             } else if (state.shelves.isEmpty() && state.resumeItems.isEmpty()) {
                 item {
                     AurasEmptyPanel(
-                        title = if (state.error == null) "Your Orbit is waiting" else "We couldn't load this catalog",
-                        body = state.error ?: "Connect a source to bring its collections and titles into Auras Orbit.",
-                        button = if (state.sources.isEmpty()) "Connect a source" else "Choose a source",
+                        title = stringResource(
+                            if (state.error == null) R.string.auras_explore_empty_title
+                            else R.string.auras_explore_load_error_title
+                        ),
+                        body = state.error ?: stringResource(R.string.auras_explore_empty_body),
+                        button = stringResource(
+                            if (state.sources.isEmpty()) R.string.auras_explore_connect_source
+                            else R.string.auras_explore_choose_source
+                        ),
                         onClick = if (state.sources.isEmpty()) onConnectSource else onSourceClick,
                     )
                 }
             }
             discoveryShelf?.let { shelf ->
                 item(key = "explore-discovery-${shelf.name}") {
-                    if (shelf == topTenShelf) {
-                        AurasTopTenRail(
-                            title = "Top 10 on ${state.sourceName ?: "this source"}",
-                            items = shelf.items,
-                            onOpen = onOpenTitle,
-                            onLoadMore = if (shelf.hasNext) ({ onExpand(shelf.name) }) else null,
-                            typeLabelOverride = mediaTypeLabelForShelf(shelf.name),
-                        )
-                    } else {
-                        AurasPosterRail(
-                            title = shelf.name,
-                            items = shelf.items.take(10),
-                            onOpen = onOpenTitle,
-                        )
-                    }
-                }
-            }
-            remainingShelves.take(4).forEach { shelf ->
-                item(key = "explore-${shelf.name}") {
-                    AurasCatalogShelf(
-                        shelf = shelf,
+                    val isTrending = shelf.isTrendingShelf()
+                    val hasFullList = isTrending || shelf.items.size > 10 || shelf.hasNext
+                    AurasPosterRail(
+                        title = discoveryTitle,
+                        items = shelf.items.take(10),
                         onOpen = onOpenTitle,
-                        onExpand = if (shelf.hasNext) ({ onExpand(shelf.name) }) else null,
+                        actionLabel = when {
+                            isTrending -> stringResource(R.string.auras_trending_see_all)
+                            hasFullList -> stringResource(R.string.auras_collection_see_all)
+                            else -> null
+                        },
+                        onAction = if (hasFullList) ({ onSeeAllTrending(shelf.name) }) else null,
+                        rankStart = 1,
                     )
                 }
             }
@@ -271,8 +327,8 @@ private fun AurasExploreScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    AurasQuietButton("All catalogs", onOpenCatalogs)
-                    AurasQuietButton("Search Orbit", onOpenSearch)
+                    AurasPrimaryButton(stringResource(R.string.auras_explore_browse_catalog), onOpenCatalogs)
+                    AurasQuietButton(stringResource(R.string.auras_explore_search), onOpenSearch)
                 }
             }
         }
@@ -282,6 +338,7 @@ private fun AurasExploreScreen(
             options = state.sources,
             onDismiss = onSourceDismiss,
             onSelect = onSourceSelect,
+            onConnectSource = onConnectSource,
         )
     }
 }
@@ -290,6 +347,9 @@ private fun AurasShelf.isExplicitTopTenShelf(): Boolean {
     val normalized = name.lowercase(Locale.ROOT)
     return Regex("\\btop(?:\\s*10|\\s*ten)\\b|\\btop10\\b").containsMatchIn(normalized)
 }
+
+private fun AurasShelf.isTrendingShelf(): Boolean =
+    Regex("\\btrending\\b", RegexOption.IGNORE_CASE).containsMatchIn(name)
 
 private fun AurasShelf.isPopularShelf(): Boolean {
     val normalized = name.lowercase(Locale.ROOT)

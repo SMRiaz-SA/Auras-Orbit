@@ -50,7 +50,6 @@ fun SettingsShortcutsScreen() {
                     ShortcutEntry(listOf("Ctrl", "R"), "Refresh the current screen or feeds", "Global", Icons.Default.Sync),
                     ShortcutEntry(listOf("Ctrl", "O"), "Open a local video file", "Global", Icons.Default.FolderOpen),
                     ShortcutEntry(listOf("Ctrl", "U"), "Open the network stream dialog", "Global", Icons.Default.Link),
-                    ShortcutEntry(listOf("F12"), "Toggle Developer Studio when developer mode is enabled", "Global", Icons.Default.Code),
                     ShortcutEntry(listOf("Esc"), "Close a supported overlay or exit fullscreen", "Global", Icons.Default.Close),
                     ShortcutEntry(listOf("Alt", "←"), "Leave the active Settings sub-screen", "Settings", Icons.AutoMirrored.Filled.ArrowBack),
                     ShortcutEntry(listOf("F1"), "Open Help & Manual", "App", Icons.Default.Keyboard),

@@ -38,22 +38,6 @@ data class ClearanceState(
     val isLaunchingManualBypass: Boolean = false,
 )
 
-data class ProviderTestReportState(
-    val isRunning: Boolean = false,
-    val results: Map<String, com.lagradost.cloudstream3.utils.TestingUtils.TestResultProvider> = emptyMap(),
-    val passed: Int = 0,
-    val failed: Int = 0,
-    val total: Int = 0,
-)
-
-data class DiagnosticsState(
-    val isNetworkTesting: Boolean = false,
-    val isMetaTesting: Boolean = false,
-    val results: List<com.lagradost.cloudstream3.desktop.network.DiagnosticResult> = emptyList(),
-    val currentTest: String = "",
-    val lastRunTime: String = "",
-)
-
 sealed class SettingsUiEvent : UiEvent {
     data class OnUpdateString(val key: String, val value: String) : SettingsUiEvent()
     data class OnUpdateBoolean(val key: String, val value: Boolean) : SettingsUiEvent()
@@ -74,12 +58,6 @@ sealed class SettingsUiEvent : UiEvent {
     data object ClearAllClearanceCookies : SettingsUiEvent()
     data class LaunchManualClearance(val url: String) : SettingsUiEvent()
 
-    data class UnlockDeveloperMode(val password: String) : SettingsUiEvent()
-    data class SetDeveloperMode(val enabled: Boolean) : SettingsUiEvent()
-    data object StartProviderTests : SettingsUiEvent()
-    data object CancelProviderTests : SettingsUiEvent()
-    data object RunNetworkDiagnostics : SettingsUiEvent()
-    data object RunMetaDiagnostics : SettingsUiEvent()
     data class UpdateDownloadPath(val path: String) : SettingsUiEvent()
     data class UpdateScreenshotPath(val path: String) : SettingsUiEvent()
 
@@ -115,10 +93,6 @@ data class SettingsUiState(
     val engineState: TorrServerEngineState = TorrServerEngineState(),
     val updateCheckState: UpdateCheckState = UpdateCheckState(),
     val clearanceState: ClearanceState = ClearanceState(),
-    val isDevModeEnabled: Boolean = false,
-    val devModeError: String? = null,
-    val providerTestState: ProviderTestReportState = ProviderTestReportState(),
-    val diagnosticsState: DiagnosticsState = DiagnosticsState(),
     val downloadPath: String = "",
     val screenshotPath: String = "",
 ) : UiState

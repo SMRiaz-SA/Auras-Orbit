@@ -41,7 +41,8 @@ class DownloadQueueFragment :
             downloadQueueToolbar.apply {
                 title = txt(R.string.download_queue).asString(context)
                 if (isLayout(PHONE or EMULATOR)) {
-                    setNavigationIcon(R.drawable.ic_baseline_arrow_back_24)
+                    setNavigationIcon(R.drawable.close_24px)
+                    setNavigationContentDescription(R.string.go_back)
                     setNavigationOnClickListener {
                         dispatchBackPressed()
                     }

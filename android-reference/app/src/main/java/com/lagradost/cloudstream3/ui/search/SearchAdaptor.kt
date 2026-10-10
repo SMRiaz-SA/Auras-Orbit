@@ -8,6 +8,8 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.databinding.SearchResultGridBinding
 import com.lagradost.cloudstream3.databinding.SearchResultGridExpandedBinding
 import com.lagradost.cloudstream3.ui.AutofitRecyclerView
+import com.lagradost.cloudstream3.ui.LANDSCAPE_ART_ASPECT_RATIO
+import com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO
 import com.lagradost.cloudstream3.ui.BaseDiffCallback
 import com.lagradost.cloudstream3.ui.NoStateAdapter
 import com.lagradost.cloudstream3.ui.ViewHolderState
@@ -48,7 +50,7 @@ class SearchAdapter(
 
     var hasNext: Boolean = false
 
-    private val coverRatio = if(isHorizontal) 1.8 else 0.68
+    private val coverRatio = if (isHorizontal) LANDSCAPE_ART_ASPECT_RATIO else PORTRAIT_POSTER_ASPECT_RATIO
 
     private val coverHeight: Int get() = (resView.itemWidth / coverRatio).roundToInt()
 

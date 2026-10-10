@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
 
 sealed class SearchUiEvent : UiEvent {
     data class OnSearchQueryChange(val query: String) : SearchUiEvent()
+    data class OnSelectSearchMode(val mode: SearchMode) : SearchUiEvent()
     object OnSearch : SearchUiEvent()
     object OnClearSearch : SearchUiEvent()
     data class OnToggleGlobalSearch(val enabled: Boolean) : SearchUiEvent()

@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.utils
 import android.content.Context
 import android.util.Log
 import android.widget.TextView
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -43,6 +44,12 @@ sealed class UiText {
         }
     }
 
+    data class PluralsResource(
+        @PluralsRes val resId: Int,
+        val quantity: Int,
+        val args: List<Any>
+    ) : UiText()
+
     fun asStringNull(context: Context?): String? {
         try {
             return asString(context ?: return null)
@@ -69,6 +76,16 @@ sealed class UiText {
                     }.toTypedArray())
                 }
             }
+            is PluralsResource -> context.resources.getQuantityString(
+                resId,
+                quantity,
+                *args.map {
+                    when (it) {
+                        is UiText -> it.asString(context)
+                        else -> it
+                    }
+                }.toTypedArray()
+            )
         }
     }
 }
@@ -84,6 +101,10 @@ fun txt(value: String?): UiText? {
 
 fun txt(@StringRes resId: Int, vararg args: Any): UiText {
     return UiText.StringResource(resId, args.toList())
+}
+
+fun txtPlural(@PluralsRes resId: Int, quantity: Int, vararg args: Any): UiText {
+    return UiText.PluralsResource(resId, quantity, args.toList())
 }
 
 @JvmName("txtNull")

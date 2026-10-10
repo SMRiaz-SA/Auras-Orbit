@@ -1,8 +1,8 @@
 <vector
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:name="vector"
-    android:width="842dp"
-    android:height="842dp"
+    android:width="200dp"
+    android:height="200dp"
     android:viewportWidth="842"
     android:viewportHeight="842">
     <!--70% https://stackoverflow.com/questions/11285961/how-to-make-a-background-20-transparent-on-android -->

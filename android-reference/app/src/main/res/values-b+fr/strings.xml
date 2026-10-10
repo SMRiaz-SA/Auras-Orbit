@@ -48,7 +48,6 @@
     <string name="popup_resume_download">Reprendre le téléchargement</string>
     <string name="popup_pause_download">Mettre en pause le téléchargement</string>
     <string name="home_more_info">Plus d\'information</string>
-    <string name="home_expanded_hide">Cacher</string>
     <string name="home_main_poster_img_des">Affiche principale</string>
     <string name="home_play">Lecture</string>
     <string name="home_info">Infos</string>
@@ -223,7 +222,7 @@
     <string name="subs_font_size">Taille de la police</string>
     <string name="search_provider_text_providers">Recherche par fournisseur</string>
     <string name="search_provider_text_types">Recherche par types</string>
-    <string name="benene_count_text">%d bananes offertes aux devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d bananes offertes aux devs</item><item quantity="other">%d bananes offertes aux devs</item><item quantity="many">%d bananes offertes aux devs</item></plurals>
     <string name="benene_count_text_none">Aucune banane n\'a été offerte</string>
     <string name="subs_auto_select_language">Sélection automatique de la langue</string>
     <string name="subs_download_languages">Télécharger les langues</string>
@@ -431,7 +430,7 @@
     <string name="delete_repository">Supprimer le repository</string>
     <string name="plugins_disabled" formatted="true">Désactivé : %d</string>
     <string name="plugins_not_downloaded" formatted="true">Non téléchargé : %d</string>
-    <string name="plugins_updated" formatted="true">%d plugins mis-à-jour</string>
+    <plurals name="plugins_updated"><item quantity="one">%d plugins mis-à-jour</item><item quantity="other">%d plugins mis-à-jour</item><item quantity="many">%d plugins mis-à-jour</item></plurals>
     <string name="download_all_plugins_from_repo">Avertissement : Auras Orbit décline toute responsabilité concernant l’utilisation d’extensions tierces et ne fournit aucun support pour celles-ci !</string>
     <string name="single_plugin_disabled" formatted="true">%s (Désactivé)</string>
     <string name="tracks">Pistes</string>
@@ -637,11 +636,8 @@
     <string name="player_load_one_subtitle_online">Charger le premier disponible</string>
     <string name="audio_singular">Audio</string>
     <string name="podcast_singular">Podcast</string>
-    <string name="sort_button_episode">Ép %s</string>
-    <string name="sort_button_rating">Note %s</string>
-    <string name="sort_button_date">Date %s</string>
     <string name="update_plugins">Mettre à jour les plugins</string>
-    <string name="plugins_updated_manually">%d plugin(s) mis à jour avec succès</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d plugin(s) mis à jour avec succès</item><item quantity="other">%d plugin(s) mis à jour avec succès</item><item quantity="many">%d plugin(s) mis à jour avec succès</item></plurals>
     <string name="no_plugins_updated_manually">Aucun plugin n\'a été mis à jour.</string>
     <string name="sort_episodes_rating_high_low">Note (Plus Haute)</string>
     <string name="update_plugins_manually">Mettre à jour les plugins manuellement</string>
@@ -657,7 +653,7 @@
     <string name="subtitles_from_online">En ligne</string>
     <string name="speech_recognition_unavailable">La reconnaissance vocale n\'est pas disponible</string>
     <string name="begin_speaking">Commencez à parler…</string>
-    <string name="volume_exceeded_100">Le volume a dépassé 100 %</string>
+    <string  name="volume_exceeded_100" formatted="false">Le volume a dépassé 100 %</string>
     <string name="slide_up_again_to_exceed_100">Glisser à nouveau vers le haut pour dépasser 100 %</string>
     <string name="all_subtitles_bold">Mettre tous les sous-titres en gras</string>
     <string name="background_radius">Rayon d\'arrière-plan</string>
@@ -703,15 +699,12 @@
     <string name="top_center">En haut au centre</string>
     <string name="top_right">En haut à droite</string>
     <string name="play_full_series_button">Jouer la série complète</string>
-    <string name="install_prerelease">Installer la version préliminaire</string>
-    <string name="prerelease_already_installed">La version préliminaire est déjà installée.</string>
-    <string name="prerelease_install_failed">L\'installation de la version préliminaire a échouée.</string>
     <string name="show_episode_text">Texte de l\'épisode</string>
     <string name="search_suggestions">Suggestions de recherche</string>
     <string name="search_suggestions_des">Afficher des suggestions de recherche pendant la saisie</string>
     <string name="clear_suggestions">Effacer les suggestions</string>
     <string name="extra_brightness_settings">Luminosité supplémentaire</string>
-    <string name="extra_brightness_settings_des">Activer le filtre de luminosité lorsque la luminosité dépasse 100 %</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Activer le filtre de luminosité lorsque la luminosité dépasse 100 %</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="show_cast_in_details">Afficher le panneau de cast</string>
     <string name="video_info">Information du média</string>

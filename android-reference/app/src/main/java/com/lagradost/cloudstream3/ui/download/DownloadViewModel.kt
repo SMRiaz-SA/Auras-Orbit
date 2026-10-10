@@ -78,7 +78,6 @@ class DownloadViewModel : ViewModel() {
 
     override fun onCleared() {
         downloadDeleteEvent -= ::onDownloadDeleted
-        super.onCleared()
     }
 
     fun cancelSelection() {
@@ -358,6 +357,9 @@ class DownloadViewModel : ViewModel() {
             // Prevent order being almost completely random,
             // making things difficult to find.
         }.sortedWith(compareBy<VisualDownloadCached.Header> {
+            // Show active or incomplete downloads before titles already available offline.
+            it.currentBytes >= it.totalBytes
+        }.thenBy {
             // Sort by isEpisodeBased() ascending. We put those that
             // are episode based at the bottom for UI purposes and to
             // make it easier to find by grouping them together.

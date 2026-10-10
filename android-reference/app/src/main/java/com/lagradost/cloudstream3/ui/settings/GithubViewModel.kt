@@ -40,7 +40,6 @@ enum class UpdateFailureStage {
 
 @Immutable
 data class GithubDialog(
-    val isPrerelease: Boolean,
     val isFromUser: Boolean,
     val state: GithubUpdateDialogState,
 )
@@ -130,9 +129,7 @@ class GithubViewModel(
     val remoteRepository: String,
     val remoteContentType: String,
     val versionName: String,
-    val isPrerelease: Boolean,
     val isDebug: Boolean,
-    val buildSha: String,
     val settings: AppSettings,
     val updater: AppUpdater,
 ) : ViewModel(), StateContainer<GithubState> by DefaultStateContainer(GithubState()),
@@ -143,7 +140,7 @@ class GithubViewModel(
         when (action) {
             GithubAction.SearchForUpdate -> {
                 ioSafe {
-                    searchForUpdate(prerelease = isPrerelease, fromUser = true)
+                    searchForUpdate(fromUser = true)
                 }
             }
 
@@ -161,7 +158,7 @@ class GithubViewModel(
             GithubAction.AutoSearchForUpdate -> {
                 if (!isDebug && settings.updates.showAppUpdates.get()) {
                     ioSafe {
-                        searchForUpdate(prerelease = isPrerelease, fromUser = false)
+                        searchForUpdate(fromUser = false)
                     }
                 }
             }
@@ -225,11 +222,9 @@ class GithubViewModel(
         }
 
     private suspend fun searchForUpdate(
-        prerelease: Boolean,
         fromUser: Boolean,
     ) = dispatchUpdate(UpdateFailureStage.Check) {
         val baseDialog = GithubDialog(
-            isPrerelease = prerelease,
             isFromUser = fromUser,
             state = GithubUpdateDialogState.Loading
         )
@@ -238,7 +233,7 @@ class GithubViewModel(
             copy(dialog = baseDialog)
         }
 
-        val release = getRelease(prerelease)
+        val release = getRelease()
         if (release == null) {
             updateState {
                 copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
@@ -246,27 +241,10 @@ class GithubViewModel(
             return@dispatchUpdate
         }
 
-        // Pre-release builds track the commit behind the newest version-tagged pre-release APK.
-        var oldSha: String? = null
-        var newSha: String? = null
-        if (prerelease) {
-            val sha = getSha(release.tagName)
-            oldSha = buildSha.take(7)
-            newSha = sha.take(7)
-
-            // Only match the first 7 chars, as that is what is saved
-            if (oldSha == newSha) {
-                updateState {
-                    copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
-                }
-                return@dispatchUpdate
-            }
-        }
-
         // Release tags, rather than asset filenames, are the version source.
         val releaseVersion = release.tagName.removePrefix("v")
-        val installedVersion = versionName.removeSuffix("-PRE").removePrefix("v")
-        if (!prerelease && releaseVersion == installedVersion) {
+        val installedVersion = versionName.removePrefix("v")
+        if (releaseVersion == installedVersion) {
             updateState {
                 copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
             }
@@ -286,8 +264,8 @@ class GithubViewModel(
                 dialog = baseDialog.copy(
                     state = GithubUpdateDialogState.UpdateFound(
                         file = release,
-                        newSha = newSha,
-                        oldSha = oldSha
+                        newSha = null,
+                        oldSha = null
                     )
                 )
             )
@@ -295,19 +273,11 @@ class GithubViewModel(
     }
 
     @Throws
-    private suspend fun getRelease(prerelease: Boolean) =
+    private suspend fun getRelease() =
         GithubReleases.getLatestReleaseFile(
-            prerelease = prerelease,
             userName = remoteUserName,
             repository = remoteRepository,
             contentType = remoteContentType
         )
 
-    @Throws
-    private suspend fun getSha(tag: String) =
-        GithubReleases.getShaFromTag(
-            tag = tag,
-            userName = remoteUserName,
-            repository = remoteRepository,
-        )
 }

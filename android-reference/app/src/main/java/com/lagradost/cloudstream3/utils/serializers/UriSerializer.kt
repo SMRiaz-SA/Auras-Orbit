@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.utils.serializers
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.lagradost.cloudstream3.InternalAPI
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -37,6 +38,6 @@ object UriSerializer : KSerializer<Uri> {
     }
 
     override fun deserialize(decoder: Decoder): Uri {
-        return Uri.parse(decoder.decodeString())
+        return decoder.decodeString().toUri()
     }
 }

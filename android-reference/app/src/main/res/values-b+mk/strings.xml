@@ -48,7 +48,6 @@
     <string name="popup_resume_download">Продолжи со преземање</string>
     <string name="popup_pause_download">Паузирај со преземање</string>
     <string name="home_more_info">Повеќе информации</string>
-    <string name="home_expanded_hide">Скриј</string>
     <string name="home_play">Пушти</string>
     <string name="home_info">Информации</string>
     <string name="filter_bookmarks">Филтрирај ги обележувачите</string>
@@ -67,7 +66,7 @@
     <string name="subs_font_size">Големина на фонт</string>
     <string name="search_provider_text_providers">Пребарувај користејќи провајдери</string>
     <string name="search_provider_text_types">Пребарувај користејќи типови</string>
-    <string name="benene_count_text">%d крем банани дадени на девелоперите</string>
+    <plurals name="benene_count_text"><item quantity="one">%d крем банани дадени на девелоперите</item><item quantity="other">%d крем банани дадени на девелоперите</item></plurals>
     <string name="benene_count_text_none">Нема дадени крем банани</string>
     <string name="subs_auto_select_language">Авто одбирање на јазик</string>
     <string name="subs_download_languages">Преземи јазици</string>
@@ -333,7 +332,7 @@
     <string name="ova">ОВА</string>
     <string name="live_singular">Пренос во живо</string>
     <string name="quality_webrip">Web</string>
-    <string name="plugins_updated" formatted="true">Ажурирани %d приклучоци</string>
+    <plurals name="plugins_updated"><item quantity="one">Ажурирани %d приклучоци</item><item quantity="other">Ажурирани %d приклучоци</item></plurals>
     <string name="skip_type_mixed_op">Мешано отворање</string>
     <string name="pref_category_extensions">Екстензии</string>
     <string name="enable_nsfw_on_providers">Овозможи NSFW на поддржаните екстензии</string>
@@ -642,18 +641,15 @@
     <string name="starting_plugin_update_manually">Започнување на процесот на ажурирање на приклучоци!</string>
     <string name="update_plugins">Ажурирај приклучоци</string>
     <string name="no_plugins_updated_manually">Ниту еден приклучок не е ажуриран.</string>
-    <string name="plugins_updated_manually">Успешно ажурирани %d приклучоци</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Успешно ажурирани %d приклучоци</item><item quantity="other">Успешно ажурирани %d приклучоци</item></plurals>
     <string name="sort_episodes_number_asc">Епизода (Растечки)</string>
     <string name="sort_episodes_number_desc">Епизода (Опаѓачки)</string>
     <string name="sort_episodes_rating_high_low">Рејтинг (Највисок)</string>
     <string name="sort_episodes_rating_low_high">Рејтинг (Најнизок)</string>
     <string name="sort_episodes_date_newest">Датум на емитување (Најнов)</string>
     <string name="sort_episodes_date_oldest">Датум на емитување (Најстар)</string>
-    <string name="sort_button_episode">Еп %s</string>
-    <string name="sort_button_rating">Рејтинг %s</string>
-    <string name="sort_button_date">Датум %s</string>
     <string name="update_plugins_manually">Ажурирај ги приклучоците рачно</string>
-    <string name="volume_exceeded_100">Јачината на звукот ја надмина 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Јачината на звукот ја надмина 100%</string>
     <string name="slide_up_again_to_exceed_100">Повлечи повторно нагоре за да надминеш 100%</string>
     <string name="player_notification_channel_name">Известувања од плеерот</string>
     <string name="player_notification_channel_description">Известување од плеерот за контрола на репродукцијата од позадина</string>
@@ -708,16 +704,13 @@
     <string name="download_queue">Редица за преземање</string>
     <string name="queue_empty_message">Моментално нема преземања во редицата.</string>
     <string name="extra_brightness_settings">Дополнителна осветленост</string>
-    <string name="extra_brightness_settings_des">Овозможи филтер за осветленост кога ќе се надмине 100% осветленост на екранот</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Овозможи филтер за осветленост кога ќе се надмине 100% осветленост на екранот</string>
     <string name="extra_brightness_key">овозможена_дополнителна_осветленост</string>
     <string name="search_suggestions">Предлози за пребарување</string>
     <string name="search_suggestions_des">Прикажувај предлози за пребарување додека пишуваш</string>
     <string name="clear_suggestions">Исчисти предлози</string>
     <string name="show_player_metadata_overlay">Прикажи преклоп со метаподатоци на плеерот</string>
     <string name="show_cast_in_details">Прикажи панел за емитување</string>
-    <string name="install_prerelease">Инсталирај предиздавачка верзија</string>
-    <string name="prerelease_already_installed">Предиздавачката верзија е веќе инсталирана.</string>
-    <string name="prerelease_install_failed">Неуспешна инсталација на предиздавачката верзија.</string>
     <string name="video_singular">Видео</string>
     <string name="show_episode_text">Текст на епизода</string>
     <string name="video_info">Информации за медиумот</string>

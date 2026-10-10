@@ -8,7 +8,6 @@ import com.lagradost.cloudstream3.desktop.download.AppDownloadManager
 import com.lagradost.cloudstream3.desktop.download.TaskStatus
 import com.lagradost.cloudstream3.desktop.downloader.DesktopDownloadManager
 import com.lagradost.cloudstream3.desktop.models.CustomSite
-import com.lagradost.cloudstream3.desktop.network.DiagnosticsRunner
 import com.lagradost.cloudstream3.desktop.network.NetworkConfig
 import com.lagradost.cloudstream3.desktop.network.SystemBrowserCdpBypass
 import com.lagradost.cloudstream3.desktop.player.LanguagePriorityHelper
@@ -18,14 +17,11 @@ import com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.*
 import com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager
-import com.lagradost.cloudstream3.desktop.utils.DeveloperModeManager
 import com.lagradost.cloudstream3.network.CloudflareKiller
-import com.lagradost.cloudstream3.utils.TestingUtils
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import com.lagradost.common.storage.DesktopDataStore
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -37,14 +33,9 @@ class SettingsViewModel : BaseMviViewModel<SettingsUiState, SettingsUiEvent, Set
     private val dbFile = File(PlatformPaths.dataDir, "cloudstream.db")
     private val logsDir = PlatformPaths.logsDir
 
-    private var providerTestJob: Job? = null
-    private var networkDiagJob: Job? = null
-    private var metaDiagJob: Job? = null
-
     init {
         updateState {
             copy(
-                isDevModeEnabled = DeveloperModeManager.isEnabled,
                 downloadPath = DesktopDownloadManager.downloadsDir.absolutePath,
                 screenshotPath = PlatformPaths.screenshotsDir.absolutePath,
             )
@@ -170,24 +161,6 @@ class SettingsViewModel : BaseMviViewModel<SettingsUiState, SettingsUiEvent, Set
             }
             is SettingsUiEvent.LaunchManualClearance -> {
                 launchManualClearance(event.url)
-            }
-            is SettingsUiEvent.UnlockDeveloperMode -> {
-                unlockDeveloperMode(event.password)
-            }
-            is SettingsUiEvent.SetDeveloperMode -> {
-                setDeveloperMode(event.enabled)
-            }
-            is SettingsUiEvent.StartProviderTests -> {
-                startProviderTests()
-            }
-            is SettingsUiEvent.CancelProviderTests -> {
-                cancelProviderTests()
-            }
-            is SettingsUiEvent.RunNetworkDiagnostics -> {
-                runNetworkDiagnostics()
-            }
-            is SettingsUiEvent.RunMetaDiagnostics -> {
-                runMetaDiagnostics()
             }
             is SettingsUiEvent.UpdateDownloadPath -> {
                 updateDownloadPath(event.path)
@@ -598,144 +571,6 @@ class SettingsViewModel : BaseMviViewModel<SettingsUiState, SettingsUiEvent, Set
                 }
             } catch (e: Exception) {
                 AppLogger.e("SettingsViewModel", "Failed to observe TorrServer download task", e)
-            }
-        }
-    }
-
-    private fun unlockDeveloperMode(password: String) {
-        if (password.trim().equals("banana", ignoreCase = true)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    DeveloperModeManager.setEnabled(true)
-                    updateState { copy(isDevModeEnabled = true, devModeError = null) }
-                } catch (e: Exception) {
-                    AppLogger.e("SettingsViewModel", "Failed to enable developer mode", e)
-                }
-            }
-        } else {
-            updateState { copy(devModeError = "Incorrect password. Try again.") }
-        }
-    }
-
-    private fun setDeveloperMode(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                DeveloperModeManager.setEnabled(enabled)
-                updateState { copy(isDevModeEnabled = enabled, devModeError = null) }
-            } catch (e: Exception) {
-                AppLogger.e("SettingsViewModel", "Failed to set developer mode", e)
-            }
-        }
-    }
-
-    private fun startProviderTests() {
-        cancelProviderTests()
-        val providers = APIHolder.allProviders.distinctBy { it::class.java.simpleName }.sortedBy { it.name }
-        updateState {
-            copy(
-                providerTestState = ProviderTestReportState(
-                    isRunning = true,
-                    results = emptyMap(),
-                    passed = 0,
-                    failed = 0,
-                    total = providers.size,
-                ),
-            )
-        }
-        providerTestJob = viewModelScope.launch(Dispatchers.IO) {
-            TestingUtils.getDeferredProviderTests(this, providers.toTypedArray()) { api, result ->
-                updateState {
-                    val newResults = providerTestState.results + (api.name to result)
-                    val passed = if (result.success) providerTestState.passed + 1 else providerTestState.passed
-                    val failed = if (!result.success) providerTestState.failed + 1 else providerTestState.failed
-                    val isRunning = newResults.size < providers.size
-                    copy(
-                        providerTestState = providerTestState.copy(
-                            results = newResults,
-                            passed = passed,
-                            failed = failed,
-                            isRunning = isRunning,
-                        ),
-                    )
-                }
-            }
-        }
-    }
-
-    private fun cancelProviderTests() {
-        providerTestJob?.cancel()
-        providerTestJob = null
-        updateState { copy(providerTestState = providerTestState.copy(isRunning = false)) }
-    }
-
-    private fun runNetworkDiagnostics() {
-        networkDiagJob?.cancel()
-        updateState {
-            copy(
-                diagnosticsState = diagnosticsState.copy(
-                    isNetworkTesting = true,
-                    results = emptyList(),
-                    currentTest = "Starting...",
-                ),
-            )
-        }
-        networkDiagJob = viewModelScope.launch(Dispatchers.IO) {
-            DiagnosticsRunner.runAll { result ->
-                updateState {
-                    copy(
-                        diagnosticsState = diagnosticsState.copy(
-                            results = diagnosticsState.results + result,
-                            currentTest = result.name,
-                        ),
-                    )
-                }
-            }
-            val formattedTime = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-            updateState {
-                copy(
-                    diagnosticsState = diagnosticsState.copy(
-                        isNetworkTesting = false,
-                        currentTest = "",
-                        lastRunTime = formattedTime,
-                    ),
-                )
-            }
-        }
-    }
-
-    private fun runMetaDiagnostics() {
-        metaDiagJob?.cancel()
-        updateState {
-            copy(
-                diagnosticsState = diagnosticsState.copy(
-                    isMetaTesting = true,
-                    results = diagnosticsState.results.filter { !it.name.startsWith("Provider:") },
-                    currentTest = "Starting metadata tests...",
-                ),
-            )
-        }
-        metaDiagJob = viewModelScope.launch(Dispatchers.IO) {
-            DiagnosticsRunner.runMetaProviders { result ->
-                updateState {
-                    copy(
-                        diagnosticsState = diagnosticsState.copy(
-                            results = diagnosticsState.results + result,
-                            currentTest = result.name,
-                        ),
-                    )
-                }
-            }
-            val formattedTime = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-            updateState {
-                copy(
-                    diagnosticsState = diagnosticsState.copy(
-                        isMetaTesting = false,
-                        currentTest = "",
-                        lastRunTime = formattedTime,
-                    ),
-                )
             }
         }
     }

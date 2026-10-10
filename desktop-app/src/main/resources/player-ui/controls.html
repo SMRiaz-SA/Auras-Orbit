@@ -4766,9 +4766,6 @@
 
     // Handles volume/mute/app-loading-status sent by Kotlin (separate from C++ state_update)
     const handleAppStateUpdate = (s) => {
-        if (s.debugWait !== undefined) window.debugWait = s.debugWait;
-        if (s.debugHasEver !== undefined) window.debugHasEver = s.debugHasEver;
-        if (s.debugPos !== undefined) window.debugPos = s.debugPos;
 
         if (typeof s.volume === 'number') {
             currentVolume = s.volume;

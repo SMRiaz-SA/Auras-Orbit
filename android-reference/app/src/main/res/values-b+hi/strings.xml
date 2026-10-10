@@ -40,7 +40,6 @@
     <string name="popup_resume_download">डाउनलोड फिर शुरू करें</string>
     <string name="popup_pause_download">डाउनलोड रोकें</string>
     <string name="home_more_info">और जानकारी</string>
-    <string name="home_expanded_hide">छिपाएं</string>
     <string name="home_play">चलाएं</string>
     <string name="home_info">जानकारी</string>
     <string name="filter_bookmarks">बुकमार्क छांटे</string>
@@ -50,7 +49,7 @@
     <string name="player_speed">प्लेयर स्पीड</string>
     <string name="search_provider_text_providers">प्रोवाइडरों का उपयोग कर खोजें</string>
     <string name="search_provider_text_types">प्रकार का उपयोग करके खोजें</string>
-    <string name="benene_count_text">%d केले डेवलपर्स को दिए गए</string>
+    <plurals name="benene_count_text"><item quantity="one">%d केले डेवलपर्स को दिए गए</item><item quantity="other">%d केले डेवलपर्स को दिए गए</item></plurals>
     <string name="benene_count_text_none">कोई केले नहीं दिए गए</string>
     <string name="subs_hold_to_reset_to_default">डिफ़ॉल्ट पर रीसेट करने के लिए दबाए रखें</string>
     <string name="continue_watching">देखना जारी रखें</string>
@@ -328,9 +327,6 @@
     <string name="episode_action_play_mirror">Play mirror</string>"
     <string name="show_hd">कितना hd है वो वाला लेबल</string>
     <string name="play_full_series_button">पूरी सीरीज़ शरु करे</string>
-    <string name="install_prerelease">प्री-रिलीज़ संस्करण स्थापित करें</string>
-    <string name="prerelease_already_installed">प्री-रिलीज़ पहले से ही स्थापित है।</string>
-    <string name="prerelease_install_failed">प्री-रिलीज़ इंस्टॉल करने में विफल रहा।</string>
     <string name="show_dub">डब लेबल</string>
     <string name="show_sub">सब लेबल</string>
     <string name="show_rating">रेटिंग लेबल</string>
@@ -413,5 +409,5 @@
     <string name="download_queue">कतार डाउनलोड करें</string>
     <string name="queue_empty_message">फिलहाल कोई डाउनलोड कतार में नहीं है।</string>
     <string name="extra_brightness_settings">अतिरिक्त चमक</string>
-    <string name="extra_brightness_settings_des">डिस्प्ले की चमक 100% से अधिक होने पर ब्राइटनेस फ़िल्टर चालू करें</string>
+    <string  name="extra_brightness_settings_des" formatted="false">डिस्प्ले की चमक 100% से अधिक होने पर ब्राइटनेस फ़िल्टर चालू करें</string>
 </resources>

@@ -80,7 +80,6 @@
     <string name="popup_resume_download">Letöltés folytatása</string>
     <string name="popup_pause_download">Letöltés szüneteltetése</string>
     <string name="home_more_info">Több információ</string>
-    <string name="home_expanded_hide">Elrejtés</string>
     <string name="home_play">Lejátszás</string>
     <string name="home_info">Információ</string>
     <string name="filter_bookmarks">Könyvjelző szűrése</string>
@@ -102,7 +101,7 @@
     <string name="subs_font">Betűtípus</string>
     <string name="search_provider_text_types">Keresés típusok szerint</string>
     <string name="search_provider_text_providers">Keresés szolgáltatók szerint</string>
-    <string name="benene_count_text">%d Banán adva a fejlesztőknek</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Banán adva a fejlesztőknek</item><item quantity="other">%d Banán adva a fejlesztőknek</item></plurals>
     <string name="subs_download_languages">Nyelvek letöltése</string>
     <string name="subs_hold_to_reset_to_default">Tartsa lenyomva az alapértelmezett érték visszaállításához</string>
     <string name="subs_import_text" formatted="true">Betűtípusok importálása %s</string>
@@ -361,7 +360,7 @@
     <string name="subscription_new">Feliratkozott a következőre: %s</string>
     <string name="example_site_name">ÚjOldalNév</string>
     <string name="quality_dvd">DVD</string>
-    <string name="plugins_updated" formatted="true">%d plugin frissítve</string>
+    <plurals name="plugins_updated"><item quantity="one">%d plugin frissítve</item><item quantity="other">%d plugin frissítve</item></plurals>
     <string name="extension_rating" formatted="true">Értékelés: %s</string>
     <string name="clear_history">Előzmények törlése</string>
     <string name="no">Nem</string>
@@ -581,15 +580,12 @@
     <string name="play_full_series_button">Teljes sorozat lejátszása</string>
     <string name="queue_empty_message">Jelenleg nincs sorban álló letöltés.</string>
     <string name="extra_brightness_settings">Extra fényerő</string>
-    <string name="extra_brightness_settings_des">A fényerő szűrő engedélyezése, ha a kijelző fényereje meghaladja a 100% -ot</string>
+    <string  name="extra_brightness_settings_des" formatted="false">A fényerő szűrő engedélyezése, ha a kijelző fényereje meghaladja a 100% -ot</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="search_suggestions">Keresési javaslatok</string>
     <string name="search_suggestions_des">Mutasson keresési javaslatok gépelés közben</string>
     <string name="clear_suggestions">Javaslatok törlése</string>
     <string name="show_cast_in_details">Szereplők panel megjelenítése</string>
-    <string name="install_prerelease">Telepít kiadás előtti verziót</string>
-    <string name="prerelease_already_installed">Az előzetes verzió már telepítve van.</string>
-    <string name="prerelease_install_failed">Az előzetes verzió telepítése sikertelen.</string>
     <string name="delete_files">Fájlok törlése</string>
     <string name="delete_message_series_only" formatted="true">Biztosan törölni szeretné az alábbi sorozat összes megjelenését?\n\n%s</string>
     <string name="resume_remaining" formatted="true">%s \nmaradék</string>
@@ -603,7 +599,7 @@
     <string name="delete_format" formatted="true">Törlés (%1$d | %2$s)</string>
     <string name="test_warning">Figyelem</string>
     <string name="delete_message_multiple" formatted="true">Biztosan véglegesen szeretné törölni a következő tételeket?\n\n%s</string>
-    <string name="delete_message_series_episodes" formatted="true">Biztosan véglegesen szeretné törölni a következő epizódokat?\n\n%2$s</string>
+    <string name="delete_message_series_episodes" formatted="true">Biztosan véglegesen szeretné törölni a(z) %1$s sorozat következő epizódjait?\n\n%2$s</string>
     <string name="delete_message_series_section" formatted="true">A következő sorozatok összes epizódját is véglegesen törli:\n\n%s</string>
     <string name="episode_action_play_mirror">Lejátszás tükrözve</string>"
     <string name="show_rating">Értékelési címke</string>

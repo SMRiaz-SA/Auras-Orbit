@@ -8,6 +8,14 @@ enum class FilmographyCategory {
     TV_SHOWS,
 }
 
+data class TmdbPersonCandidate(
+    val tmdbId: Int,
+    val name: String,
+    val profileUrl: String?,
+    val knownForDepartment: String?,
+    val knownFor: List<String>,
+)
+
 data class PersonMediaCredit(
     val tmdbId: Int,
     val title: String,

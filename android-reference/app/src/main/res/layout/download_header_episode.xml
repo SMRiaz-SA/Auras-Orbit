@@ -78,22 +78,25 @@
                 tools:text="Perfect Run" />
 
             <TextView
+                android:id="@+id/download_header_type"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:background="@drawable/auras_media_type_badge"
+                android:paddingHorizontal="7dp"
+                android:paddingVertical="3dp"
+                android:textColor="@color/aurasText"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                tools:text="TV SHOW" />
+
+            <TextView
                 android:id="@+id/download_header_info"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="?attr/grayTextColor"
                 tools:text="1 episode | 285MB" />
         </LinearLayout>
-
-        <ImageView
-            android:id="@+id/download_header_goto_child"
-            android:layout_width="@dimen/download_size"
-            android:layout_height="@dimen/download_size"
-            android:layout_gravity="center_vertical|end"
-            android:layout_marginStart="-50dp"
-            android:contentDescription="@string/download"
-            android:padding="10dp"
-            android:src="@drawable/ic_baseline_keyboard_arrow_right_24" />
 
         <com.lagradost.cloudstream3.ui.download.button.PieFetchButton
             android:id="@+id/download_button"

@@ -163,7 +163,9 @@
         android:orientation="horizontal"
         android:paddingHorizontal="0dp">
 
+        <!-- Keep a 50dp focus/click target around the smaller profile card. -->
         <LinearLayout
+            tools:ignore="UselessParent"
             android:id="@+id/alternate_home_head_profile_padding"
             android:layout_width="50dp"
             android:layout_height="50dp"
@@ -213,9 +215,7 @@
             android:background="?android:attr/selectableItemBackground"
             android:contentDescription="@string/home_more_info"
             android:padding="12dp"
-            android:text="@string/continue_watching"
-            app:drawableRightCompat="@drawable/ic_baseline_arrow_forward_24"
-            app:drawableTint="?attr/white" />
+            android:text="@string/continue_watching" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/home_watch_child_recyclerview"
@@ -318,14 +318,6 @@
 
             </HorizontalScrollView>
 
-            <ImageView
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_gravity="end"
-                android:layout_marginEnd="12dp"
-                android:contentDescription="@string/home_more_info"
-                android:src="@drawable/ic_baseline_arrow_forward_24"
-                app:drawableTint="?attr/white" />
         </FrameLayout>
 
         <androidx.recyclerview.widget.RecyclerView

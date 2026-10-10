@@ -620,7 +620,7 @@
         <item name="android:windowIsFloating">false</item>
         <item name="android:navigationBarColor">?attr/primaryBlackBackground</item>
         <item name="android:statusBarColor">?attr/primaryBlackBackground</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="m">?attr/isLightTheme</item>
+        <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
     </style>
 
     <style name="DialogHalfFullscreen" parent="AlertDialogCustom">
@@ -653,11 +653,6 @@
         <item name="seekBarPreferenceStyle">@style/CustomSeekBarPreferenceStyle</item>
     </style>
 
-    <!--
-    <style name="CustomPreferenceCategoryStyle" parent="@style/Preference.Category.Material">
-        <item name="android:layout">@layout/custom_preference_category_material</item>
-    </style>-->
-
     <style name="CustomSwitchPreferenceStyle" parent="@style/Preference.SwitchPreference.Material">
         <item name="android:layout">@layout/custom_preference_material</item>
     </style>
@@ -680,7 +675,6 @@
         <item name="android:background">?attr/focusBackground</item>
         <item name="android:textColor">?attr/textColor</item>
         <item name="android:textAppearance">?android:attr/textAppearanceListItemSmall</item>
-        <item name="drawableEndCompat">@drawable/ic_baseline_keyboard_arrow_right_24</item>
     </style>
 
     <style name="WatchHeaderText">
@@ -1051,11 +1045,8 @@
         <item name="castPlayButtonDrawable">@drawable/ic_baseline_play_arrow_24</item>
         <item name="castPauseButtonDrawable">@drawable/netflix_pause</item>
         <item name="castStopButtonDrawable">@drawable/cast_ic_expanded_controller_stop</item>
-        <item name="castSkipPreviousButtonDrawable">
-            @drawable/cast_ic_expanded_controller_skip_previous
-        </item>
-        <item name="castSkipNextButtonDrawable">@drawable/cast_ic_expanded_controller_skip_next
-        </item>
+        <item name="castSkipPreviousButtonDrawable">@drawable/cast_ic_expanded_controller_skip_previous</item>
+        <item name="castSkipNextButtonDrawable">@drawable/cast_ic_expanded_controller_skip_next</item>
         <item name="castRewind30ButtonDrawable">@drawable/go_back_30</item>
         <item name="castForward30ButtonDrawable">@drawable/go_forward_30</item>
     </style>
@@ -1071,8 +1062,7 @@
         <item name="castProgressBarColor">?attr/colorPrimary</item>
         <item name="castStopButtonDrawable">@drawable/cast_ic_mini_controller_stop</item>'
         <item name="castLargeStopButtonDrawable">@drawable/cast_ic_mini_controller_stop_large</item>
-        <item name="castSkipPreviousButtonDrawable">@drawable/cast_ic_mini_controller_skip_prev
-        </item>
+        <item name="castSkipPreviousButtonDrawable">@drawable/cast_ic_mini_controller_skip_prev</item>
         <item name="castSkipNextButtonDrawable">@drawable/cast_ic_mini_controller_skip_next</item>
         <item name="castRewind30ButtonDrawable">@drawable/go_back_30</item>
         <item name="castForward30ButtonDrawable">@drawable/go_forward_30</item>

@@ -75,7 +75,6 @@
     <string name="download_done">Скачивание закончено</string>
     <string name="home_info">Инфо</string>
     <string name="update_started">Обновление началось</string>
-    <string name="home_expanded_hide">Прятать</string>
     <string name="home_play">Смотреть</string>
     <string name="home_more_info">Подробнее</string>
     <string name="filter_bookmarks">Фильтр закладки</string>
@@ -101,7 +100,7 @@
     <string name="subs_subtitle_elevation">Подъем субтитров</string>
     <string name="search_provider_text_providers">Поиск с использованием поставщиков</string>
     <string name="search_provider_text_types">Поиск с использованием типов</string>
-    <string name="benene_count_text">%d бенен(а/ов) выдано разработчикам</string>
+    <plurals name="benene_count_text"><item quantity="one">%d бенен(а/ов) выдано разработчикам</item><item quantity="other">%d бенен(а/ов) выдано разработчикам</item><item quantity="few">%d бенен(а/ов) выдано разработчикам</item><item quantity="many">%d бенен(а/ов) выдано разработчикам</item></plurals>
     <string name="benene_count_text_none">Бенены не выданы</string>
     <string name="subs_auto_select_language">Автоматический выбор языка</string>
     <string name="subs_download_languages">Скачать языки</string>
@@ -438,7 +437,7 @@
     <string name="download_all_plugins_from_repo">Внимание: Auras Orbit не несёт ответственность за сторонние файлы и не поддерживает их!</string>
     <string name="safe_mode_title">Включен безопасный режим</string>
     <string name="plugins_downloaded" formatted="true">Скачано: %d</string>
-    <string name="plugins_updated" formatted="true">Обновлено %d дополнений</string>
+    <plurals name="plugins_updated"><item quantity="one">Обновлено %d дополнений</item><item quantity="other">Обновлено %d дополнений</item><item quantity="few">Обновлено %d дополнений</item><item quantity="many">Обновлено %d дополнений</item></plurals>
     <string name="player_load_subtitles_online">Скачивать из интернета</string>
     <string name="update_notification_downloading">Скачивание обновления приложения…</string>
     <string name="error_invalid_url">Недопустимый URL</string>
@@ -637,9 +636,6 @@
     <string name="subtitles_from_online">Из сети</string>
     <string name="sort_episodes_number_desc">Серия (по убыванию)</string>
     <string name="sort_episodes_rating_high_low">Оценка (Наивысший)</string>
-    <string name="sort_button_episode">Сер %s</string>
-    <string name="sort_button_rating">Оценка %s</string>
-    <string name="sort_button_date">Дата %s</string>
     <string name="sort_episodes_date_newest">Дата выпуска (Новейшие)</string>
     <string name="software_decoding_desc">Программное декодирование позволяет проигрователю воспроизводить видео, которые не поддерживаются вашим устройством, но может быть с задержками или нестабильным воспроизведением при высоком разрешении.</string>
     <string name="software_decoding">Программное декодирование</string>
@@ -649,7 +645,7 @@
     <string name="speech_recognition_unavailable">Распознавание речи недоступно</string>
     <string name="begin_speaking">Начните говорить…</string>
     <string name="starting_plugin_update_manually">Начало процесса обновления дополнения!</string>
-    <string name="plugins_updated_manually">Успешно обновлено %d дополнений!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Успешно обновлено %d дополнений!</item><item quantity="other">Успешно обновлено %d дополнений!</item><item quantity="few">Успешно обновлено %d дополнений!</item><item quantity="many">Успешно обновлено %d дополнений!</item></plurals>
     <string name="no_plugins_updated_manually">Дополнений не было обновлено.</string>
     <string name="player_notification_channel_name">Уведомления плеера</string>
     <string name="sort_episodes_date_oldest">Дата выпуска (Старейшие)</string>
@@ -659,7 +655,7 @@
     <string name="background_radius">Радиус фона</string>
     <string name="all_subtitles_bold">Сделать все субтитры жирными</string>
     <string name="all_subtitles_italic">Сделать все субтитры курсивом</string>
-    <string name="volume_exceeded_100">Громкость превысила 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Громкость превысила 100%</string>
     <string name="slide_up_again_to_exceed_100">Повысьте снова чтобы перевысить 100%</string>
     <string name="go_to_downloads">Перейти к загрузкам</string>
     <string name="no_internet_connection">Нет подключения к Интернету.\n\nПожалуйста, подключитесь к Интернету и повторите попытку, или смотрите свои загрузки, находясь в автономном режиме.</string>
@@ -702,9 +698,6 @@
     <string name="top_center">Верхний центр</string>
     <string name="top_right">Верхний справа</string>
     <string name="play_full_series_button">Смотреть полностью</string>
-    <string name="install_prerelease">Установить предварительный выпуск</string>
-    <string name="prerelease_already_installed">Предварительный выпуск уже установлен.</string>
-    <string name="prerelease_install_failed">Не удалось установить предварительный выпуск.</string>
     <string name="show_episode_text">Текст эпизода</string>
     <string name="search_suggestions">Поиск предложений</string>
     <string name="search_suggestions_des">Показывать подсказки поиска при вводе текста</string>
@@ -727,7 +720,7 @@
     <string name="download_queue">Очередь загрузок</string>
     <string name="queue_empty_message">В настоящее время нет загрузок в очереди.</string>
     <string name="extra_brightness_settings">Дополнительная яркость</string>
-    <string name="extra_brightness_settings_des">Включать фильтр яркости при превышении 100% яркости</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Включать фильтр яркости при превышении 100% яркости</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="source_priority">Приоритетный источник</string>
     <string name="source_priority_help">Выберите способ сортировки видеоисточников в плеере</string>

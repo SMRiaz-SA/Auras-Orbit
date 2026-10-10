@@ -18,6 +18,7 @@
         android:layout_height="32dp"
         android:layout_gravity="start|center_vertical"
         android:layout_marginEnd="16dp"
+        android:contentDescription="@null"
         android:scaleType="fitCenter"
         app:srcCompat="@drawable/ic_github_logo" />
 
@@ -47,7 +48,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:layout_marginEnd="5dp"
-                android:text="🇷🇼"
+                tools:text="🇷🇼"
 
                 android:textColor="?attr/grayTextColor"
                 android:visibility="gone"
@@ -59,7 +60,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:layout_marginEnd="5dp"
-                android:text="v1"
+                tools:text="v1"
                 android:textColor="?attr/grayTextColor"
                 android:visibility="gone"
                 tools:visibility="visible" />
@@ -70,7 +71,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:layout_marginEnd="5dp"
-                android:text="100MB"
+                tools:text="100MB"
                 android:textColor="?attr/grayTextColor"
                 android:visibility="gone"
                 tools:visibility="visible" />
@@ -141,7 +142,7 @@
         android:contentDescription="@string/download"
         android:focusable="true"
         android:nextFocusLeft="@id/action_settings"
-        android:nextFocusRight="@id/add_repo_button_imageview"
+        android:nextFocusRight="@id/add_repo_button"
         android:padding="12dp"
         tools:src="@drawable/ic_baseline_add_24" />
 

@@ -50,8 +50,6 @@ class EmbeddedPlayerViewModel(
     }
 
     init {
-        PlayerDiagnosticsHolder.register(playerState)
-
         viewModelScope.launch(Dispatchers.IO) {
             val autoPlay = DesktopDataStore.getKey<Boolean>(PlayerConfig.PREF_AUTO_PLAY) ?: true
             updateState { copy(autoPlayEnabled = autoPlay) }
@@ -132,7 +130,6 @@ class EmbeddedPlayerViewModel(
         timeoutJob?.cancel()
         loadLinksJob?.cancel()
         com.lagradost.cloudstream3.desktop.discord.DiscordRpcManager.onPlayerStopped()
-        PlayerDiagnosticsHolder.unregister(playerState)
         kotlinx.coroutines.runBlocking(Dispatchers.IO) {
             pendingSave?.join()
         }

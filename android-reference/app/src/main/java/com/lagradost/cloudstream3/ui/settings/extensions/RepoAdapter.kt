@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.ui.settings.extensions
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.RepositoryItemBinding
 import com.lagradost.cloudstream3.databinding.RepositoryItemTvBinding
@@ -25,6 +26,13 @@ class RepoAdapter(
     NoStateAdapter<RepositoryData>(diffCallback = BaseDiffCallback(itemSame = { a, b ->
         a.url == b.url
     })) {
+
+    private var catalogSummaries: Map<String, ExtensionsViewModel.RepositoryCatalogSummary> = emptyMap()
+
+    fun updateCatalogSummaries(summaries: Map<String, ExtensionsViewModel.RepositoryCatalogSummary>) {
+        catalogSummaries = summaries
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+    }
 
     override fun onCreateContent(parent: ViewGroup): ViewHolderState<Any> {
         val layout = if (isLayout(TV)) RepositoryItemTvBinding.inflate(
@@ -53,21 +61,25 @@ class RepoAdapter(
         when (val binding = holder.view) {
             is RepositoryItemTvBinding -> {
                 binding.apply {
-                    // Only shows icon if on setup or if it isn't a prebuilt repo.
-                    // No delete buttons on prebuilt repos.
-                    if (!isPrebuilt || isSetup) {
+                    val hasAction = !isPrebuilt || isSetup
+                    actionButton.isVisible = hasAction
+                    actionButton.isFocusable = hasAction
+                    actionButton.isClickable = hasAction
+                    if (hasAction) {
                         actionButton.setImageResource(drawable)
-                    }
-
-                    actionButton.setOnClickListener {
-                        imageClickCallback(item)
+                        actionButton.contentDescription = root.context.getString(
+                            if (isSetup) R.string.download else R.string.delete_repository
+                        )
+                        actionButton.setOnClickListener {
+                            imageClickCallback(item)
+                        }
                     }
 
                     repositoryItemRoot.setOnClickListener {
                         clickCallback(item)
                     }
                     mainText.text = item.name
-                    subText.text = item.url
+                    subText.text = item.catalogSubtitle(binding.root.context)
                     if (!item.iconUrl.isNullOrEmpty()) {
                         entryIcon.loadImage(item.iconUrl) {
                             error(
@@ -85,14 +97,18 @@ class RepoAdapter(
 
             is RepositoryItemBinding -> {
                 binding.apply {
-                    // Only shows icon if on setup or if it isn't a prebuilt repo.
-                    // No delete buttons on prebuilt repos.
-                    if (!isPrebuilt || isSetup) {
+                    val hasAction = !isPrebuilt || isSetup
+                    actionButton.isVisible = hasAction
+                    actionButton.isFocusable = hasAction
+                    actionButton.isClickable = hasAction
+                    if (hasAction) {
                         actionButton.setImageResource(drawable)
-                    }
-
-                    actionButton.setOnClickListener {
-                        imageClickCallback(item)
+                        actionButton.contentDescription = root.context.getString(
+                            if (isSetup) R.string.download else R.string.delete_repository
+                        )
+                        actionButton.setOnClickListener {
+                            imageClickCallback(item)
+                        }
                     }
 
                     repositoryItemRoot.setOnClickListener {
@@ -107,7 +123,7 @@ class RepoAdapter(
                     }
 
                     mainText.text = item.name
-                    subText.text = item.url
+                    subText.text = item.catalogSubtitle(binding.root.context)
                     if (!item.iconUrl.isNullOrEmpty()) {
                         entryIcon.loadImage(item.iconUrl) {
                             error(
@@ -123,6 +139,18 @@ class RepoAdapter(
                 }
             }
         }
+    }
+
+    private fun RepositoryData.catalogSubtitle(context: android.content.Context): String {
+        val summary = catalogSummaries[url] ?: return url
+        if (!summary.isAvailable) return context.getString(R.string.repository_connection_unavailable)
+
+        val providerCount = summary.providerCount ?: 0
+        return context.resources.getQuantityString(
+            R.plurals.repository_connected_provider_count,
+            providerCount,
+            providerCount,
+        )
     }
 
     companion object {

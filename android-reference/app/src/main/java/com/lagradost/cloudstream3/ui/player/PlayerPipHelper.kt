@@ -8,9 +8,11 @@ import android.app.RemoteAction
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.util.Rational
+import android.view.View
 import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
@@ -105,7 +107,8 @@ object PlayerPipHelper {
         activity: Activity?,
         status: CSPlayerLoading,
         pipEnabled: Boolean,
-        aspectRatio: Rational?
+        aspectRatio: Rational?,
+        sourceView: View? = null
     ) {
         // Is it even desired to enter pip mode right now if we ignore all settings?
         // This does not check for isPIPPossible as that is deferred to later
@@ -155,7 +158,7 @@ object PlayerPipHelper {
                 getRemoteAction(
                     activity,
                     R.drawable.ic_baseline_play_arrow_24,
-                    R.string.pause,
+                    R.string.home_play,
                     CSPlayerEvent.Play
                 )
             )
@@ -181,6 +184,7 @@ object PlayerPipHelper {
             aspectRatio?.toFloat()?.coerceIn(mixAspectRatio, maxAspectRatio)?.let {
                 Rational((it * ratioAccuracy).roundToInt(), ratioAccuracy)
             }
+        val sourceRect = Rect().takeIf { rect -> sourceView?.getGlobalVisibleRect(rect) == true }
 
         safe {
             activity.setPictureInPictureParams(
@@ -197,6 +201,7 @@ object PlayerPipHelper {
                     }
                     .setAspectRatio(fixedRational)
                     .setActions(actions)
+                    .apply { sourceRect?.let { setSourceRectHint(it) } }
                     .build()
             )
         }

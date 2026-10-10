@@ -65,7 +65,6 @@
     <string name="pick_subtitle">Titulky</string>
     <string name="play_episode">Prehrať epizódu</string>
     <string name="popup_pause_download">Pozastaviť sťahovanie</string>
-    <string name="home_expanded_hide">Skryť</string>
     <string name="filter_bookmarks">Filtrovať záložky</string>
     <string name="action_remove_from_bookmarks">Odstrániť</string>
     <string name="sort_apply">Použiť</string>
@@ -89,7 +88,7 @@
     <string name="subs_font_size">Veľkosť písma</string>
     <string name="benene_count_text_none">Nedarovali ste žiadne benény</string>
     <string name="subs_hold_to_reset_to_default">Podržaním obnovíte predvolené nastavenia</string>
-    <string name="benene_count_text">%d benénov darovaných vývojárom</string>
+    <plurals name="benene_count_text"><item quantity="one">%d benénov darovaných vývojárom</item><item quantity="other">%d benénov darovaných vývojárom</item><item quantity="few">%d benénov darovaných vývojárom</item><item quantity="many">%d benénov darovaných vývojárom</item></plurals>
     <string name="subs_download_languages">Stiahnuť jazyky</string>
     <string name="action_remove_watching">Odstrániť</string>
     <string name="vpn_torrent">Tento poskytovateľ je torrent, odporúča sa VPN</string>
@@ -461,14 +460,11 @@
     <string name="queue_empty_message">Momentálne nie sú žiadne sťahovania v poradí.</string>
     <string name="result_search_tooltip">Vyhľadávanie v iných rozšíreniach</string>
     <string name="extra_brightness_settings">Extra Jas</string>
-    <string name="extra_brightness_settings_des">Spustiť filter jasu, keď je prekročený 100% jas displeja</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Spustiť filter jasu, keď je prekročený 100% jas displeja</string>
     <string name="extra_brightness_key">extra_jas_zapnuty</string>
     <string name="search_suggestions">Návrhy vyhľadávania</string>
     <string name="search_suggestions_des">Zobraziť návrhy vyhľadávania pri písaní</string>
     <string name="clear_suggestions">Vyčistiť Návrhy</string>
-    <string name="install_prerelease">Nainštalujte pre-release verziu</string>
-    <string name="prerelease_already_installed">Pre-release je už nainštalovaný.</string>
-    <string name="prerelease_install_failed">Nepodarilo sa nainštalovať pre-release.</string>
     <string name="unsupported_error">Nepodporovaná chyba</string>
     <string name="show_episode_text">Text Epizódy</string>
     <string name="auth_locally">Lokálna verifikácia</string>

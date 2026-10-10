@@ -15,6 +15,8 @@ import com.lagradost.cloudstream3.databinding.HomeResultGridBinding
 import com.lagradost.cloudstream3.databinding.HomeResultGridExpandedBinding
 import com.lagradost.cloudstream3.ui.BaseAdapter
 import com.lagradost.cloudstream3.ui.BaseDiffCallback
+import com.lagradost.cloudstream3.ui.LANDSCAPE_ART_ASPECT_RATIO
+import com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO
 import com.lagradost.cloudstream3.ui.ViewHolderState
 import com.lagradost.cloudstream3.ui.newSharedPool
 import com.lagradost.cloudstream3.ui.search.SEARCH_ACTION_LOAD
@@ -25,6 +27,7 @@ import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.utils.UIHelper.isBottomLayout
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
+import kotlin.math.roundToInt
 
 class HomeScrollViewHolderState(view: ViewBinding) : ViewHolderState<Boolean>(view) {
     // very shitty that we cant store the state when the view clears,
@@ -131,12 +134,12 @@ open class HomeChildItemAdapter(
         setWidth = if (!isHorizontal) {
             minPosterSize
         } else {
-            maxPosterSize
+            landscapePosterWidth
         }
         setHeight = if (!isHorizontal) {
             maxPosterSize
         } else {
-            minPosterSize
+            landscapePosterHeight
         }
     }
 
@@ -166,14 +169,18 @@ open class HomeChildItemAdapter(
 
         var minPosterSize: Int = 0
         var maxPosterSize: Int = 0
+        private var landscapePosterWidth: Int = 0
+        private var landscapePosterHeight: Int = 0
 
         fun updatePosterSize(context: Context, value: Int? = null) {
             val scale = value ?: PreferenceManager.getDefaultSharedPreferences(context)
                 ?.getInt(context.getString(R.string.poster_size_key), 0) ?: 0
             // Scale by +10% per step
             val mul = 1.0f + scale * 0.1f
-            minPosterSize = (114.toPx.toFloat() * mul).toInt()
-            maxPosterSize = (180.toPx.toFloat() * mul).toInt()
+            minPosterSize = (114.toPx.toFloat() * mul).roundToInt()
+            maxPosterSize = (minPosterSize / PORTRAIT_POSTER_ASPECT_RATIO).roundToInt()
+            landscapePosterWidth = (180.toPx.toFloat() * mul).roundToInt()
+            landscapePosterHeight = (landscapePosterWidth / LANDSCAPE_ART_ASPECT_RATIO).roundToInt()
         }
 
         fun updateLayoutParms(layout: FrameLayout, width: Int, height: Int) {

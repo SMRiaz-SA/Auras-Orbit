@@ -56,7 +56,6 @@
     <string name="popup_resume_download">Atsākt ielādi</string>
     <string name="popup_pause_download">Pauzēt ielādi</string>
     <string name="home_more_info">Vairāk informācijas</string>
-    <string name="home_expanded_hide">Slēpt</string>
     <string name="home_play">Atskaņot</string>
     <string name="home_info">Informācija</string>
     <string name="filter_bookmarks">Filtra bookmarks</string>
@@ -76,7 +75,7 @@
     <string name="subs_font_size">Fonta lielums</string>
     <string name="search_provider_text_providers">Meklēt pēc pakalpojumu sniedzējiem</string>
     <string name="search_provider_text_types">Meklēt pēc tipiem</string>
-    <string name="benene_count_text">%d Banāni iedoti veidotājiem</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Banāni iedoti veidotājiem</item><item quantity="other">%d Banāni iedoti veidotājiem</item><item quantity="zero">%d Banāni iedoti veidotājiem</item></plurals>
     <string name="next_episode_format" formatted="true">%d. epizode būs pieejama</string>
     <string name="filler" formatted="true">Filtrs</string>
     <string name="title_downloads">Lejupielādes</string>
@@ -401,7 +400,7 @@
     <string name="plugins_downloaded" formatted="true">Lejupielādēts: %d</string>
     <string name="plugins_disabled" formatted="true">Atspējots: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Nelejupielādēts: %d</string>
-    <string name="plugins_updated" formatted="true">Atjaunināti %d papildinājumi</string>
+    <plurals name="plugins_updated"><item quantity="one">Atjaunināti %d papildinājumi</item><item quantity="other">Atjaunināti %d papildinājumi</item><item quantity="zero">Atjaunināti %d papildinājumi</item></plurals>
     <string name="view_public_repositories_button">Skatīt kopienas repozitorijus</string>
     <string name="view_public_repositories_button_short">Publiskais saraksts</string>
     <string name="uppercase_all_subtitles">Visi subtitri ar lielajiem burtiem</string>
@@ -570,7 +569,7 @@
     <string name="update_plugins">Atjaunināt papildinājumus</string>
     <string name="update_plugins_manually">Atjaunināt papildinājumus manuāli</string>
     <string name="starting_plugin_update_manually">Sāk papildinājuma atjaunināšanas procesu!</string>
-    <string name="plugins_updated_manually">Veiksmīgi atjaunināts(-i) %d papildinājums(-i)</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Veiksmīgi atjaunināts(-i) %d papildinājums(-i)</item><item quantity="other">Veiksmīgi atjaunināts(-i) %d papildinājums(-i)</item><item quantity="zero">Veiksmīgi atjaunināts(-i) %d papildinājums(-i)</item></plurals>
     <string name="no_plugins_updated_manually">Neviens papildinājums netika atjaunināts.</string>
     <string name="result_search_tooltip">Meklēt citos papildinājumos</string>
     <string name="test_extensions">Pārbaudīt visus papildinājumus</string>

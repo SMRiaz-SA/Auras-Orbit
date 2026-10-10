@@ -94,7 +94,9 @@
         </GridLayout>
     </androidx.cardview.widget.CardView>
 
+    <!-- Text and rules remain separate so the separator lines do not enter the text hit target. -->
     <LinearLayout
+        tools:ignore="UseCompoundDrawables"
         android:visibility="gone"
         tools:visibility="visible"
         android:id="@+id/separator_holder"
@@ -112,7 +114,7 @@
 
         </TextView>
 
-        <ImageView
+        <ImageView android:contentDescription="@null"
             android:layout_width="match_parent"
             android:layout_height="5dp"
             android:src="@drawable/dashed_line_horizontal" />

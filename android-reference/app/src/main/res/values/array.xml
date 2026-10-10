@@ -333,7 +333,7 @@
     <string-array name="extension_statuses">
         <item>Down</item>
         <!-- "Ok" is usually capitalized as "OK". Ok android studio 🤓-->
-        <item>Ok</item>
+        <item>OK</item>
         <item>Slow</item>
         <item>Beta</item>
     </string-array>

@@ -64,7 +64,7 @@
             android:layout_marginStart="5dp"
             android:layout_gravity="center">
 
-            <ImageView
+            <ImageView android:contentDescription="@string/play_episode"
                 android:id="@+id/episode_play_icon"
                 style="@style/ContinueWatchingPlayUnderlayProgress"
                 android:layout_margin="4dp"/>

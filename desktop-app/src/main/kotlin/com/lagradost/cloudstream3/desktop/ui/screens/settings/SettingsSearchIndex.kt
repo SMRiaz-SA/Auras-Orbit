@@ -110,18 +110,13 @@ object SettingsSearchIndex {
 
         // Network tab
         SettingsSearchEntry("DNS over HTTPS (DoH)", LeafTab.NETWORK, listOf("dns", "https", "doh", "cloudflare", "quad9", "adguard", "google", "network", "isp", "bypass"), uiLabel = "DNS over HTTPS (DoH)"),
-        SettingsSearchEntry("Experimental & Scraper Engine", LeafTab.NETWORK, listOf("security", "cloudflare", "scraper", "solver", "captcha", "bypass"), uiLabel = "Experimental & Scraper Engine"),
+        SettingsSearchEntry("Cloudflare & Scraper Engine", LeafTab.NETWORK, listOf("security", "cloudflare", "scraper", "solver", "captcha", "bypass"), uiLabel = "Cloudflare & Scraper Engine"),
 
         // Advanced tab
         SettingsSearchEntry("Storage Directories", LeafTab.ADVANCED, listOf("storage", "directory", "path", "files", "data", "appdata", "roaming"), uiLabel = "Storage Directories"),
         SettingsSearchEntry("Clear Image Cache", LeafTab.ADVANCED, listOf("clear", "image", "cache", "storage", "disk", "free space"), uiLabel = "Clear Image Cache"),
         SettingsSearchEntry("Cloned Sites & Custom Provider URLs", LeafTab.ADVANCED, listOf("clone", "provider", "custom", "url", "override", "mirror", "domain"), uiLabel = "Cloned Sites & Custom URLs"),
         SettingsSearchEntry("Factory Reset / Danger Zone", LeafTab.ADVANCED, listOf("reset", "wipe", "delete", "factory", "clear all", "reinstall"), uiLabel = "Danger Zone"),
-
-        // Developer tab
-        SettingsSearchEntry("Provider Testing & Benchmarking", LeafTab.DEVELOPER, listOf("developer", "provider", "test", "debug", "benchmark", "extractor"), uiLabel = "Provider Testing"),
-        SettingsSearchEntry("Network Diagnostics", LeafTab.DEVELOPER, listOf("network", "diagnostics", "debug", "ping", "connectivity"), uiLabel = "Network Diagnostics"),
-        SettingsSearchEntry("Logcat Live Viewer", LeafTab.DEVELOPER, listOf("logcat", "logs", "debug", "crash", "console", "f12"), uiLabel = "Logcat Viewer"),
 
         // About tab
         SettingsSearchEntry("Check for App Updates", LeafTab.ABOUT, listOf("update", "version", "check", "new", "release", "download"), uiLabel = "Check for Updates"),

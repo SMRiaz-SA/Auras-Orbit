@@ -68,7 +68,6 @@
     <string name="popup_resume_download">Retomar Transferência</string>
     <string name="popup_pause_download">Pausar Transferência</string>
     <string name="home_more_info">Mais info</string>
-    <string name="home_expanded_hide">Esconder</string>
     <string name="home_play">Reproduzir</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Filtrar Marcadores</string>
@@ -91,7 +90,7 @@
     <string name="subs_font_size">Tamanho da Fonte</string>
     <string name="search_provider_text_providers">Procurar usando fornecedores</string>
     <string name="search_provider_text_types">Procurar usando tipos</string>
-    <string name="benene_count_text">%d Benenes dadas aos devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes dadas aos devs</item><item quantity="other">%d Benenes dadas aos devs</item><item quantity="many">%d Benenes dadas aos devs</item></plurals>
     <string name="benene_count_text_none">Nenhum Benene dada</string>
     <string name="subs_auto_select_language">Auto-seleção de Idioma</string>
     <string name="subs_download_languages">Transferir Idiomas</string>
@@ -238,7 +237,7 @@
     <string name="skip_update">Saltar esta Atualização</string>
     <string name="update">Atualizar</string>
     <string name="watch_quality_pref">Qualidade Preferida (WiFi)</string>
-    <string name="limit_title">Máximo de caracteres do título no player de video</string>
+    <string name="limit_title">Máximo de caracteres do título no player de vídeo</string>
     <string name="limit_title_rez">Mostrar informações do player de vídeo</string>
     <string name="video_buffer_size_settings">Tamanho do buffer do vídeo</string>
     <string name="video_buffer_length_settings">Comprimento do buffer do vídeo</string>
@@ -457,7 +456,7 @@
     <string name="revert">Reverter</string>
     <string name="network_adress_example">https://example.com/example.mp4</string>
     <string name="plugin_downloaded">Plugins baixados</string>
-    <string name="plugins_updated" formatted="true">%d plugins atualizados</string>
+    <plurals name="plugins_updated"><item quantity="one">%d plugins atualizados</item><item quantity="other">%d plugins atualizados</item><item quantity="many">%d plugins atualizados</item></plurals>
     <string name="skip_type_format" formatted="true">Pular %s</string>
     <string name="skip_type_mixed_op">Abertura mista</string>
     <string name="sort_alphabetical_z">Alfabético (Z a A)</string>
@@ -467,7 +466,7 @@
     <string name="video_tracks">Faixas de vídeo</string>
     <string name="delayed_update_notice">O aplicativo será atualizado ao sair</string>
     <string name="subscription_in_progress_notification">Atualizando shows inscritos</string>
-    <string name="sort_alphabetical_a">Alfabético (A a Z)</string>
+    <string name="sort_alphabetical_a">Alfabético (A–Z)</string>
     <string name="sort_rating_asc">Avaliações (Crescente)</string>
     <string name="empty_library_no_accounts_message">A sua biblioteca está vazia :( \nEntre numa conta da biblioteca ou adicione espectáculos à sua biblioteca local.</string>
     <string name="safe_mode_file">Arquivo de modo de segurança encontrado! \nNenhuma extensão será carregada na inicialização do app até que o arquivo seja removido.</string>
@@ -477,8 +476,8 @@
     <string name="pref_category_ui_features">Recursos</string>
     <string name="pref_category_app_updates">Atualizações de aplicativos</string>
     <string name="watch_quality_pref_data">Qualidade Preferida (Dados Móveis)</string>
-    <string name="android_tv_interface_on_seek_settings_summary">Quantidade de busca (em segundos) usada quando o player de video está visível</string>
-    <string name="android_tv_interface_off_seek_settings_summary">Quantidade de busca (em segundos) usada quando o player de video está oculto</string>
+    <string name="android_tv_interface_on_seek_settings_summary">Quantidade de busca (em segundos) usada quando o player de vídeo está visível</string>
+    <string name="android_tv_interface_off_seek_settings_summary">Quantidade de busca (em segundos) usada quando o player de vídeo está oculto</string>
     <string name="jsdelivr_enabled">Não foi possível chegar ao GitHub. Ativando o proxy jsDelivr…</string>
     <string name="pref_category_cache">Cache</string>
     <string name="pref_category_android_tv">Android TV</string>
@@ -643,7 +642,7 @@
     <string name="sort_episodes_date_oldest">Data de exibição (mais antiga)</string>
     <string name="update_plugins">Atualizar plugins</string>
     <string name="starting_plugin_update_manually">A iniciar o processo de atualização do plugin!</string>
-    <string name="plugins_updated_manually">Atualização bem-sucedida para %d plugin(s)!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Atualização bem-sucedida para %d plugin(s)!</item><item quantity="other">Atualização bem-sucedida para %d plugin(s)!</item><item quantity="many">Atualização bem-sucedida para %d plugin(s)!</item></plurals>
     <string name="no_plugins_updated_manually">Nenhum plugin foi atualizado.</string>
     <string name="update_plugins_manually">Atualizar plugins manualmente</string>
     <string name="speech_recognition_unavailable">O reconhecimento de fala não está disponível</string>
@@ -651,14 +650,11 @@
     <string name="sort_episodes_rating_high_low">Avaliação (mais alta)</string>
     <string name="sort_episodes_rating_low_high">Avaliação (mais baixa)</string>
     <string name="sort_episodes_date_newest">Data de exibição (mais recente)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Avaliação %s</string>
-    <string name="sort_button_date">Data %s</string>
     <string name="player_notification_channel_description">Notificação do player para controlar a reprodução em segundo plano</string>
     <string name="player_notification_channel_name">Notificações de reprodução</string>
     <string name="all_subtitles_italic">Colocar todas as legendas em itálico</string>
     <string name="background_radius">Raio do fundo</string>
-    <string name="volume_exceeded_100">O volume excedeu 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">O volume excedeu 100%</string>
     <string name="all_subtitles_bold">Colocar todas as legendas em negrito</string>
     <string name="slide_up_again_to_exceed_100">Deslize para cima novamente para ir além de 100%</string>
     <string name="download_parallel_settings_des">Quantos itens diferentes podem ser baixados em paralelo</string>
@@ -702,14 +698,11 @@
     <string name="top_center">Centro em cima</string>
     <string name="top_right">Direita em cima</string>
     <string name="play_full_series_button">Reproduzir Série Inteira</string>
-    <string name="install_prerelease">Instalar versão de pré-lançamento</string>
-    <string name="prerelease_already_installed">Versão de pré-lançamento já instalada.</string>
-    <string name="prerelease_install_failed">Falha ao instalar pré-lançamento.</string>
     <string name="show_episode_text">Texto do Episódio</string>
     <string name="download_queue">Fila de downloads</string>
     <string name="queue_empty_message">Não há downloads na fila no momento.</string>
     <string name="extra_brightness_settings">Brilho extra</string>
-    <string name="extra_brightness_settings_des">Ativar filtro de brilho quando o brilho da tela exceder 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Ativar filtro de brilho quando o brilho da tela exceder 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="search_suggestions">Sugestões de pesquisa</string>
     <string name="search_suggestions_des">Mostrar sugestões de pesquisa enquanto digita</string>

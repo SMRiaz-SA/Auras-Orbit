@@ -96,6 +96,9 @@ class PluginAdapter(
 
         binding.nsfwMarker.isVisible = metadata.tvTypes?.contains(TvType.NSFW.name) ?: false
         binding.actionButton.setImageResource(drawableInt)
+        binding.actionButton.contentDescription = itemView.context.getString(
+            if (item.isDownloaded) R.string.delete_plugin else R.string.download
+        )
 
         binding.actionButton.setOnClickListener {
             iconClickCallback.invoke(item.pluginWrapper)
@@ -218,7 +221,7 @@ class PluginAdapter(
             return findClosestBase2(target, current * 2, max)
         }
 
-        // DO NOT MOVE, as running this test will result in ExceptionInInitializerError on prerelease due to static variables using Resources.getSystem()
+        // DO NOT MOVE: this test can fail during static initialization when Resources.getSystem() is accessed.
         // this test function is only to show how the function works
         /*@Test
         fun testFindClosestBase2() {

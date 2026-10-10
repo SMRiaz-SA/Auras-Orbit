@@ -1,13 +1,24 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <lint>
-    <!-- ByteOrderMark has errors in values-b+ja/strings.xml, but it's handled by weblate so we don't really care. -->
-    <issue id="ByteOrderMark" severity="ignore" />
+    <!-- Existing locales intentionally fall back to English for untranslated strings; Auras help is explicitly English-only. -->
+    <issue id="MissingTranslation">
+        <ignore path="src/main/res/values/strings.xml" />
+    </issue>
 
-    <!-- We don't care about MissingTranslation since it's handled by weblate. -->
-    <issue id="MissingTranslation" severity="ignore" />
+    <!-- Keep raster launcher fallbacks for API 23–25 alongside the API 26 adaptive icon. -->
+    <issue id="IconXmlAndPng" severity="ignore" />
 
-    <!-- We only care about the source language here. -->
-    <issue id="StringFormatInvalid">
-        <ignore path="**/res/values-*/**" />
+    <!-- The version catalog documents API 23/runtime constraints for these pinned dependencies. -->
+    <issue id="GradleDependency">
+        <ignore path="../gradle/libs.versions.toml" />
+    </issue>
+    <issue id="NewerVersionAvailable">
+        <ignore path="../gradle/libs.versions.toml" />
+    </issue>
+
+    <!-- The app keeps targetSdk 36 until Android 17 behavior is validated on TV devices. -->
+    <issue id="OldTargetApi">
+        <ignore path="../gradle/libs.versions.toml" />
+        <ignore path="build.gradle.kts" />
     </issue>
 </lint>

@@ -26,7 +26,7 @@
             app:cardBackgroundColor="?attr/primaryGrayBackground"
             app:cardCornerRadius="@dimen/rounded_image_radius">
 
-            <ImageView
+            <ImageView android:contentDescription="@string/delete"
                 android:layout_width="60dp"
                 android:layout_height="60dp"
                 android:layout_gravity="center"

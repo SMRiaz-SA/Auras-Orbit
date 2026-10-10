@@ -65,7 +65,6 @@
     <string name="popup_resume_download">Pokračovat ve stahování</string>
     <string name="popup_pause_download">Pozastavit stahování</string>
     <string name="home_more_info">Více informací</string>
-    <string name="home_expanded_hide">Skrýt</string>
     <string name="home_play">Přehrát</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Filtrovat záložky</string>
@@ -89,7 +88,7 @@
     <string name="subs_font_size">Velikost písma</string>
     <string name="search_provider_text_providers">Hledat pomocí poskytovatelů</string>
     <string name="search_provider_text_types">Hledat pomocí typů</string>
-    <string name="benene_count_text">%d benénů darováno vývojářům</string>
+    <plurals name="benene_count_text"><item quantity="one">%d benénů darováno vývojářům</item><item quantity="other">%d benénů darováno vývojářům</item><item quantity="few">%d benénů darováno vývojářům</item><item quantity="many">%d benénů darováno vývojářům</item></plurals>
     <string name="benene_count_text_none">Nedarovali jste žádné benény</string>
     <string name="subs_auto_select_language">Automaticky vybrat jazyk</string>
     <string name="subs_download_languages">Stáhnout jazyky</string>
@@ -415,7 +414,7 @@
     <string name="batch_download_start_format" formatted="true">Spuštěno stahování %1$d %2$s…</string>
     <string name="blank_repo_message">Auras Orbit nemá ve výchozím nastavení nainstalované žádné zdroje. Je třeba je nainstalovat z repozitářů. \n \nPřipojte se na náš Discord nebo hledejte na internetu.</string>
     <string name="plugins_disabled" formatted="true">Zakázáno: %d</string>
-    <string name="plugins_updated" formatted="true">Aktualizováno %d doplňků</string>
+    <plurals name="plugins_updated"><item quantity="one">Aktualizováno %d doplňků</item><item quantity="other">Aktualizováno %d doplňků</item><item quantity="few">Aktualizováno %d doplňků</item><item quantity="many">Aktualizováno %d doplňků</item></plurals>
     <string name="safe_mode_crash_info">Zobrazit informace o pádu</string>
     <string name="extension_rating" formatted="true">Hodnocení: %s</string>
     <string name="action_remove_from_watched">Odebrat ze zhlédnutých</string>
@@ -654,13 +653,10 @@
     <string name="sort_episodes_rating_high_low">Hodnocení (nejvyšší)</string>
     <string name="sort_episodes_date_newest">Datum vysílání (nejnovější)</string>
     <string name="sort_episodes_date_oldest">Datum vysílání (nejstarší)</string>
-    <string name="sort_button_rating">Hodnocení %s</string>
-    <string name="sort_button_date">Datum %s</string>
     <string name="update_plugins">Aktualizovat doplňky</string>
     <string name="starting_plugin_update_manually">Spouštím proces aktualizace doplňků!</string>
     <string name="no_plugins_updated_manually">Nebyly aktualizovány žádné doplňky.</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="plugins_updated_manually">Úspěšně aktualizováno %d doplňků</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Úspěšně aktualizováno %d doplňků</item><item quantity="other">Úspěšně aktualizováno %d doplňků</item><item quantity="few">Úspěšně aktualizováno %d doplňků</item><item quantity="many">Úspěšně aktualizováno %d doplňků</item></plurals>
     <string name="sort_episodes_number_desc">Epizoda (sestupně)</string>
     <string name="sort_episodes_rating_low_high">Hodnocení (nejnižší)</string>
     <string name="update_plugins_manually">Ručně aktualizovat doplňky</string>
@@ -675,7 +671,7 @@
     <string name="all_subtitles_italic">Vykreslit všechny titulky kurzívou</string>
     <string name="background_radius">Poloměr pozadí</string>
     <string name="slide_up_again_to_exceed_100">Přejeďte opět nahoru pro pokračování nad 100 %</string>
-    <string name="volume_exceeded_100">Hlasitost překročila 100 %</string>
+    <string  name="volume_exceeded_100" formatted="false">Hlasitost překročila 100 %</string>
     <string name="download_parallel_settings_des">Počet různých položek, které lze stahovat v jednu chvíli</string>
     <string name="poster_size_settings_des">Změní velikost plakátů</string>
     <string name="no_internet_connection">Žádné připojení k internetu. \n\nPřipojte se prosím k internetu a zkuste to znovu, nebo sledujte stažené, zatímco jste offline.</string>
@@ -717,16 +713,13 @@
     <string name="top_center">Uprostřed nahoře</string>
     <string name="top_right">Vpravo nahoře</string>
     <string name="play_full_series_button">Přehrát celý seriál</string>
-    <string name="install_prerelease">Nainstalovat předběžnou verzi</string>
-    <string name="prerelease_already_installed">Předběžné vydání je již nainstalováno.</string>
-    <string name="prerelease_install_failed">Nepodařilo se nainstalovat předběžné vydání.</string>
     <string name="show_episode_text">Text epizody</string>
     <string name="search_suggestions">Návrhy vyhledávání</string>
     <string name="search_suggestions_des">Zobrazit návrhy vyhledávání během psaní</string>
     <string name="clear_suggestions">Vymazat návrhy</string>
     <string name="show_cast_in_details">Zobrazit panel vysílání</string>
     <string name="extra_brightness_settings">Extra jas</string>
-    <string name="extra_brightness_settings_des">Povolit filtr jasu při překročení 100 % jasu obrazovky</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Povolit filtr jasu při překročení 100 % jasu obrazovky</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="video_info">Informace o médiu</string>
     <string name="source_name">Název zdroje</string>

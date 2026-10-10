@@ -112,17 +112,6 @@ compose.resources {
     packageOfResClass = "com.lagradost.cloudstream3.desktop.resources"
 }
 
-val orbitDistribution = project.findProperty("orbitDistribution")?.toString() ?: "release"
-require(orbitDistribution == "release" || orbitDistribution == "tester") {
-    "orbitDistribution must be either 'release' or 'tester' (was '$orbitDistribution')."
-}
-val testerDefaultRepositoryJvmArg =
-    if (orbitDistribution == "tester") {
-        "-Dauras.tester.defaultRepositoryUrl=https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds/repo.json"
-    } else {
-        null
-    }
-
 // Compose Desktop application configuration
 compose.desktop {
     application {
@@ -137,7 +126,6 @@ compose.desktop {
                 "-Dcloudstream.version=$appVersion",
                 "-Dfile.encoding=UTF-8",
             )
-        jvmArgs += listOfNotNull(testerDefaultRepositoryJvmArg)
         buildTypes.release.proguard {
             isEnabled.set(false)
         }
@@ -145,8 +133,8 @@ compose.desktop {
         nativeDistributions {
             // Inno Setup (installer/setup.iss) handles packaging — no native installer format needed here
             packageName = "Auras-Orbit"
-            // jpackage STRICTLY requires version to be numeric (e.g. 0.1.5). Strip any -beta or -pre-alpha suffixes.
-            packageVersion = appVersion.substringBefore('-')
+            // APP_VERSION is validated as a numeric stable version above.
+            packageVersion = appVersion
             description = "Auras Orbit open-source desktop client"
             vendor = "Auras Prime Dynamics"
             includeAllModules = false
@@ -195,7 +183,6 @@ tasks.matching { it.name == "run" }.configureEach {
         "-Djava.library.path=${project.file("build/native/jni").absolutePath}",
         "-Dcloudstream.version=$appVersion",
     )
-    testerDefaultRepositoryJvmArg?.let { runTask.jvmArgs(it) }
 }
 
 val generateInstallerVersion by tasks.registering {

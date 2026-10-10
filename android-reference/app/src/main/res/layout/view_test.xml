@@ -66,7 +66,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Tests passed"
+                        android:text="@string/tests_passed"
                         android:textSize="17sp" />
 
                     <TextView
@@ -92,7 +92,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Tests failed"
+                        android:text="@string/tests_failed"
                         android:textSize="17sp" />
 
                     <TextView

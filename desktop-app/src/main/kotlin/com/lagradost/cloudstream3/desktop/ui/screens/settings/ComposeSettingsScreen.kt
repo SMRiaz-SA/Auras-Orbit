@@ -42,7 +42,6 @@ enum class LeafTab(val title: String, val icon: androidx.compose.ui.graphics.vec
     INTEGRATIONS("Metadata & Providers", Icons.Outlined.AutoAwesome),
     EXTENSIONS("Extensions & Sources", Icons.Outlined.Extension),
     NETWORK("Network & DNS", Icons.Outlined.Router),
-    DEVELOPER("Developer & Logs", Icons.Outlined.Terminal),
     ADVANCED("Advanced & Storage", Icons.Outlined.FolderOpen),
     ABOUT("About & Updates", Icons.Outlined.Info),
 
@@ -91,7 +90,6 @@ internal val MAIN_NAV_ITEMS: List<LeafTab> = listOf(
     LeafTab.INTEGRATIONS,
     LeafTab.EXTENSIONS,
     LeafTab.NETWORK,
-    LeafTab.DEVELOPER,
     LeafTab.ADVANCED,
 )
 
@@ -364,7 +362,6 @@ fun ComposeSettingsScreen(
                                     LeafTab.ADDONS,
                                     -> SettingsExtensions(onNavigate = onNavigate)
                                     LeafTab.NETWORK -> SettingsNetworkScreen(viewModel = settingsViewModel)
-                                    LeafTab.DEVELOPER -> SettingsDeveloper(viewModel = settingsViewModel)
                                     LeafTab.ABOUT -> SettingsAboutAndUpdates(viewModel = settingsViewModel)
                                     LeafTab.THEME -> SettingsAppearanceThemeScreen()
                                     LeafTab.LAYOUT -> SettingsAppearanceLayoutScreen(onNavigateToSubScreen = { activeSubScreen = it })

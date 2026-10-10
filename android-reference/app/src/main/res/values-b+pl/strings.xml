@@ -61,7 +61,6 @@
     <string name="popup_resume_download">Wznów pobieranie</string>
     <string name="popup_pause_download">Wstrzymaj pobieranie</string>
     <string name="home_more_info">Więcej informacji</string>
-    <string name="home_expanded_hide">Ukryj</string>
     <string name="home_play">Odtwórz</string>
     <string name="home_info">Informacje</string>
     <string name="filter_bookmarks">Filtruj zakładki</string>
@@ -85,7 +84,7 @@
     <string name="subs_font_size">Rozmiar czcionki</string>
     <string name="search_provider_text_providers">Szukaj według źródeł</string>
     <string name="search_provider_text_types">Szukaj według typów</string>
-    <string name="benene_count_text">Dano %d bananów</string>
+    <plurals name="benene_count_text"><item quantity="one">Dano %d bananów</item><item quantity="other">Dano %d bananów</item><item quantity="few">Dano %d bananów</item><item quantity="many">Dano %d bananów</item></plurals>
     <string name="benene_count_text_none">Brak bananów</string>
     <string name="subs_auto_select_language">Wybierz język automatycznie</string>
     <string name="subs_download_languages">Pobieranie języków</string>
@@ -381,7 +380,7 @@
     <string name="plugins_downloaded" formatted="true">Pobrano: %d</string>
     <string name="plugins_disabled" formatted="true">Wyłączono: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Nie pobrano: %d</string>
-    <string name="plugins_updated">Zaaktualizowano %d rozszerzeń</string>
+    <plurals name="plugins_updated"><item quantity="one">Zaaktualizowano %d rozszerzeń</item><item quantity="other">Zaaktualizowano %d rozszerzeń</item><item quantity="few">Zaaktualizowano %d rozszerzeń</item><item quantity="many">Zaaktualizowano %d rozszerzeń</item></plurals>
     <string name="blank_repo_message">Auras Orbit nie ma domyślnie zainstalowanych żadnych witryn. Musisz zainstalować witryny z repozytoriów. \n \nDołącz do naszego Discorda lub poszukaj online.</string>
     <string name="view_public_repositories_button">Zobacz repozytoria społeczności</string>
     <string name="view_public_repositories_button_short">Publiczna lista</string>
@@ -640,16 +639,13 @@
     <string name="software_decoding">Dekodowanie programowe</string>
     <string name="software_decoding_desc">Dekodowanie programowe umożliwia odtwarzaczowi odtwarzanie plików wideo, których to urządzenie nie obsługuje, ale może powodować opóźnienia lub niestabilność odtwarzania w wysokiej rozdzielczości.</string>
     <string name="sort_episodes_rating_low_high">Ocena (najniższa)</string>
-    <string name="sort_button_rating">Ocena %s</string>
     <string name="sort_episodes_date_newest">Data emisji (najnowsza)</string>
     <string name="sort_episodes_date_oldest">Data emisji (najstarsza)</string>
-    <string name="sort_button_episode">Odc. %s</string>
-    <string name="sort_button_date">Data %s</string>
     <string name="sort_episodes_number_asc">Odcinek (rosnąco)</string>
     <string name="sort_episodes_number_desc">Odcinek (malejąco)</string>
     <string name="sort_episodes_rating_high_low">Ocena (najwyższa)</string>
     <string name="update_plugins">Zaktualizuj wtyczki</string>
-    <string name="plugins_updated_manually">Pomyślnie zaktualizowano wtyczki: %d</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Pomyślnie zaktualizowano wtyczki: %d</item><item quantity="other">Pomyślnie zaktualizowano wtyczki: %d</item><item quantity="few">Pomyślnie zaktualizowano wtyczki: %d</item><item quantity="many">Pomyślnie zaktualizowano wtyczki: %d</item></plurals>
     <string name="no_plugins_updated_manually">Nie zaktualizowano żadnych wtyczek.</string>
     <string name="update_plugins_manually">Zaktualizuj wtyczki ręcznie</string>
     <string name="starting_plugin_update_manually">Rozpoczęcie procesu aktualizacji wtyczek!</string>
@@ -663,7 +659,7 @@
     <string name="background_radius">Promień tła</string>
     <string name="all_subtitles_bold">Zmień wszystkie napisy na pogrubione</string>
     <string name="slide_up_again_to_exceed_100">Przesuń ponownie w górę, aby przekroczyć 100%</string>
-    <string name="volume_exceeded_100">Głośność przekroczyła 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Głośność przekroczyła 100%</string>
     <string name="concurrent_connections_settings_des">Ile równoczesnych połączeń może wykorzystać każde pobieranie</string>
     <string name="download_parallel_settings_des">Ile różnych elementów można pobrać równolegle</string>
     <string name="parallel_downloads">Pobieranie równoległe</string>
@@ -705,9 +701,6 @@
     <string name="top_center">Górne środkowe</string>
     <string name="top_right">Górne prawe</string>
     <string name="play_full_series_button">Odtwórz całą serię</string>
-    <string name="install_prerelease">Zainstaluj wersję przedpremierową</string>
-    <string name="prerelease_already_installed">Wersja przedpremierowa jest już zainstalowana.</string>
-    <string name="prerelease_install_failed">Nie udało się zainstalować wersji przedpremierowej.</string>
     <string name="show_episode_text">Tekst odcinka</string>
     <string name="search_suggestions">Sugestie wyszukiwania</string>
     <string name="search_suggestions_des">Pokaż sugestie wyszukiwania podczas pisania</string>
@@ -716,7 +709,7 @@
     <string name="source_name">Nazwa źródła</string>
     <string name="video_info">Informacje o multimediach</string>
     <string name="extra_brightness_settings">Dodatkowa jasność</string>
-    <string name="extra_brightness_settings_des">Włącz filtr jasności, gdy jasność wyświetlacza przekroczy 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Włącz filtr jasności, gdy jasność wyświetlacza przekroczy 100%</string>
     <string name="extra_brightness_key">Włączono dodatkową jasność</string>
     <string name="download_queue">Kolejka pobierania</string>
     <string name="queue_empty_message">Obecnie nie ma żadnych plików do pobrania w kolejce.</string>

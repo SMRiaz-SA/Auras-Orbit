@@ -26,7 +26,6 @@
 
         <SeekBarPreference
             android:defaultValue="3"
-            android:icon="@drawable/arrow_or_edge_24px"
             android:key="@string/download_parallel_key"
             android:max="10"
             android:summary="@string/download_parallel_settings_des"
@@ -38,7 +37,6 @@
 
         <SeekBarPreference
             android:defaultValue="3"
-            android:icon="@drawable/arrow_and_edge_24px"
             android:key="@string/download_concurrent_key"
             android:max="10"
             android:summary="@string/concurrent_connections_settings_des"

@@ -15,11 +15,51 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ListView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.ComposeView
+import coil3.compose.AsyncImage
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.GridLayoutManager
@@ -57,6 +97,7 @@ import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.loadHomepageLis
 import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.updateChips
 import com.lagradost.cloudstream3.ui.home.HomeViewModel
 import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
+import com.lagradost.cloudstream3.ui.result.AndroidPersonRepository
 import com.lagradost.cloudstream3.ui.result.FOCUS_SELF
 import com.lagradost.cloudstream3.ui.result.setLinearListLayout
 import com.lagradost.cloudstream3.ui.setRecycledViewPool
@@ -85,6 +126,19 @@ import com.lagradost.cloudstream3.utils.UIHelper.getSpanCount
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import java.util.Locale
 import java.util.concurrent.locks.ReentrantLock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private data class AurasPeopleSearchState(
+    val query: String = "",
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val candidates: List<AndroidPersonRepository.PersonCandidate> = emptyList(),
+)
 
 class SearchFragment : BaseFragment<FragmentSearchBinding>(
     BaseFragment.BindingCreator.Bind(FragmentSearchBinding::bind)
@@ -114,6 +168,11 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 
     private val searchViewModel: SearchViewModel by activityViewModels()
     private var bottomSheetDialog: BottomSheetDialog? = null
+    private var peopleSearchJob: Job? = null
+    private var peopleSearchState by mutableStateOf(AurasPeopleSearchState())
+    private var peopleOnlyMode by mutableStateOf(false)
+    private var advancedSearchEnabled = true
+    private var searchSuggestionsEnabled = true
 
     private val speechRecognizerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -143,6 +202,8 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     }
 
     override fun onDestroyView() {
+        peopleSearchJob?.cancel()
+        peopleSearchJob = null
         hideKeyboard()
         bottomSheetDialog?.ownHide()
         activity?.detachBackPressedCallback("SearchFragment")
@@ -328,6 +389,17 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             searchAutofitResults.setRecycledViewPool(SearchAdapter.sharedPool)
             searchAutofitResults.adapter = adapter
             searchLoadingBar.alpha = 0f
+            aurasPeopleSearch.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            aurasPeopleSearch.setContent {
+                com.lagradost.cloudstream3.ui.explore.AurasMobileTheme {
+                    AurasPeopleSearchPanel(
+                        state = peopleSearchState,
+                        peopleOnly = peopleOnlyMode,
+                        onFilterChanged = ::changePeopleFilter,
+                        onPersonSelected = ::openPerson,
+                    )
+                }
+            }
         }
         if (isLayout(PHONE)) positionSearchSuggestions(binding)
 
@@ -383,6 +455,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                         null,
                         false
                     )
+                selectMainpageBinding.applyBttHolder.isVisible = true
                 builder.setContentView(selectMainpageBinding.root)
                 builder.show()
                 builder.let { dialog ->
@@ -498,6 +571,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             override fun onQueryTextSubmit(query: String): Boolean {
                 search(query)
                 searchViewModel.clearSuggestions()
+                requestPeopleSearch(query)
 
                 binding.mainSearch.let {
                     hideKeyboard(it)
@@ -507,6 +581,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             }
 
             override fun onQueryTextChange(newText: String): Boolean {
+                requestPeopleSearch(newText)
                 //searchViewModel.quickSearch(newText)
                 val showHistory = newText.isBlank()
                 if (showHistory) {
@@ -520,11 +595,9 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     }
                 }
                 binding.apply {
-                    searchHistoryRecycler.isVisible = showHistory
-                    searchMasterRecycler.isVisible = !showHistory && isAdvancedSearch
-                    searchAutofitResults.isVisible = !showHistory && !isAdvancedSearch
-                    // Hide suggestions when showing history or showing search results
-                    searchSuggestionsRecycler.isVisible = !showHistory && isSearchSuggestionsEnabled
+                    advancedSearchEnabled = isAdvancedSearch
+                    searchSuggestionsEnabled = isSearchSuggestionsEnabled
+                    applyPeopleSearchVisibility(this, newText)
                 }
 
                 return true
@@ -745,7 +818,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         // Observe search suggestions
         observe(searchViewModel.searchSuggestions) { suggestions ->
             val hasSuggestions = suggestions.isNotEmpty()
-            binding.searchSuggestionsRecycler.isVisible = hasSuggestions
+            binding.searchSuggestionsRecycler.isVisible = hasSuggestions && !peopleOnlyMode
             (binding.searchSuggestionsRecycler.adapter as? SearchSuggestionAdapter?)?.submitList(suggestions)
 
             // On non-phone layouts, redirect focus and handle back button
@@ -766,6 +839,82 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         }
 
         searchViewModel.updateHistory()
+    }
+
+    private fun requestPeopleSearch(query: String) {
+        val cleanQuery = query.trim()
+        peopleSearchJob?.cancel()
+        if (cleanQuery.length < 2) {
+            peopleSearchState = AurasPeopleSearchState()
+            peopleOnlyMode = false
+            binding?.let { applyPeopleSearchVisibility(it, cleanQuery) }
+            return
+        }
+
+        peopleSearchState = AurasPeopleSearchState(query = cleanQuery, isLoading = true)
+        binding?.let { applyPeopleSearchVisibility(it, cleanQuery) }
+        peopleSearchJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                delay(350)
+                val people = withContext(Dispatchers.IO) {
+                    AndroidPersonRepository.searchPeople(cleanQuery)
+                }
+                if (peopleSearchState.query == cleanQuery) {
+                    peopleSearchState = AurasPeopleSearchState(query = cleanQuery, candidates = people)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (peopleSearchState.query == cleanQuery) {
+                    peopleSearchState = AurasPeopleSearchState(
+                        query = cleanQuery,
+                        error = error.message ?: getString(R.string.person_load_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyPeopleSearchVisibility(binding: FragmentSearchBinding, query: String) {
+        val hasQuery = query.isNotBlank()
+        val hasPeopleQuery = query.trim().length >= 2
+        binding.aurasPeopleSearch.isVisible = hasPeopleQuery
+        binding.tvtypesChipsScroll.root.isVisible = !peopleOnlyMode
+        binding.searchHistoryRecycler.isVisible = !peopleOnlyMode && !hasQuery
+        binding.searchMasterRecycler.isVisible = !peopleOnlyMode && hasQuery && advancedSearchEnabled
+        binding.searchAutofitResults.isVisible = !peopleOnlyMode && hasQuery && !advancedSearchEnabled
+        binding.searchSuggestionsRecycler.isVisible = !peopleOnlyMode && hasQuery && searchSuggestionsEnabled &&
+            searchViewModel.searchSuggestions.value.orEmpty().isNotEmpty()
+        listOf(binding.searchMasterRecycler, binding.searchAutofitResults).forEach { list ->
+            val params = list.layoutParams as? LinearLayout.LayoutParams ?: return@forEach
+            params.height = if (peopleOnlyMode || hasQuery) 0 else ViewGroup.LayoutParams.MATCH_PARENT
+            params.weight = if (!peopleOnlyMode && hasQuery) 1f else 0f
+            list.layoutParams = params
+        }
+        val historyParams = binding.searchHistoryRecycler.layoutParams as? LinearLayout.LayoutParams
+        historyParams?.let { params ->
+            params.height = if (!peopleOnlyMode && !hasQuery) ViewGroup.LayoutParams.MATCH_PARENT else 0
+            params.weight = if (!peopleOnlyMode && !hasQuery) 0f else 1f
+            binding.searchHistoryRecycler.layoutParams = params
+        }
+        binding.aurasPeopleSearch.layoutParams = binding.aurasPeopleSearch.layoutParams.apply {
+            height = if (peopleOnlyMode) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        binding.aurasPeopleSearch.requestLayout()
+    }
+
+    private fun changePeopleFilter(enabled: Boolean) {
+        peopleOnlyMode = enabled
+        binding?.let { applyPeopleSearchVisibility(it, it.mainSearch.query.toString()) }
+    }
+
+    private fun openPerson(candidate: AndroidPersonRepository.PersonCandidate) {
+        val args = Bundle().apply {
+            putString("personName", candidate.name)
+            putString("personImage", candidate.profileUrl)
+            putInt("personId", candidate.id)
+        }
+        findNavController().navigate(R.id.navigation_person_filmography, args)
     }
 
     private fun positionSearchSuggestions(binding: FragmentSearchBinding) {
@@ -793,5 +942,174 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             root.post(updatePosition)
         }
         root.doOnLayout { updatePosition.run() }
+    }
+}
+
+@Composable
+private fun AurasPeopleSearchPanel(
+    state: AurasPeopleSearchState,
+    peopleOnly: Boolean,
+    onFilterChanged: (Boolean) -> Unit,
+    onPersonSelected: (AndroidPersonRepository.PersonCandidate) -> Unit,
+) {
+    val surface = com.lagradost.cloudstream3.ui.explore.AurasPalette.Surface
+    val canvas = com.lagradost.cloudstream3.ui.explore.AurasPalette.Canvas
+    val text = com.lagradost.cloudstream3.ui.explore.AurasPalette.Text
+    val muted = com.lagradost.cloudstream3.ui.explore.AurasPalette.Muted
+    val accent = com.lagradost.cloudstream3.ui.explore.AurasPalette.Accent
+
+    @Composable
+    fun Filters() {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = !peopleOnly,
+                onClick = { onFilterChanged(false) },
+                label = { Text(stringResource(R.string.person_all)) },
+            )
+            FilterChip(
+                selected = peopleOnly,
+                onClick = { onFilterChanged(true) },
+                label = { Text(stringResource(R.string.person_people)) },
+            )
+        }
+    }
+
+    if (peopleOnly) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().background(canvas),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(stringResource(R.string.person_search_people), color = text, style = MaterialTheme.typography.titleLarge)
+                    Filters()
+                    if (state.isLoading) Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = accent, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(9.dp))
+                        Text(stringResource(R.string.person_finding_people), color = muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    state.error?.let { Text(it, color = muted, style = MaterialTheme.typography.bodyMedium) }
+                    if (!state.isLoading && state.error == null && state.candidates.isEmpty()) {
+                        Text(
+                            stringResource(R.string.person_no_search_matches, state.query),
+                            color = muted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+            items(state.candidates, key = { it.id }) { candidate ->
+                AurasPersonSearchCard(candidate, compact = false, onClick = { onPersonSelected(candidate) })
+            }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth().background(canvas).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.person_search_results),
+                    color = text,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.weight(1f))
+                Filters()
+            }
+            if (state.isLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = accent, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.person_finding_people), color = muted, style = MaterialTheme.typography.bodySmall)
+                }
+            } else if (state.candidates.isNotEmpty()) {
+                Text(stringResource(R.string.person_people), color = accent, style = MaterialTheme.typography.labelLarge)
+                LazyRow(
+                    contentPadding = PaddingValues(end = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.heightIn(max = 86.dp),
+                ) {
+                    items(state.candidates.take(4), key = { it.id }) { candidate ->
+                        AurasPersonSearchCard(candidate, compact = true, onClick = { onPersonSelected(candidate) })
+                    }
+                    if (state.candidates.size > 4) item {
+                        Card(
+                            onClick = { onFilterChanged(true) },
+                            colors = CardDefaults.cardColors(containerColor = surface),
+                            modifier = Modifier.width(112.dp).heightIn(min = 72.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Text("+${state.candidates.size - 4}", color = accent, style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.person_view_all), color = text, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            } else if (state.error != null) {
+                Text(
+                    stringResource(R.string.person_search_unavailable),
+                    color = muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AurasPersonSearchCard(
+    candidate: AndroidPersonRepository.PersonCandidate,
+    compact: Boolean,
+    onClick: () -> Unit,
+) {
+    val surface = com.lagradost.cloudstream3.ui.explore.AurasPalette.Surface
+    val text = com.lagradost.cloudstream3.ui.explore.AurasPalette.Text
+    val muted = com.lagradost.cloudstream3.ui.explore.AurasPalette.Muted
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = surface),
+        shape = RoundedCornerShape(15.dp),
+        modifier = if (compact) Modifier.width(224.dp) else Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AsyncImage(
+                model = candidate.profileUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(if (compact) 48.dp else 62.dp).clip(CircleShape),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    candidate.name,
+                    color = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                candidate.department?.let {
+                    Text(it, color = muted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (!compact && candidate.knownFor.isNotEmpty()) {
+                    Text(
+                        candidate.knownFor.joinToString(" · "),
+                        color = muted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
     }
 }

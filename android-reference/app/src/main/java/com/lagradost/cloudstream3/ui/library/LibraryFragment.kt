@@ -351,11 +351,25 @@ class LibraryFragment : BaseFragment<FragmentLibraryBinding>(
                 is Resource.Success -> {
                     handler.removeCallbacks(startLoading)
                     val pages = resource.value
+                    val suggestedStartPage = if (savedInstanceState == null && libraryViewModel.currentPage.value == 0) {
+                        val continueWatchingTitle = binding.root.context
+                            .getString(R.string.continue_watching)
+                            .trim()
+                        pages.indexOfFirst { page ->
+                            page.title.asStringNull(binding.root.context)
+                                ?.trim()
+                                ?.equals(continueWatchingTitle, ignoreCase = true) == true
+                        }.takeIf { it >= 0 }
+                    } else null
+                    suggestedStartPage?.let(libraryViewModel::switchPage)
                     val showNotice = pages.all { it.items.isEmpty() }
 
                     binding.apply {
                         emptyListTextview.isVisible = showNotice
                         if (showNotice) {
+                            // The empty-state label is declared before the opaque pager container
+                            // in both library layouts, so it needs to be brought above the pager.
+                            emptyListTextview.bringToFront()
                             if (libraryViewModel.availableApiNames.size > 1) {
                                 emptyListTextview.setText(R.string.empty_library_logged_in_message)
                             } else {
@@ -380,7 +394,7 @@ class LibraryFragment : BaseFragment<FragmentLibraryBinding>(
                             viewpager.adapter?.itemCount ?: 0
                         )*/
 
-                        libraryViewModel.currentPage.value?.let { page ->
+                        (suggestedStartPage ?: libraryViewModel.currentPage.value)?.let { page ->
                             binding.viewpager.setCurrentItem(page, false)
                             binding.searchBar.setExpanded(true)
                         }

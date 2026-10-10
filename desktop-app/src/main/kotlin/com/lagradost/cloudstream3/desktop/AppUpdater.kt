@@ -33,7 +33,6 @@ data class GitHubRelease(
 internal class ReleaseChecker(
     private val client: OkHttpClient,
     private val endpoint: () -> String,
-    private val includePrereleases: () -> Boolean,
     private val currentVersion: () -> String,
 ) {
     private companion object {
@@ -62,7 +61,7 @@ internal class ReleaseChecker(
                         stream.readBoundedBytes(MAX_RELEASE_RESPONSE_BYTES)
                     }
                     val releases = mapper.readValue<List<GitHubRelease>>(responseBytes)
-                    val latest = selectRelease(releases, includePrereleases())
+                    val latest = selectRelease(releases)
                     _latestRelease.value = latest?.takeIf { compareVersions(it.tag_name.removePrefix("v"), currentVersion()) > 0 }
                 }
                 hasChecked = true
@@ -77,8 +76,8 @@ internal class ReleaseChecker(
         }
     }
 
-    internal fun selectRelease(releases: List<GitHubRelease>, includePrereleases: Boolean): GitHubRelease? =
-        releases.filter { !it.draft && (includePrereleases || !it.prerelease) }
+    internal fun selectRelease(releases: List<GitHubRelease>): GitHubRelease? =
+        releases.filter { !it.draft && !it.prerelease && VersionComparator.isStable(it.tag_name.removePrefix("v")) }
             .maxWithOrNull { a, b -> compareVersions(a.tag_name.removePrefix("v"), b.tag_name.removePrefix("v")) }
 
     internal fun compareVersions(v1: String, v2: String): Int = VersionComparator.compare(v1, v2)
@@ -92,7 +91,6 @@ object AppUpdater {
             .callTimeout(20, TimeUnit.SECONDS)
             .build(),
         endpoint = { "https://api.github.com/repos/${AppConfig.GITHUB_REPO}/releases?per_page=100" },
-        includePrereleases = { java.lang.Boolean.getBoolean("auras.updates.prereleases") },
         currentVersion = { AppConfig.APP_VERSION },
     )
 
@@ -101,8 +99,8 @@ object AppUpdater {
 
     suspend fun checkForUpdates(force: Boolean = false) = checker.checkForUpdates(force)
 
-    internal fun selectRelease(releases: List<GitHubRelease>, includePrereleases: Boolean): GitHubRelease? =
-        checker.selectRelease(releases, includePrereleases)
+    internal fun selectRelease(releases: List<GitHubRelease>): GitHubRelease? =
+        checker.selectRelease(releases)
 
     internal fun compareVersions(v1: String, v2: String): Int = checker.compareVersions(v1, v2)
 }

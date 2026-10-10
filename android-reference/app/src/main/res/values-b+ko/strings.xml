@@ -48,7 +48,6 @@
     <string name="popup_resume_download">다운로드 재개</string>
     <string name="popup_pause_download">다운로드 일시정지</string>
     <string name="home_more_info">상세 정보</string>
-    <string name="home_expanded_hide">숨기기</string>
     <string name="home_play">재생</string>
     <string name="home_info">정보</string>
     <string name="action_add_to_bookmarks">시청 상태 설정</string>
@@ -423,7 +422,7 @@
     <string name="extension_authors">제작자</string>
     <string name="preferred_media_subtext">무엇을 보고 싶으신가요</string>
     <string name="extension_status">상태</string>
-    <string name="plugins_updated" formatted="true">%d 플러그인 업데이트</string>
+    <plurals name="plugins_updated"><item quantity="other">%d 플러그인 업데이트</item></plurals>
     <string name="restart">재시작</string>
     <string name="stop">정지</string>
     <string name="extension_description">소개</string>
@@ -470,7 +469,7 @@
     <string name="play_livestream_button">라이브 스트리밍 재생</string>
     <string name="stream">네트워크 스트림</string>
     <string name="search_provider_text_types">유형을 사용하여 검색</string>
-    <string name="benene_count_text">개발자에게 %d 바나나 줌</string>
+    <plurals name="benene_count_text"><item quantity="other">개발자에게 %d 바나나 줌</item></plurals>
     <string name="benene_count_text_none">바나나를 주지 않음</string>
     <string name="action_open_watching">상세 정보</string>
     <string name="action_open_play">@string/home_play</string>
@@ -629,9 +628,6 @@
     <string name="download_time_left_min_sec_format" formatted="true">%1$d분 %2$d초</string>
     <string name="download_time_left_sec_format" formatted="true">%1$d초</string>
     <string name="play_full_series_button">전체 시리즈 재생하기</string>
-    <string name="install_prerelease">출시 전 버전 설치</string>
-    <string name="prerelease_already_installed">출시 전 버전이 이미 설치되어 있습니다.</string>
-    <string name="prerelease_install_failed">출시 전 버전 설치 실패.</string>
     <string name="episode_action_play_mirror">재생 소스 목록</string>"
     <string name="show_rating">평가 라벨</string>
     <string name="show_episode_text">에피소드 본문</string>
@@ -643,9 +639,6 @@
     <string name="sort_episodes_rating_low_high">평가 (낮은순)</string>
     <string name="sort_episodes_date_newest">공개일 (최신순)</string>
     <string name="sort_episodes_date_oldest">공개일 (오래된순)</string>
-    <string name="sort_button_episode">에피소드 %s</string>
-    <string name="sort_button_rating">평가 %s</string>
-    <string name="sort_button_date">날짜 %s</string>
     <string name="no_account">계정 없음</string>
     <string name="no_subtitles_loaded">자막이 아직 로드되지 않음</string>
     <string name="backup_path_title">백업 폴더 위치</string>
@@ -659,12 +652,12 @@
     <string name="torrent_not_accepted">진행하려면 앱 재시작 후 토렌트 스트리밍 팝업란의 수락이 필요합니다.</string>
     <string name="software_decoding">소프트웨어 디코딩</string>
     <string name="software_decoding_desc">소프트웨어 디코딩은 해당 기기에서 지원되지 않는 영상 파일들을 재생할 수 있지만, 높은 화질에서 렉 또는 불안정한 재생을 유발할 수 있습니다.</string>
-    <string name="volume_exceeded_100">볼륨이 100%를 초과하였습니다</string>
+    <string  name="volume_exceeded_100" formatted="false">볼륨이 100%를 초과하였습니다</string>
     <string name="slide_up_again_to_exceed_100">100% 너머로 높이려면 한번 더 슬라이드 하십시오</string>
     <string name="update_plugins">플러그인 업데이트하기</string>
     <string name="update_plugins_manually">수동으로 플러그인 업데이트 하기</string>
     <string name="starting_plugin_update_manually">플러그인 업데이트 절차를 시작합니다!</string>
-    <string name="plugins_updated_manually">플러그인 %d개를 성공적으로 업데이트했습니다</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">플러그인 %d개를 성공적으로 업데이트했습니다</item></plurals>
     <string name="no_plugins_updated_manually">업데이트 된 플러그인이 없습니다.</string>
     <string name="player_notification_channel_name">플레이어 알림</string>
     <string name="player_notification_channel_description">백그라운드에서 재생을 제어하기 위한 플레이어 알림</string>
@@ -703,7 +696,7 @@
     <string name="top_center">중앙 위</string>
     <string name="top_right">오른쪽 위</string>
     <string name="source_priority_help">비디오 소스가 플레이어에서 정렬되는 순서 설정</string>
-    <string name="extra_brightness_settings_des">디스플레이 밝기가 100%를 초과하면 밝기 필터를 활성화합니다</string>
+    <string  name="extra_brightness_settings_des" formatted="false">디스플레이 밝기가 100%를 초과하면 밝기 필터를 활성화합니다</string>
     <string name="cancel_queue_message">모든 다운로드 작업을 취소하시겠습니까?</string>
     <string name="download_episode_range">에피소드를 다운로드 하시겠습니까 %s?</string>
     <string name="queue_empty_message">다운로드 대기열이 비어 있습니다.</string>

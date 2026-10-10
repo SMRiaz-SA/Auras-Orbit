@@ -88,7 +88,6 @@
     <string name="popup_resume_download">ດາວໂຫຼດຕໍ່</string>
     <string name="popup_pause_download">ຢຸດການດາວໂຫຼດ</string>
     <string name="home_more_info">ຂໍ້ມູນເພີ່ມເຕີມ</string>
-    <string name="home_expanded_hide">ເຊື່ອງ</string>
     <string name="home_play">ຫຼິ້ນ</string>
     <string name="home_info">ຂໍ້ມູນ</string>
     <string name="filter_bookmarks">ກັ່ນຕອງບຸກມາກ</string>
@@ -117,7 +116,7 @@
     <string name="subs_font_size">ຂະໜາດຟອນທ໌</string>
     <string name="search_provider_text_providers">ຄົ້ນຫາໂດຍໃຊ້ຜູ້ໃຫ້ບໍລິການ</string>
     <string name="search_provider_text_types">ຄົ້ນຫາໂດຍໃຊ້ປະເພດ</string>
-    <string name="benene_count_text">ມອບ Benene ໃຫ້ຜູ້ພັດທະນາແລ້ວ %d ອັນ</string>
+    <plurals name="benene_count_text"><item quantity="other">ມອບ Benene ໃຫ້ຜູ້ພັດທະນາແລ້ວ %d ອັນ</item></plurals>
     <string name="benene_count_text_none">ຍັງບໍ່ໄດ້ມອບ Benene</string>
     <string name="subs_auto_select_language">ເລືອກພາສາອັດຕະໂນມັດ</string>
     <string name="subs_download_languages">ພາສາທີ່ຈະດາວໂຫຼດ</string>
@@ -160,7 +159,7 @@
     <string name="use_system_brightness_settings">ໃຊ້ຄວາມສະຫວ່າງຂອງລະບົບ</string>
     <string name="use_system_brightness_settings_des">ໃຊ້ຄວາມສະຫວ່າງຂອງລະບົບໃນເຄື່ອງຫຼິ້ນແທນການໃຊ້ແຜ່ນມົວສີດຳ</string>
     <string name="extra_brightness_settings">ຄວາມສະຫວ່າງພິເສດ</string>
-    <string name="extra_brightness_settings_des">ເປີດໃຊ້ຟິວເຕີຄວາມສະຫວ່າງເມື່ອຄວາມສະຫວ່າງໜ້າຈໍເກີນ 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">ເປີດໃຊ້ຟິວເຕີຄວາມສະຫວ່າງເມື່ອຄວາມສະຫວ່າງໜ້າຈໍເກີນ 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="episode_sync_settings">ອັບເດດຄວາມຄືບໜ້າການເບິ່ງ</string>
     <string name="episode_sync_settings_des">ຊິງຄ໌ຄວາມຄືບໜ້າຂອງຕອນປັດຈຸບັນໂດຍອັດຕະໂນມັດ</string>
@@ -195,9 +194,6 @@
     <string name="updates_settings">ສະແດງການອັບເດດແອັບຯ</string>
     <string name="updates_settings_des">ຄົ້ນຫາການອັບເດດໃໝ່ໂດຍອັດຕະໂນມັດຫຼັງຈາກເປີດແອັບຯ.</string>
     <string name="redo_setup_process">ຕັ້ງຄ່າໃໝ່ທັງໝົດ</string>
-    <string name="install_prerelease">ຕິດຕັ້ງເວີຊັນທົດລອງ (Pre-release)</string>
-    <string name="prerelease_already_installed">ຕິດຕັ້ງເວີຊັນທົດລອງແລ້ວ.</string>
-    <string name="prerelease_install_failed">ບໍ່ສາມາດຕິດຕັ້ງເວີຊັນທົດລອງໄດ້.</string>
     <string name="apk_installer_settings">ຕົວຕິດຕັ້ງ APK</string>
     <string name="apk_installer_settings_des">ບາງອຸປະກອນບໍ່ຮອງຮັບຕົວຕິດຕັ້ງແພັກເກດແບບໃໝ່. ລອງໃຊ້ຕົວເລືອກແບບເກົ່າ (Legacy) ຖ້າບໍ່ສາມາດອັບເດດໄດ້.</string>
     <string name="github">Github</string>
@@ -336,7 +332,7 @@
     <string name="dns_pref_summary">ມີປະໂຫຍດໃນການຂ້າມການບລັອກຈາກ ISP</string>
     <string name="jsdelivr_proxy">GitHub Proxy</string>
     <string name="jsdelivr_enabled">ບໍ່ສາມາດເຊື່ອມຕໍ່ GitHub ໄດ້. ກຳລັງເປີດໃຊ້ jsDelivr proxy…</string>
-    <string name="jsdelivr_proxy_summary">ຂ້າມການບລັອກ URL ຂອງ GitHub ໂດຍໃຊ້ jsDelivr. ອາດຈະເຮັດໃຫ້ການອັບເດດຊ້າລົງ 2-3 ມື້.</string>
+    <string name="jsdelivr_proxy_summary">ຂ້າມການບລັອກ URL ຂອງ GitHub ໂດຍໃຊ້ jsDelivr. ອາດຈະເຮັດໃຫ້ການອັບເດດຊ້າລົງ 2–3 ມື້.</string>
     <string name="add_site_pref">ຄັດລອກເວັບໄຊທ໌</string>
     <string name="remove_site_pref">ລຶບເວັບໄຊທ໌</string>
     <string name="add_site_summary">ເພີ່ມເວັບໄຊທ໌ທີ່ຄືກັບເວັບໄຊທ໌ທີ່ມີຢູ່ແລ້ວ ແຕ່ໃຊ້ URL ອື່ນ</string>
@@ -505,7 +501,7 @@
     <string name="plugins_downloaded" formatted="true">ດາວໂຫຼດແລ້ວ: %d</string>
     <string name="plugins_disabled" formatted="true">ປິດການໃຊ້ງານ: %d</string>
     <string name="plugins_not_downloaded" formatted="true">ຍັງບໍ່ໄດ້ດາວໂຫຼດ: %d</string>
-    <string name="plugins_updated" formatted="true">ອັບເດດແລ້ວ %d ປລັກອິນ</string>
+    <plurals name="plugins_updated"><item quantity="other">ອັບເດດແລ້ວ %d ປລັກອິນ</item></plurals>
     <string name="blank_repo_message">Auras Orbit ບໍ່ມີເວັບໄຊຕິດຕັ້ງມາໃຫ້ແຕ່ທຳອິດ. ເຈົ້າຕ້ອງຕິດຕັ້ງເວັບໄຊຈາກບ່ອນເກັບຂໍ້ມູນ (Repositories). \n \nເຂົ້າຮ່ວມ Discord ຂອງພວກເຮົາ ຫຼື ຄົ້ນຫາທາງອອນລາຍ.</string>
     <string name="view_public_repositories_button">ເບິ່ງບ່ອນເກັບຂໍ້ມູນຂອງຊຸມຊົນ</string>
     <string name="view_public_repositories_button_short">ລາຍການສາທາລະນະ</string>
@@ -584,9 +580,6 @@
     <string name="sort_episodes_rating_low_high">ຄະແນນ (ຕ່ຳສຸດ)</string>
     <string name="sort_episodes_date_newest">ວັນທີສາຍ (ໃໝ່ສຸດ)</string>
     <string name="sort_episodes_date_oldest">ວັນທີສາຍ (ເກົ່າສຸດ)</string>
-    <string name="sort_button_episode">ຕອນ %s</string>
-    <string name="sort_button_rating">ຄະແນນ %s</string>
-    <string name="sort_button_date">ວັນທີ %s</string>
     <string name="select_library">ເລືອກຫ້ອງສະໝຸດ</string>
     <string name="open_with">ເປີດດ້ວຍ</string>
     <string name="empty_library_no_accounts_message">ຫ້ອງສະໝຸດຂອງເຈົ້າຍັງວ່າງ :( \nເຂົ້າສູ່ລະບົບບັນຊີຫ້ອງສະໝຸດ ຫຼື ເພີ່ມລາຍການໃສ່ຫ້ອງສະໝຸດໃນເຄື່ອງ.</string>
@@ -682,12 +675,12 @@
     <string name="torrent_not_accepted">ເລີ່ມແອັບໃໝ່ ແລະ ກົດຍອມຮັບ Stream Torrent ເພື່ອດຳເນີນການຕໍ່.</string>
     <string name="software_decoding">ການຖອດລະຫັດດ້ວຍຊອບແວ</string>
     <string name="software_decoding_desc">ການຖອດລະຫັດດ້ວຍຊອບແວຊ່ວຍໃຫ້ຫຼິ້ນໄຟລ໌ທີ່ອຸປະກອນບໍ່ຮອງຮັບໄດ້, ແຕ່ອາດເຮັດໃຫ້ກະຕຸກ ຫຼື ບໍ່ສະຖຽນໃນຄວາມລະອຽດສູງ.</string>
-    <string name="volume_exceeded_100">ລະດັບສຽງເກີນ 100% ແລ້ວ</string>
+    <string  name="volume_exceeded_100" formatted="false">ລະດັບສຽງເກີນ 100% ແລ້ວ</string>
     <string name="slide_up_again_to_exceed_100">ເລື່ອນຂຶ້ນອີກຄັ້ງເພື່ອໃຫ້ສຽງດັງເກີນ 100%</string>
     <string name="update_plugins">ອັບເດດປລັກອິນ</string>
     <string name="update_plugins_manually">ອັບເດດປລັກອິນດ້ວຍຕົນເອງ</string>
     <string name="starting_plugin_update_manually">ເລີ່ມຂະບວນການອັບເດດປລັກອິນ!</string>
-    <string name="plugins_updated_manually">ອັບເດດ %d ປລັກອິນສຳເລັດແລ້ວ</string>
+    <plurals name="plugins_updated_manually"><item quantity="other">ອັບເດດ %d ປລັກອິນສຳເລັດແລ້ວ</item></plurals>
     <string name="no_plugins_updated_manually">ບໍ່ມີປລັກອິນໃດຖືກອັບເດດ.</string>
     <string name="player_notification_channel_name">ການແຈ້ງເຕືອນເຄື່ອງຫຼິ້ນ</string>
     <string name="player_notification_channel_description">ການແຈ້ງເຕືອນເຄື່ອງຫຼິ້ນສຳລັບຄວບຄຸມການຫຼິ້ນຈາກພື້ນຫຼັງ</string>

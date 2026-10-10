@@ -62,7 +62,6 @@
     <string name="subs_window_color">የዊንዶው ቀለም</string>
     <string name="play_torrent_button">Torrent አጫውት</string>
     <string name="download_canceled">ማውረድ ተቋርጧል</string>
-    <string name="home_expanded_hide">ደብቅ</string>
     <string name="sort_apply">አጽድቅ</string>
     <string name="pick_subtitle">የትርጉም ጽሑፎች</string>
     <string name="download_paused">ማውረድ ቆሟል</string>
@@ -95,7 +94,7 @@
     <string name="continue_watching">መመልከትዎን ይቀጥሉ</string>
     <string name="subs_download_languages">ቋንቋዎችን ያውርዱ</string>
     <string name="search_provider_text_providers">አቅራቢዎችን በመጠቀም ይፈልጉ</string>
-    <string name="benene_count_text">%d ሙዝ ለዴቭሎፐሮቹ ተሰጥቷል</string>
+    <plurals name="benene_count_text"><item quantity="one">%d ሙዝ ለዴቭሎፐሮቹ ተሰጥቷል</item><item quantity="other">%d ሙዝ ለዴቭሎፐሮቹ ተሰጥቷል</item></plurals>
     <string name="vpn_might_be_needed">ይህ አቅራቢ በትክክል እንዲሰራ ቪፒኤን ሊያስፈልግ ይችላል</string>
     <string name="benene_count_text_none">ምንም ሙዝ አልተሰጠም</string>
     <string name="subs_subtitle_languages">የትርጉም ጽሑፍ ቋንቋ</string>

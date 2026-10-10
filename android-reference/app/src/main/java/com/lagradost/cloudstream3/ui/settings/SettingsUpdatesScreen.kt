@@ -24,7 +24,6 @@ import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.utils.BackupUtils
 import com.lagradost.cloudstream3.utils.BackupUtils.restorePrompt
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
-import com.lagradost.cloudstream3.utils.InAppUpdater.installPreReleaseIfNeeded
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream4.AppSettings
 import com.lagradost.cloudstream4.rememberAppSettings
@@ -88,7 +87,7 @@ object SettingsUpdatesScreen : SearchableSettings {
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(R.string.check_for_update),
                         subtitle = BuildConfig.VERSION_NAME,
-                        icon = painterResource(R.drawable.mobile_arrow_down_24px),
+                        icon = painterResource(R.drawable.ic_outline_info_24),
                         onClick = {
                             githubViewModel?.onAction(GithubAction.SearchForUpdate)
                             /*ioSafe {
@@ -103,15 +102,6 @@ object SettingsUpdatesScreen : SearchableSettings {
                             }*/
                         }
                     ),
-                    Preference.PreferenceItem.TextPreference(
-                        title = stringResource(R.string.install_prerelease),
-                        icon = painterResource(R.drawable.mobile_code_24px),
-                        enabled = BuildConfig.FLAVOR == "stable",
-                        onClick = {
-                            activity?.installPreReleaseIfNeeded()
-                        }
-                    ),
-
                     Preference.PreferenceItem.ListPreference(
                         title = stringResource(R.string.apk_installer_settings),
                         subtitle = stringResource(R.string.apk_installer_settings_des),

@@ -157,7 +157,6 @@ object SettingsUIScreen : SearchableSettings {
                         title = stringResource(R.string.overscan_settings),
                         subtitle = stringResource(R.string.overscan_settings_des),
                         valueRange = 0..100,
-                        icon = painterResource(R.drawable.arrows_input_24px),
                         enabled = isLayout(TV),
                         onValueChanged = { newValue ->
                             settings.ui.overscanDp.set(newValue)
@@ -198,7 +197,7 @@ object SettingsUIScreen : SearchableSettings {
                     Preference.PreferenceItem.SwitchPreference(
                         preference = settings.ui.fillersEnabled,
                         title = stringResource(R.string.show_fillers_settings),
-                        icon = painterResource(R.drawable.skip_next_24px)
+                        icon = painterResource(R.drawable.ic_baseline_film_roll_24)
                     ),
                     Preference.PreferenceItem.SwitchPreference(
                         preference = settings.ui.showMetadataOverlay,

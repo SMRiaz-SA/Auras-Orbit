@@ -4,6 +4,12 @@ import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
+import com.lagradost.cloudstream3.desktop.ui.screens.person.model.TmdbPersonCandidate
+
+enum class SearchMode {
+    TITLES,
+    PEOPLE,
+}
 
 @Immutable
 data class SearchProviderPagination(
@@ -15,7 +21,10 @@ data class SearchProviderPagination(
 @Immutable
 data class SearchUiState(
     val searchQuery: String = "",
+    val searchMode: SearchMode = SearchMode.TITLES,
     val searchResultsGrouped: Map<String, Pair<com.lagradost.cloudstream3.MainAPI, List<SearchResponse>>>? = null,
+    val peopleResults: List<TmdbPersonCandidate> = emptyList(),
+    val peopleSearchFailed: Boolean = false,
     val isLoadingSearch: Boolean = false,
     val isLoadingMore: Boolean = false,
     val canPaginate: Boolean = true,

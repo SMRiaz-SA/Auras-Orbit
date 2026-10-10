@@ -6,9 +6,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,8 +46,6 @@ import com.lagradost.cloudstream3.desktop.resources.app_icon_small
 import com.lagradost.cloudstream3.desktop.ui.CloudstreamApp
 import com.lagradost.cloudstream3.desktop.ui.LocalFullscreenController
 import com.lagradost.cloudstream3.desktop.ui.navigation.DefaultRootComponent
-import com.lagradost.cloudstream3.desktop.ui.screens.dev.DevStudioState
-import com.lagradost.cloudstream3.desktop.ui.screens.dev.DevStudioView
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import kotlinx.coroutines.Dispatchers
@@ -71,17 +67,9 @@ fun main(args: Array<String> = emptyArray()) {
     initCrashHandler()
     initWindowsEnvironment()
 
-    val isDevMode = args.any { it.equals("--dev", ignoreCase = true) || it.equals("--dev-logger", ignoreCase = true) } ||
-        System.getProperty("cloudstream.dev") != null
-
     AppLogger.i("Launching Auras Orbit...")
     AppLogger.i("Platform: ${PlatformPaths.currentOS}")
     AppLogger.i("App data directory: ${PlatformPaths.appDataDir.absolutePath}")
-
-    if (isDevMode) {
-        AppLogger.i("Dev Mode enabled via startup arguments.")
-        DevStudioState.open(detached = true)
-    }
 
     ShaderManager.extractBundledShaders()
     com.lagradost.cloudstream3.desktop.ui.theme.CustomFontManager.extractBundledFonts()
@@ -123,9 +111,6 @@ fun main(args: Array<String> = emptyArray()) {
         )
 
         val fullscreenHelper = rememberFullscreenHelper()
-        val isDevOpen by DevStudioState.isOpen.collectAsState()
-        val isDevDetached by DevStudioState.isDetachedWindow.collectAsState()
-
         val isPipMode by com.lagradost.cloudstream3.desktop.ui.PipState.isPipMode.collectAsState()
 
         Window(
@@ -214,44 +199,12 @@ fun main(args: Array<String> = emptyArray()) {
 
                             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                                 CloudstreamApp(rootComponent = root)
-
-                                // In-app Docked Dev Studio Overlay
-                                if (isDevOpen && !isDevDetached) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .fillMaxHeight(0.50f)
-                                            .align(Alignment.BottomCenter),
-                                    ) {
-                                        DevStudioView(isDetached = false)
-                                    }
-                                }
                             }
                         } else {
                             com.lagradost.cloudstream3.desktop.ui.components.AppStartupSplashScreen()
                         }
                     }
                 }
-            }
-        }
-
-        // Secondary Standalone Floating Window for Dev Studio
-        if (isDevOpen && isDevDetached) {
-            val devWindowState = rememberWindowState(
-                width = 1100.dp,
-                height = 700.dp,
-                position = WindowPosition.Aligned(Alignment.Center),
-            )
-            Window(
-                onCloseRequest = { DevStudioState.close() },
-                title = "Auras Orbit Dev Studio & Live LogCat",
-                state = devWindowState,
-                icon = painterResource(Res.drawable.app_icon_small),
-            ) {
-                DevStudioView(
-                    isDetached = true,
-                    onClose = { DevStudioState.close() },
-                )
             }
         }
     }

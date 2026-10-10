@@ -1,7 +1,9 @@
+<!-- Keep the TV player's focusable controls declarative for remote navigation. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/player_holder"
+    tools:ignore="TooManyViews"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -33,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="88dp">
 
-                <ImageView
+                <ImageView android:contentDescription="@null"
                     android:id="@+id/player_movie_logo"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
@@ -88,7 +90,7 @@
 
         </LinearLayout>
 
-        <ImageView
+        <ImageView android:contentDescription="@null"
             android:id="@+id/video_outline"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -305,7 +307,7 @@
             android:visibility="gone" />
 
         <!-- atm this is useless, however it might be used for PIP one day? -->
-        <ImageView
+        <ImageView android:contentDescription="@string/player_fullscreen"
             android:id="@+id/player_fullscreen"
             android:layout_width="30dp"
             android:layout_height="30dp"
@@ -368,7 +370,9 @@
                             android:fontFamily="@font/google_sans"
                             android:textStyle="bold" />
 
+                    <!-- Title and metadata retain independent alignment in the TV overlay. -->
                     <LinearLayout
+                        tools:ignore="UseCompoundDrawables"
                         android:id="@+id/player_video_title_holder"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -388,7 +392,7 @@
                             android:textStyle="bold"
                             tools:text="Hello world" />
 
-                        <ImageView
+                        <ImageView android:contentDescription="@string/available_offline"
                             android:id="@+id/offline_pin"
                             android:layout_width="18dp"
                             android:layout_height="18dp"
@@ -480,7 +484,7 @@
                             android:nextFocusRight="@id/player_restart"
                             android:nextFocusUp="@id/player_go_back"
                             android:nextFocusDown="@id/player_pause_play"
-                            android:src="@drawable/ic_baseline_arrow_back_24"
+                            android:src="@drawable/close_24px"
                             android:tag="@string/tv_no_focus_tag"
                             app:tint="@android:color/white" />
 
@@ -733,8 +737,7 @@
                         android:nextFocusDown="@id/player_pause_play"
                         android:padding="10dp"
                         android:scaleType="fitCenter"
-                        android:scaleX="-1"
-                        android:src="@drawable/netflix_skip_forward"
+                        android:src="@drawable/netflix_skip_back"
                         android:tintMode="src_in"
                         app:tint="@color/white"
                         tools:ignore="ContentDescription" />
@@ -823,7 +826,9 @@
 
                 <ImageButton
                     android:id="@id/exo_repeat_toggle"
-                    style="@style/ExoMediaButton"
+                    android:layout_width="71dp"
+                    android:layout_height="52dp"
+                    android:background="?android:attr/selectableItemBackground"
                     android:tintMode="src_in"
                     app:tint="?attr/colorPrimaryDark"
                     tools:ignore="ContentDescription" />
@@ -1067,8 +1072,8 @@
                             android:nextFocusDown="@id/player_resize_btt"
                             android:text="@string/next_episode"
                             android:visibility="gone"
-                            app:icon="@drawable/ic_baseline_skip_next_24"
-                            tools:visibility="visible" />
+                            tools:visibility="visible"
+                            app:icon="@drawable/ic_baseline_skip_next_24" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/player_resize_btt"

@@ -506,6 +506,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             R.id.navigation_home,
             R.id.navigation_catalogs,
             R.id.navigation_auras_catalogs,
+            R.id.navigation_auras_catalog_list,
+            R.id.navigation_auras_trending,
             R.id.navigation_auras_help,
             R.id.navigation_search,
             R.id.navigation_library,
@@ -579,7 +581,9 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
              */
             when (destination.id) {
                 R.id.navigation_catalogs,
-                R.id.navigation_auras_catalogs -> {
+                R.id.navigation_auras_catalogs,
+                R.id.navigation_auras_catalog_list,
+                R.id.navigation_auras_trending -> {
                     navRailView.menu.findItem(R.id.navigation_home).isChecked = true
                     navView.menu.findItem(R.id.navigation_home).isChecked = true
                 }
@@ -2060,15 +2064,6 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         try {
             if (getKey<Boolean>(HAS_DONE_SETUP_KEY, false) != true) {
                 navController.navigate(R.id.navigation_setup_language)
-                // If no plugins bring up extensions screen
-            } else if (PluginManager.getPluginsOnline().isEmpty()
-                && PluginManager.getPluginsLocal().isEmpty()
-//                && PREBUILT_REPOSITORIES.isNotEmpty()
-            ) {
-                navController.navigate(
-                    R.id.navigation_setup_extensions,
-                    SetupFragmentExtensions.newInstance(false)
-                )
             }
         } catch (e: Exception) {
             logError(e)

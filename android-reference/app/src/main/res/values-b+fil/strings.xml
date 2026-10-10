@@ -4,11 +4,11 @@
     <string name="action_remove_mark_watched_up_to_this_episode">Alisin ang napanood hanggang sa episode na ito</string>
     <string name="no_internet_connection">Walang koneksyon sa internet.\n\nKumonekta sa internet at subukang muli, o panoorin ang iyong mga na-download habang ikaw ay offline.</string>
     <string name="player_notification_channel_description">Ang abiso ng player para sa pagkontrol sa pag-playback mula sa background</string>
-    <string name="plugins_updated_manually">Matagumpay na na-update ang %d plugin!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Matagumpay na na-update ang %d plugin!</item><item quantity="other">Matagumpay na na-update ang %d plugin!</item></plurals>
     <string name="overscan_settings_des">Binabago ang mga hangganan ng screen</string>
     <string name="all_subtitles_bold">Gawing bold ( ≖‿ ≖ ) ang lahat ng subtitle</string>
     <string name="all_subtitles_italic">Gawing italic ang lahat ng subtitle</string>
-    <string name="volume_exceeded_100">Lakas ng tunog ay lumampas sa 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">Lakas ng tunog ay lumampas sa 100%</string>
     <string name="slide_up_again_to_exceed_100">Muling mag-slide pataas upang lumampas sa 100%</string>
     <string name="confirm_before_exiting_desc">Ipakita ang dialog bago lumabas sa app</string>
     <string name="preview_seekbar_desc">Paganahin ang preview thumbnail sa seekbar</string>
@@ -124,7 +124,6 @@
     <string name="popup_resume_download">Ipagpatuloy ang pag-download</string>
     <string name="popup_pause_download">Ihinto ang pag-download</string>
     <string name="home_more_info">Higit pang impormasyon</string>
-    <string name="home_expanded_hide">Itago</string>
     <string name="home_play">Ipatugtog</string>
     <string name="home_info">Impormasyon</string>
     <string name="filter_bookmarks">I-filter ang Mga Bookmark</string>
@@ -152,7 +151,7 @@
     <string name="subs_font_size">Laki ng Font</string>
     <string name="search_provider_text_providers">Maghanap gamit ang mga tagatustos</string>
     <string name="search_provider_text_types">Maghanap gamit ang mga uri</string>
-    <string name="benene_count_text">%d Benenes naibigay sa mga dev</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes naibigay sa mga dev</item><item quantity="other">%d Benenes naibigay sa mga dev</item></plurals>
     <string name="benene_count_text_none">Walang Benenes na binigay</string>
     <string name="subs_auto_select_language">Awtomatikong Piliin ang Wika</string>
     <string name="subs_download_languages">Mag-download ng Mga Wika</string>

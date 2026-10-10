@@ -78,7 +78,6 @@
     <string name="download">להוריד</string>
     <string name="app_dubbed_text">מדובב</string>
     <string name="home_more_info">יותר מידע</string>
-    <string name="home_expanded_hide">להתחבא</string>
     <string name="player_speed">מהירות הנגן</string>
     <string name="subtitles_settings">הגדרות הכתוביות</string>
     <string name="subs_text_color">צבע טקסט</string>
@@ -102,7 +101,7 @@
     <string name="picture_in_picture">מצב תמונה בתמונה</string>
     <string name="player_size_settings">כפתור שינוי גודל הנגן</string>
     <string name="player_size_settings_des">הסר את הגבולות השחורים</string>
-    <string name="benene_count_text">%d בנינים שניתנו למפתחים</string>
+    <plurals name="benene_count_text"><item quantity="one">%d בנינים שניתנו למפתחים</item><item quantity="other">%d בנינים שניתנו למפתחים</item><item quantity="two">%d בנינים שניתנו למפתחים</item></plurals>
     <string name="player_subtitles_settings_des">הגדרות כתוביות הנגן</string>
     <string name="chromecast_subtitles_settings_des">הגדרות כתוביות כרומקאסט</string>
     <string name="subs_font">גופן</string>
@@ -432,7 +431,7 @@
     <string name="tracks">מסלולים</string>
     <string name="safe_mode_description">כל התוספים נכבו עקב התרסקות כדי לעזור לך למצוא את האחד הגורם לצרות.</string>
     <string name="apk_installer_package_installer">מוריד החבילות</string>
-    <string name="plugins_updated" formatted="true">עודכן %d תוספים</string>
+    <plurals name="plugins_updated"><item quantity="one">עודכן %d תוספים</item><item quantity="other">עודכן %d תוספים</item><item quantity="two">עודכן %d תוספים</item></plurals>
     <string name="plugin">תוספים</string>
     <string name="delete_repository_plugins">פעולה זו תמחק גם את כל תוספי המאגר</string>
     <string name="setup_extensions_subtext">הורד את רשימת האתרים שבהם ברצונך להשתמש</string>

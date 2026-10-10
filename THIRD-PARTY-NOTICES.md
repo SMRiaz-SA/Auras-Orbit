@@ -8,6 +8,7 @@ This file records the principal third-party components used by the Auras Orbit d
 | --- | --- |
 | Auras Orbit desktop-specific code | GNU GPL v3; see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). |
 | CloudStream upstream/reference code | Retained upstream notices and GPL text in `android-reference/LICENSE`. |
+| Torrentserver Android AAR | GPL-3.0; built from [recloudstream/torrentserver commit `7861970e`](https://github.com/recloudstream/torrentserver/tree/7861970e038b35cd8c6918384e49caf26903e09e). The vendored AAR and native rebuild details are in [`android-reference/app/libs/torrentserver-7861970-16kb.md`](android-reference/app/libs/torrentserver-7861970-16kb.md); the license text is in `android-reference/LICENSE`. |
 
 ## Bundled/native components
 

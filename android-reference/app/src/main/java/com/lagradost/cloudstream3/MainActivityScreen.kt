@@ -36,7 +36,6 @@ import com.lagradost.cloudstream3.ui.settings.GithubState
 import com.lagradost.cloudstream3.ui.settings.GithubUpdateDialogState
 import com.lagradost.cloudstream3.ui.settings.GithubViewModel
 import com.lagradost.cloudstream3.ui.settings.UpdateFailureStage
-import com.lagradost.cloudstream3.utils.GitInfo.currentCommitHash
 import com.lagradost.cloudstream4.compose.BlackButton
 import com.lagradost.cloudstream4.compose.Screen
 import com.lagradost.cloudstream4.compose.WhiteButton
@@ -55,9 +54,7 @@ object MainActivityScreen : Screen {
                 remoteRepository = APK_REPOSITORY,
                 remoteContentType = APK_CONTENT_TYPE,
                 versionName = BuildConfig.VERSION_NAME,
-                isPrerelease = BuildConfig.FLAVOR == "prerelease",
                 isDebug = BuildConfig.DEBUG,
-                buildSha = activity.currentCommitHash(),
                 settings = settings,
                 updater = ApkUpdater
             )/*.apply {

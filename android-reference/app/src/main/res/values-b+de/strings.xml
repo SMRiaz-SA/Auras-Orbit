@@ -78,7 +78,6 @@
     <string name="popup_resume_download">Download fortsetzen</string>
     <string name="popup_pause_download">Download pausieren</string>
     <string name="home_more_info">Mehr Infos</string>
-    <string name="home_expanded_hide">Verstecken</string>
     <string name="home_play">Abspielen</string>
     <string name="home_info">Info</string>
     <string name="filter_bookmarks">Lesezeichen filtern</string>
@@ -102,7 +101,7 @@
     <string name="subs_font_size">Schriftgröße</string>
     <string name="search_provider_text_providers">Suche anhand Anbietern</string>
     <string name="search_provider_text_types">Suche anhand Typen</string>
-    <string name="benene_count_text">%d Benenes an die Devs geschenkt</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes an die Devs geschenkt</item><item quantity="other">%d Benenes an die Devs geschenkt</item></plurals>
     <string name="benene_count_text_none">Noch keine Benenes verschenkt</string>
     <string name="subs_auto_select_language">Sprache automatisch wählen</string>
     <string name="subs_download_languages">Sprachen herunterladen</string>
@@ -453,7 +452,7 @@
     <string name="pref_category_defaults">Voreinstellungen</string>
     <string name="pref_category_looks">Aussehen</string>
     <string name="pref_category_ui_features">Funktionen</string>
-    <string name="plugins_updated" formatted="true">%d Plugins aktualisiert</string>
+    <plurals name="plugins_updated"><item quantity="one">%d Plugins aktualisiert</item><item quantity="other">%d Plugins aktualisiert</item></plurals>
     <string name="action_mark_as_watched">Als gesehen markieren</string>
     <string name="confirm_exit_dialog">Sicher, dass die App beendet werden soll?</string>
     <string name="yes">Ja</string>
@@ -634,18 +633,15 @@
     <string name="sort_episodes_date_newest">Ausstrahlungsdatum (Letztes)</string>
     <string name="sort_episodes_number_asc">Episode (Steigend)</string>
     <string name="sort_episodes_date_oldest">Ausstrahlungsdatum (Erstes)</string>
-    <string name="sort_button_date">Datum %s</string>
     <string name="torrent_preferred_media">Torrent in Eintellungen/Anbieter/Bevorzugte Medien aktivieren</string>
     <string name="software_decoding_desc">Softwaredekodierung ermöglicht es dem Player, Videodateien abzuspielen, die von deinem Gerät nicht unterstützt werden, könnte jedoch bei hoher Auflösung zu ruckelnder oder instabiler Wiedergabe führen.</string>
     <string name="torrent_not_accepted">App neu starten und Stream Torrent Pop-Up akzeptieren, um fortzufahren.</string>
     <string name="update_plugins">Plugins aktualisieren</string>
-    <string name="plugins_updated_manually">%d Plugin(s) erfolgreich aktualisiert</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">%d Plugin(s) erfolgreich aktualisiert</item><item quantity="other">%d Plugin(s) erfolgreich aktualisiert</item></plurals>
     <string name="update_plugins_manually">Plugins manuell aktualisieren</string>
     <string name="podcast_singular">Podcast</string>
     <string name="unsupported_error">Nicht unterstützter Fehler</string>
     <string name="encoding_error">Kodierungsfehler</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_rating">Bewertung %s</string>
     <string name="no_plugins_updated_manually">Keine Plugins wurden aktualisiert.</string>
     <string name="software_decoding">Softwaredekodierung</string>
     <string name="starting_plugin_update_manually">Plugin-Updateprozess wird gestartet!</string>
@@ -659,7 +655,7 @@
     <string name="all_subtitles_bold">Alle Untertitel fett machen</string>
     <string name="all_subtitles_italic">Alle Untertitel kursiv machen</string>
     <string name="background_radius">Hintergrundsradius</string>
-    <string name="volume_exceeded_100">Lautstärke hat 100% überschritten</string>
+    <string  name="volume_exceeded_100" formatted="false">Lautstärke hat 100% überschritten</string>
     <string name="slide_up_again_to_exceed_100">Noch einmal nach oben wischen, um 100% zu überschreiten</string>
     <string name="player_settings_always_ask">Immer fragen</string>
     <string name="download_parallel_settings_des">Wie viele verschiedene Elemente können parallel heruntergeladen werden</string>
@@ -701,16 +697,13 @@
     <string name="top_center">Oben mitte</string>
     <string name="top_right">Oben rechts</string>
     <string name="play_full_series_button">Gesamte Serie abspielen</string>
-    <string name="install_prerelease">Vorabversion installieren</string>
-    <string name="prerelease_already_installed">Vorabversion ist bereits installiert.</string>
-    <string name="prerelease_install_failed">Die Installation der Vorabversion ist fehlgeschlagen.</string>
     <string name="episode_action_play_mirror">Spiel Mirror ab</string>"
     <string name="show_episode_text">Episodentext</string>
     <string name="search_suggestions">Empfehlungen suchen</string>
     <string name="search_suggestions_des">Beim Tippen Suchempfehlungen anzeigen</string>
     <string name="clear_suggestions">Empfehlungen löschen</string>
     <string name="extra_brightness_settings">Zusätzliche Helligkeit</string>
-    <string name="extra_brightness_settings_des">Aktiviere Helligkeitsfilter, wenn 100% Bildschirmhelligkeit überschritten ist</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Aktiviere Helligkeitsfilter, wenn 100% Bildschirmhelligkeit überschritten ist</string>
     <string name="extra_brightness_key">Erhöhte Helligkeit aktiviert</string>
     <string name="show_cast_in_details">Zeige Cast-Panel</string>
     <string name="video_info">Mediainfo</string>

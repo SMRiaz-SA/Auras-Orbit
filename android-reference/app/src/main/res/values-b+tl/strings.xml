@@ -60,7 +60,6 @@
     <string name="popup_resume_download">I-resume ang download</string>
     <string name="popup_pause_download">I-pause ang download</string>
     <string name="home_more_info">More Info</string>
-    <string name="home_expanded_hide">Itago</string>
     <string name="home_play">I-play</string>
     <string name="home_info">Impormasyon</string>
     <string name="filter_bookmarks">Filter Bookmarks</string>
@@ -79,7 +78,7 @@
     <string name="subs_font_size">Laki ng Font</string>
     <string name="search_provider_text_providers">Search using providers</string>
     <string name="search_provider_text_types">Search using types</string>
-    <string name="benene_count_text">%d Benenes na ibinigay sa mga devs</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes na ibinigay sa mga devs</item><item quantity="other">%d Benenes na ibinigay sa mga devs</item></plurals>
     <string name="benene_count_text_none">Walang Benenes na binigay</string>
     <string name="subs_auto_select_language">Awtomatikong magpili ng lenggwahe</string>
     <string name="subs_download_languages">I-download ang mga Wika</string>

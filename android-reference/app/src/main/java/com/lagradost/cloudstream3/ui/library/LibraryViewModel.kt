@@ -141,6 +141,5 @@ class LibraryViewModel : ViewModel() {
 
     override fun onCleared() {
         MainActivity.reloadLibraryEvent -= ::reloadPages
-        super.onCleared()
     }
 }

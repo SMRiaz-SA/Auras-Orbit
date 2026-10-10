@@ -36,7 +36,7 @@
     <string name="discord">انضم لگروپ \"كلود ستريم\" ع الـ\"ديسكورد\"</string>
     <string name="episode_more_options_des">بعد خيارات</string>
     <string name="backup_success">تسيّڤة النسخة الإحتياطية</string>
-    <string name="benene_count_text">صرتو عاطين %d موزززة للمطورين</string>
+    <plurals name="benene_count_text"><item quantity="one">صرتو عاطين %d موزززة للمطورين</item><item quantity="other">صرتو عاطين %d موزززة للمطورين</item></plurals>
     <string name="swipe_to_seek_settings">سحابو لتقدمو وترجعو</string>
     <string name="backup_failed">إذن الوصول لذاكرة التخزين مفقود. پليز جرب بعد مرّة.</string>
     <string name="type_watching">عم إحضر</string>
@@ -307,7 +307,6 @@
     <string name="tv_layout">الشكل المعمول للتلفزيون</string>
     <string name="download_canceled">نلغى التنزيل</string>
     <string name="account">أكونت</string>
-    <string name="home_expanded_hide">خبي</string>
     <string name="sort_apply">طَبِق</string>
     <string name="pick_subtitle">الترجمة</string>
     <string name="next_episode_time_day_format" formatted="true">%1$d يوم %2$d ساعة %3$d ديقة</string>
@@ -503,7 +502,7 @@
     <string name="quality_blueray">Blu-ray</string>
     <string name="sync_score_format" formatted="true">%d/10</string>
     <string name="clipboard_too_large">النص كبير كتير. مافينا ننسخو.</string>
-    <string name="plugins_updated" formatted="true">عدد الإضافيات يللي تجددت: %d</string>
+    <plurals name="plugins_updated"><item quantity="one">عدد الإضافيات يللي تجددت: %d</item><item quantity="other">عدد الإضافيات يللي تجددت: %d</item></plurals>
     <string name="delayed_update_notice">رح يتجدد الآپ وقتا تطلعو مِنو</string>
     <string name="hls_playlist">پلاي ليست \"ايش أل أس\"</string>
     <string name="add_repository">زيد ريپو</string>
@@ -639,24 +638,21 @@
     <string name="sort_episodes_rating_low_high">رايتينگ (أوطا)</string>
     <string name="sort_episodes_date_newest">نهار اللي نزل (أجدد)</string>
     <string name="sort_episodes_date_oldest">نهار اللي نزل (أقدم)</string>
-    <string name="sort_button_date">تاريخ %s</string>
     <string name="update_plugins">جدد الإضافات</string>
     <string name="update_plugins_manually">جدد الإضافات يدويًا</string>
     <string name="sort_episodes_rating_high_low">رايتينگ (أعلى)</string>
     <string name="sort_episodes_number_asc">الحلقة (من الواطي ل العالي)</string>
     <string name="player_notification_channel_name">شغل الڤيديو عبر النوتيفيكايشنز</string>
     <string name="sort_episodes_number_desc">الحلقة (من العالي ل الواطي)</string>
-    <string name="sort_button_episode">ح %s</string>
     <string name="no_plugins_updated_manually">م تجدد شي.</string>
-    <string name="sort_button_rating">رايتينگ %s</string>
     <string name="starting_plugin_update_manually">بلشت عملية تجديد الإضافات!</string>
-    <string name="plugins_updated_manually">نجح تجديد %d إضافات!</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">نجح تجديد %d إضافات!</item><item quantity="other">نجح تجديد %d إضافات!</item></plurals>
     <string name="player_notification_channel_description">نوتيفيكايشن بت خليك تتحكم بال ڤيديو لما م يكون الآپ مفتوح</string>
     <string name="subtitles_from_online">اونلاين</string>
     <string name="subtitles_from_embedded">داخلياً</string>
     <string name="speech_recognition_unavailable">التعرّف الصوتي مش موجود</string>
     <string name="begin_speaking">بَلّش حكي…</string>
-    <string name="volume_exceeded_100">تعلى الصوت ل أعلى من 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">تعلى الصوت ل أعلى من 100%</string>
     <string name="slide_up_again_to_exceed_100">سحاب بعد ت تعليه فوق الـ100%</string>
     <string name="all_subtitles_bold">عمول خط الترجمة بولد</string>
     <string name="all_subtitles_italic">عمول خط الترجمة أيتاليك</string>
@@ -683,9 +679,6 @@
     <string name="edit_profile_image_hint">ادخل لينك ( عنوان ال URL ) تبع صورة الملف</string>
     <string name="edit_profile_image_success">تم تعديل الصورة بنجاح</string>
     <string name="play_full_series_button">بلّش كل المسلسل</string>
-    <string name="install_prerelease">نزل النسخة التجريبية من الآپ</string>
-    <string name="prerelease_already_installed">أصلًا عندك النسخة التجريبية.</string>
-    <string name="prerelease_install_failed">فشل تنزيل النسخة التجريبية.</string>
     <string name="episode_action_play_mirror">ستعمل مصدر بديل</string>"
     <string name="show_episode_text">كتيبة الحلقة</string>
     <string name="edit_profile_image_error_empty">م لقينا الرابط</string>
@@ -709,7 +702,7 @@
     <string name="download_queue">ليستة التنزيلات</string>
     <string name="queue_empty_message">مافي شي عم يتنزّل هلّق.</string>
     <string name="extra_brightness_settings">قوة ضو إضافية</string>
-    <string name="extra_brightness_settings_des">بت حط فلتر للبرايتنس لمّا تعلي قوة الضو ل أكتر من 100%</string>
+    <string  name="extra_brightness_settings_des" formatted="false">بت حط فلتر للبرايتنس لمّا تعلي قوة الضو ل أكتر من 100%</string>
     <string name="extra_brightness_key">extra_brightness_enabled</string>
     <string name="search_suggestions">اقتراحات التنبيش</string>
     <string name="search_suggestions_des">بت فرجي اقتراحات إنتا و عم بت نَبّش</string>

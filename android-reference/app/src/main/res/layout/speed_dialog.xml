@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <com.google.android.material.floatingactionbutton.FloatingActionButton android:contentDescription="@string/decrease_playback_speed"
             android:id="@+id/speed_minus"
             style="@style/ExtendedFloatingActionButton"
             android:layout_gravity="center_vertical"
@@ -59,7 +59,7 @@
             <requestFocus />
         </com.google.android.material.slider.Slider>
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <com.google.android.material.floatingactionbutton.FloatingActionButton android:contentDescription="@string/increase_playback_speed"
             android:id="@+id/speed_plus"
             style="@style/ExtendedFloatingActionButton"
             android:layout_gravity="center_vertical"

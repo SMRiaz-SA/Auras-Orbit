@@ -14,7 +14,9 @@
         android:baselineAligned="false"
         android:orientation="horizontal">
 
+        <!-- This ID is the dynamic target for subtitle rows and the sort controls. -->
         <LinearLayout
+            tools:ignore="UselessParent"
             android:id="@+id/sort_subtitles_holder"
             android:layout_width="0dp"
             android:layout_height="match_parent"

@@ -138,7 +138,7 @@ object SettingsFragmentScreen : Screen {
             title = R.string.category_updates,
             navigation = R.id.action_navigation_global_to_navigation_settings_updates,
             screen = SettingsUpdatesScreen,
-            icon = R.drawable.mobile_arrow_down_24px,
+            icon = R.drawable.ic_outline_info_24,
             subtitle = persistentListOf(
                 R.string.pref_category_app_updates,
                 R.string.pref_category_backup,
@@ -342,7 +342,7 @@ object SettingsFragmentScreen : Screen {
                             focusManager.clearFocus()
                         }) {
                             Icon(
-                                painter = painterResource(R.drawable.keyboard_arrow_left_24px),
+                                painter = painterResource(R.drawable.close_24px),
                                 contentDescription = null
                             )
                         }

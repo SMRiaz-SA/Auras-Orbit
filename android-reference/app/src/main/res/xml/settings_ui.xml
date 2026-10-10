@@ -24,7 +24,6 @@
 
         <SeekBarPreference
             android:defaultValue="0"
-            android:icon="@drawable/arrows_input_24px"
             android:key="@string/overscan_key"
             android:max="100"
             android:summary="@string/overscan_settings_des"
@@ -81,7 +80,7 @@
             android:title="@string/show_cast_in_details" />    
         <SwitchPreference
             android:defaultValue="false"
-            android:icon="@drawable/ic_baseline_skip_next_24"
+            android:icon="@drawable/ic_baseline_playlist_play_24"
             android:key="@string/show_fillers_key"
             android:title="@string/show_fillers_settings" />
         <SwitchPreference

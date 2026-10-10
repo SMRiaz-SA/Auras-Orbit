@@ -190,5 +190,5 @@ jobs:
           desktop-app/build/outputs/Auras-Orbit-Portable-*.zip
           desktop-app/build/outputs/Auras-Orbit.apk
         generate_release_notes: true
-        prerelease: true
+        prerelease: false
         overwrite_files: true

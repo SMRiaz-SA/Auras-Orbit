@@ -120,7 +120,8 @@ class SettingsFragment : BaseFragment<MainSettingsBinding>(
             settingsToolbar.apply {
                 setTitle(title)
                 if (isLayout(PHONE or EMULATOR)) {
-                    setNavigationIcon(R.drawable.ic_baseline_arrow_back_24)
+                    setNavigationIcon(R.drawable.close_24px)
+                    setNavigationContentDescription(R.string.go_back)
                     setNavigationOnClickListener {
                         activity?.onBackPressedDispatcher?.onBackPressed()
                     }
@@ -135,7 +136,8 @@ class SettingsFragment : BaseFragment<MainSettingsBinding>(
             settingsToolbar.apply {
                 setTitle(title)
                 if (isLayout(PHONE or EMULATOR)) {
-                    setNavigationIcon(R.drawable.ic_baseline_arrow_back_24)
+                    setNavigationIcon(R.drawable.close_24px)
+                    setNavigationContentDescription(R.string.go_back)
                     children.firstOrNull { it is ImageView }?.tag = getString(R.string.tv_no_focus_tag)
                     setNavigationOnClickListener {
                         safe { activity?.onBackPressedDispatcher?.onBackPressed() }

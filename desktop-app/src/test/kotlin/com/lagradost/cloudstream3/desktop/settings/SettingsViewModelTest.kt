@@ -2,8 +2,6 @@ package com.lagradost.cloudstream3.desktop.settings
 
 import com.lagradost.cloudstream3.desktop.network.DohProvider
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.ClearanceState
-import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.DiagnosticsState
-import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.ProviderTestReportState
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.SettingsUiState
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.StorageMetrics
 import com.lagradost.cloudstream3.desktop.ui.screens.settings.contract.TorrServerEngineState
@@ -26,8 +24,6 @@ class SettingsViewModelTest {
         assertTrue(state.floatSettings.isEmpty())
         assertEquals("", state.downloadPath)
         assertEquals("", state.screenshotPath)
-        assertFalse(state.isDevModeEnabled)
-        assertNull(state.devModeError)
         assertFalse(state.isOptimizingDb)
         assertFalse(state.isRefreshingStorage)
 
@@ -35,8 +31,6 @@ class SettingsViewModelTest {
         assertEquals(TorrServerEngineState(), state.engineState)
         assertEquals(UpdateCheckState(), state.updateCheckState)
         assertEquals(ClearanceState(), state.clearanceState)
-        assertEquals(ProviderTestReportState(), state.providerTestState)
-        assertEquals(DiagnosticsState(), state.diagnosticsState)
     }
 
     @Test
@@ -94,22 +88,6 @@ class SettingsViewModelTest {
 
         state = state.copy(floatSettings = state.floatSettings + ("audio_delay" to 250f))
         assertEquals(250f, state.floatSettings["audio_delay"])
-    }
-
-    @Test
-    fun testDiagnosticsState_Transitions() {
-        var state = DiagnosticsState()
-        assertFalse(state.isNetworkTesting)
-        assertFalse(state.isMetaTesting)
-        assertTrue(state.results.isEmpty())
-
-        state = state.copy(isNetworkTesting = true, currentTest = "DNS Resolution")
-        assertTrue(state.isNetworkTesting)
-        assertEquals("DNS Resolution", state.currentTest)
-
-        state = state.copy(isNetworkTesting = false, currentTest = "", lastRunTime = "2026-09-12 12:00:00")
-        assertFalse(state.isNetworkTesting)
-        assertEquals("2026-09-12 12:00:00", state.lastRunTime)
     }
 
     @Test

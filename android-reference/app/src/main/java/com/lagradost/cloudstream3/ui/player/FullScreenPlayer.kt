@@ -1267,10 +1267,8 @@ open class FullScreenPlayer : AbstractPlayerFragment<FragmentPlayerBinding>(
                 showTracksDialogue()
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                playerControlsScroll.setOnScrollChangeListener { _, _, _, _, _ ->
-                    autoHide()
-                }
+            playerControlsScroll.setOnScrollChangeListener { _, _, _, _, _ ->
+                autoHide()
             }
 
             exoProgress.registerPlayerView(playerView)

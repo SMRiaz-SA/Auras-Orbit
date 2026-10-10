@@ -58,6 +58,7 @@ import com.lagradost.cloudstream3.utils.UiText
 import com.lagradost.cloudstream3.utils.downloader.DownloadFileManagement.sanitizeFilename
 import com.lagradost.cloudstream3.utils.extractorApis
 import com.lagradost.cloudstream3.utils.txt
+import com.lagradost.cloudstream3.utils.txtPlural
 import dalvik.system.PathClassLoader
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -322,7 +323,11 @@ object PluginManager {
         }
 
         main {
-            val uitext = txt(R.string.plugins_updated, updatedPlugins.size)
+            val uitext = txtPlural(
+                R.plurals.plugins_updated,
+                updatedPlugins.size,
+                updatedPlugins.size
+            )
             createNotification(activity, uitext, updatedPlugins)
             /*val navBadge = (activity as MainActivity).binding?.navRailView?.getOrCreateBadge(R.id.navigation_settings)
             navBadge?.isVisible = true
@@ -877,15 +882,20 @@ object PluginManager {
         }.also {
             main {
                 val message = if (updatedPlugins.isNotEmpty()) {
-                    activity.getString(R.string.plugins_updated_manually, updatedPlugins.size)
+                    activity.resources.getQuantityString(
+                        R.plurals.plugins_updated_manually,
+                        updatedPlugins.size,
+                        updatedPlugins.size
+                    )
                 } else {
                     activity.getString(R.string.no_plugins_updated_manually)
                 }
                 showToast(message, Toast.LENGTH_LONG)
 
-                val notificationText = UiText.StringResource(
-                    R.string.plugins_updated_manually,
-                    listOf(updatedPlugins.size)
+                val notificationText = txtPlural(
+                    R.plurals.plugins_updated_manually,
+                    updatedPlugins.size,
+                    updatedPlugins.size
                 )
                 createNotification(activity, notificationText, updatedPlugins)
 

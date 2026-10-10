@@ -70,7 +70,6 @@
     <string name="popup_resume_download">Continuar download</string>
     <string name="popup_pause_download">Pausar download</string>
     <string name="home_more_info">Mais informações</string>
-    <string name="home_expanded_hide">Ocultar</string>
     <string name="home_play">Reproduzir</string>
     <string name="home_info">Informações</string>
     <string name="filter_bookmarks">Filtrar marcadores</string>
@@ -94,7 +93,7 @@
     <string name="subs_font_size">Tamanho da fonte</string>
     <string name="search_provider_text_providers">Pesquisar usando fornecedor</string>
     <string name="search_provider_text_types">Pesquisar usando tipos</string>
-    <string name="benene_count_text">%d Benenes doados aos desenvolvedores</string>
+    <plurals name="benene_count_text"><item quantity="one">%d Benenes doados aos desenvolvedores</item><item quantity="other">%d Benenes doados aos desenvolvedores</item><item quantity="many">%d Benenes doados aos desenvolvedores</item></plurals>
     <string name="benene_count_text_none">Nenhuma Benenes doada</string>
     <string name="subs_auto_select_language">Escolher automaticamente idioma</string>
     <string name="subs_download_languages">Salvar idiomas ao baixar</string>
@@ -107,7 +106,7 @@
     <string name="action_open_play">@string/home_play</string>
     <string name="vpn_might_be_needed">Uma VPN pode ser necessária para esse fornecedor funcionar corretamente</string>
     <string name="vpn_torrent">Esse fornecedor é um torrent, uma VPN é recomendada</string>
-    <string name="provider_info_meta">Metadados não são oferecidas pelo site, o carregamento do video pode falhar se ele não existir no site.</string>
+    <string name="provider_info_meta">Metadados não são oferecidas pelo site, o carregamento do vídeo pode falhar se ele não existir no site.</string>
     <string name="torrent_plot">Descrição</string>
     <string name="normal_no_plot">Sinopse não encontrada</string>
     <string name="torrent_no_plot">Descrição não encontrada</string>
@@ -478,7 +477,7 @@
     <string name="extension_size">Tamanho</string>
     <string name="skip_type_op">Abrindo</string>
     <string name="season_format">%1$s %2$d%3$s</string>
-    <string name="plugins_updated" formatted="true">%d plugins atualizados</string>
+    <plurals name="plugins_updated"><item quantity="one">%d plugins atualizados</item><item quantity="other">%d plugins atualizados</item><item quantity="many">%d plugins atualizados</item></plurals>
     <string name="safe_mode_description">Todos as extensões serão desligadas para ajuda se talvez estejam causando algum bug.</string>
     <string name="app_not_found_error">Aplicativo não encontrado</string>
     <string name="skip_type_recap">Recapitular</string>
@@ -500,8 +499,8 @@
     <string name="extension_authors">Autores</string>
     <string name="extension_install_first">Instale a extensão primeiro</string>
     <string name="skip_type_credits">Créditos</string>
-    <string name="history">Historico</string>
-    <string name="clear_history">Limpar historico</string>
+    <string name="history">Histórico</string>
+    <string name="clear_history">Limpar histórico</string>
     <string name="clipboard_too_large">Tem Muito texto. Não é possível salvar no clipboard.</string>
     <string name="player_pref">Player de vídeo preferido</string>
     <string name="start">Iniciar</string>
@@ -512,7 +511,7 @@
     <string name="safe_mode_crash_info">Visualização info de crash</string>
     <string name="audio_tracks">Faixas de áudio</string>
     <string name="sort_updated_new">Adicionado em (novo para antigo)</string>
-    <string name="video_tracks">Faixas de video</string>
+    <string name="video_tracks">Faixas de vídeo</string>
     <string name="pref_category_subtitles">Legendas</string>
     <string name="is_adult">18+</string>
     <string name="pref_category_links">Links</string>
@@ -655,14 +654,11 @@
     <string name="sort_episodes_number_desc">Episódio (descendente)</string>
     <string name="sort_episodes_rating_high_low">Avaliação (mais alta)</string>
     <string name="sort_episodes_rating_low_high">Avaliação (mais baixa)</string>
-    <string name="sort_button_rating">Avaliação %s</string>
     <string name="sort_episodes_date_newest">Data de exibição (mais recente)</string>
     <string name="sort_episodes_date_oldest">Data de exibição (mais antiga)</string>
-    <string name="sort_button_episode">Ep %s</string>
-    <string name="sort_button_date">Data %s</string>
     <string name="update_plugins">Atualizar plugins</string>
     <string name="starting_plugin_update_manually">Iniciando o processo de atualização do plugin!</string>
-    <string name="plugins_updated_manually">Atualização bem-sucedida para %d plugin(s)</string>
+    <plurals name="plugins_updated_manually"><item quantity="one">Atualização bem-sucedida para %d plugin(s)</item><item quantity="other">Atualização bem-sucedida para %d plugin(s)</item><item quantity="many">Atualização bem-sucedida para %d plugin(s)</item></plurals>
     <string name="no_plugins_updated_manually">Nenhum plugin foi atualizado.</string>
     <string name="update_plugins_manually">Atualizar plugins manualmente</string>
     <string name="player_notification_channel_name">Notificações de reprodução</string>
@@ -674,7 +670,7 @@
     <string name="background_radius">Bordas do plano de fundo</string>
     <string name="all_subtitles_bold">Tornar todas as legendas em negrito</string>
     <string name="all_subtitles_italic">Tornar todas as legendas em itálico</string>
-    <string name="volume_exceeded_100">O volume ultrapassou 100%</string>
+    <string  name="volume_exceeded_100" formatted="false">O volume ultrapassou 100%</string>
     <string name="slide_up_again_to_exceed_100">Deslize para cima novamente para ir além de 100%</string>
     <string name="download_time_left_hour_min_sec_format" formatted="true">%1$dh %2$dm %3$ds</string>
     <string name="download_time_left_min_sec_format" formatted="true">%1$dm %2$ds</string>
@@ -717,14 +713,11 @@
     <string name="top_right">Superior direito</string>
     <string name="play_full_series_button">Assistir à série completa</string>
     <string name="resolution_and_name">Resolução e nome</string>
-    <string name="prerelease_install_failed">Falha ao instalar a versão antecipada.</string>
-    <string name="prerelease_already_installed">Versão antecipada instalada.</string>
-    <string name="install_prerelease">Instalar versão antecipada</string>
     <string name="show_episode_text">Episódio Text</string>
     <string name="download_queue">Fila de download</string>
     <string name="queue_empty_message">Não há itens na fila para download.</string>
     <string name="extra_brightness_settings">Brilho extra</string>
-    <string name="extra_brightness_settings_des">Ativar filtro de claridade ao exceder 100% do brilho do display</string>
+    <string  name="extra_brightness_settings_des" formatted="false">Ativar filtro de claridade ao exceder 100% do brilho do display</string>
     <string name="extra_brightness_key">brilho_extra_ativado</string>
     <string name="search_suggestions">Sugestões de Busca</string>
     <string name="search_suggestions_des">Exibir sugestões de pesquisa durante a digitação</string>

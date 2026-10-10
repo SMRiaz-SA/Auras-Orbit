@@ -84,7 +84,6 @@
     <string name="popup_resume_download">Continua la descàrrega</string>
     <string name="popup_pause_download">Posa la descàrrega en espera</string>
     <string name="home_more_info">Més informació</string>
-    <string name="home_expanded_hide">Amaga</string>
     <string name="home_play">Reprodueix</string>
     <string name="home_info">Informació</string>
     <string name="filter_bookmarks">Filtra els favorits</string>
@@ -113,7 +112,7 @@
     <string name="subs_font_size">Tamany de la lletra</string>
     <string name="search_provider_text_providers">Cerca amb proveïdors</string>
     <string name="search_provider_text_types">Cerca per tipus</string>
-    <string name="benene_count_text">%d bananes donades als desenvolupadors</string>
+    <plurals name="benene_count_text"><item quantity="one">%d bananes donades als desenvolupadors</item><item quantity="other">%d bananes donades als desenvolupadors</item><item quantity="many">%d bananes donades als desenvolupadors</item></plurals>
     <string name="benene_count_text_none">No s\'han donat bananes</string>
     <string name="subs_auto_select_language">Selecciona l\'idioma automàticament</string>
     <string name="subs_download_languages">Descarrega els idiomes</string>

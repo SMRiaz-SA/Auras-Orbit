@@ -10,6 +10,8 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.viewbinding.ViewBinding
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.isMovieType
 import com.lagradost.cloudstream3.databinding.DownloadChildEpisodeBinding
 import com.lagradost.cloudstream3.databinding.DownloadHeaderEpisodeBinding
 import com.lagradost.cloudstream3.mvvm.logError
@@ -125,6 +127,11 @@ class DownloadAdapter(
                 }
             }
             downloadHeaderTitle.text = data.name
+            downloadHeaderType.text = when {
+                data.type.isMovieType() -> root.context.getString(R.string.auras_media_movie)
+                data.type.isEpisodeBased() -> root.context.getString(R.string.auras_media_tv_show)
+                else -> data.type.name.replace('_', ' ')
+            }
             val formattedSize = formatShortFileSize(binding.root.context, card.totalBytes)
 
             if (card.child != null) {
@@ -149,8 +156,6 @@ class DownloadAdapter(
         formattedSize: String
     ) {
         card.child ?: return
-        downloadHeaderGotoChild.isVisible = false
-
         val posDur = getViewPos(card.data.id)
         watchProgressContainer.isVisible = true
         downloadHeaderEpisodeProgress.apply {
@@ -173,6 +178,7 @@ class DownloadAdapter(
 
         downloadButton.resetView()
         val status = downloadButton.getStatus(card.child.id, card.currentBytes, card.totalBytes)
+        downloadHeaderInfo.text = downloadInfo(formattedSize, card, downloadHeaderInfo.context)
         if (status == DownloadStatusTell.IsDone) {
             // We do this here instead if we are finished downloading
             // so that we can use the value from the view model
@@ -185,7 +191,6 @@ class DownloadAdapter(
             downloadButton.progressBar.progressDrawable =
                 downloadButton.getDrawableFromStatus(status)
                     ?.let { ContextCompat.getDrawable(downloadButton.context, it) }
-            downloadHeaderInfo.text = formattedSize
         } else {
             // We need to make sure we restore the correct progress
             // when we refresh data in the adapter.
@@ -224,11 +229,10 @@ class DownloadAdapter(
         watchProgressContainer.isVisible = false
         downloadButton.isVisible = false
         downloadHeaderEpisodeProgress.isVisible = false
-        downloadHeaderGotoChild.isVisible = !isMultiDeleteState
 
         try {
             downloadHeaderInfo.isVisible = true
-            downloadHeaderInfo.text =
+            val downloadSummary =
                 downloadHeaderInfo.context.getString(R.string.extra_info_format).format(
                     card.totalDownloads,
                     downloadHeaderInfo.context.resources.getQuantityString(
@@ -237,6 +241,7 @@ class DownloadAdapter(
                     ),
                     formattedSize
                 )
+            downloadHeaderInfo.text = downloadInfo(downloadSummary, card, downloadHeaderInfo.context)
         } catch (e: Exception) {
             downloadHeaderInfo.text = null
             logError(e)
@@ -252,6 +257,19 @@ class DownloadAdapter(
                 )
             }
         }
+    }
+
+    private fun downloadInfo(
+        summary: String,
+        card: VisualDownloadCached.Header,
+        context: android.content.Context,
+    ): String {
+        val state = if (card.currentBytes < card.totalBytes) {
+            R.string.auras_download_in_progress
+        } else {
+            R.string.auras_download_available_offline
+        }
+        return "$summary · ${context.getString(state)}"
     }
 
     private fun bindChild(binding: ViewBinding, card: VisualDownloadCached.Child?) {

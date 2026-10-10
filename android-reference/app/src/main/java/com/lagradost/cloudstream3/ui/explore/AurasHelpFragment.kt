@@ -36,9 +36,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +73,12 @@ private val aurasHelpTopics = listOf(
     AurasHelpTopic(R.string.auras_help_section_catalogs, R.string.auras_help_library_title, R.string.auras_help_library_summary, R.array.auras_help_library_steps, R.string.auras_help_library_terms, R.string.auras_help_library_recovery, R.id.navigation_library),
     AurasHelpTopic(R.string.auras_help_section_catalogs, R.string.auras_help_downloads_title, R.string.auras_help_downloads_summary, R.array.auras_help_downloads_steps, R.string.auras_help_downloads_terms, R.string.auras_help_downloads_recovery, R.id.navigation_downloads),
     AurasHelpTopic(R.string.auras_help_section_recovery, R.string.auras_help_settings_title, R.string.auras_help_settings_summary, R.array.auras_help_settings_steps, R.string.auras_help_settings_terms, R.string.auras_help_settings_recovery, R.id.navigation_settings),
+)
+
+private val aurasPopularHelpTopics = listOf(
+    aurasHelpTopics[0], // Connect a catalog
+    aurasHelpTopics[1], // Browse catalogs
+    aurasHelpTopics[2], // Explore the top ten
 )
 
 /** Searchable, bundled Android guide. All article content is Android string resources so it can be translated. */
@@ -112,22 +118,29 @@ private fun AurasHelpScreen(
     onBack: () -> Unit,
     onOpenDestination: (Int) -> Unit,
 ) {
-    val context = LocalContext.current
-    val filteredTopics = remember(query, context) {
+    val localizedTopicText = aurasHelpTopics.associateWith { topic ->
+        listOf(
+            stringResource(topic.section),
+            stringResource(topic.title),
+            stringResource(topic.summary),
+            stringResource(topic.searchTerms),
+            stringResource(topic.recovery),
+            *stringArrayResource(topic.steps),
+        )
+    }
+    val filteredTopics = remember(query, localizedTopicText) {
         val needle = query.trim()
         if (needle.isBlank()) aurasHelpTopics else aurasHelpTopics.filter { topic ->
-            val indexedText = listOf(
-                context.getString(topic.section),
-                context.getString(topic.title),
-                context.getString(topic.summary),
-                context.getString(topic.searchTerms),
-                context.getString(topic.recovery),
-                *context.resources.getStringArray(topic.steps),
-            )
+            val indexedText = localizedTopicText[topic].orEmpty()
             indexedText.any { it.contains(needle, ignoreCase = true) }
         }
     }
-    val selectedSteps = selectedTopic?.let { context.resources.getStringArray(it.steps).toList() }.orEmpty()
+    val remainingTopics = if (query.isBlank()) {
+        filteredTopics.filterNot { it in aurasPopularHelpTopics }
+    } else {
+        filteredTopics
+    }
+    val selectedSteps = selectedTopic?.let { stringArrayResource(it.steps).toList() }.orEmpty()
 
     BackHandler(enabled = selectedTopic != null, onBack = onBackToTopics)
     Column(
@@ -256,7 +269,28 @@ private fun AurasHelpScreen(
                         label = { Text(stringResource(R.string.auras_help_search_hint)) },
                     )
                 }
-                if (filteredTopics.isEmpty()) {
+                if (query.isBlank()) {
+                    item(key = "popular-help-heading") {
+                        Text(
+                            stringResource(R.string.auras_help_popular_heading),
+                            color = AurasPalette.Accent,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                    }
+                    items(aurasPopularHelpTopics, key = { "popular-${it.title}" }) { topic ->
+                        AurasHelpTopicCard(topic, onSelectTopic)
+                    }
+                    item(key = "all-help-heading") {
+                        Text(
+                            stringResource(R.string.auras_help_all_guides_heading),
+                            color = AurasPalette.Accent,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                    }
+                }
+                if (remainingTopics.isEmpty() && query.isNotBlank()) {
                     item {
                         Text(
                             stringResource(R.string.auras_help_no_results),
@@ -265,7 +299,7 @@ private fun AurasHelpScreen(
                         )
                     }
                 } else {
-                    filteredTopics.groupBy { it.section }.forEach { (section, topics) ->
+                    remainingTopics.groupBy { it.section }.forEach { (section, topics) ->
                         item(key = "help-section-$section") {
                             Text(
                                 stringResource(section),
@@ -275,32 +309,37 @@ private fun AurasHelpScreen(
                             )
                         }
                         items(topics, key = { it.title }) { topic ->
-                            Card(
-                                onClick = { onSelectTopic(topic) },
-                                colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AurasPalette.Stroke),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text(
-                                        stringResource(topic.title),
-                                        color = AurasPalette.Text,
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    Text(
-                                        stringResource(topic.summary),
-                                        color = AurasPalette.Muted,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                }
-                            }
+                            AurasHelpTopicCard(topic, onSelectTopic)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AurasHelpTopicCard(topic: AurasHelpTopic, onSelectTopic: (AurasHelpTopic) -> Unit) {
+    Card(
+        onClick = { onSelectTopic(topic) },
+        colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AurasPalette.Stroke),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(topic.title),
+                color = AurasPalette.Text,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(topic.summary),
+                color = AurasPalette.Muted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

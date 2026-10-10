@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Keep a concrete include root for the sync panel and its loading overlay. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MergeRootFrame"
 
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -24,7 +26,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
-                android:text="MyAnimeList, AniList"
+                tools:text="MyAnimeList, AniList"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -34,7 +36,7 @@
                 android:orientation="horizontal"
                 android:visibility="visible">
 
-                <ImageView
+                <ImageView android:contentDescription="@string/remove_episode"
                     android:id="@+id/result_sync_sub_episode"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -66,7 +68,7 @@
                     android:textSize="20sp"
                     tools:text="30" />
 
-                <ImageView
+                <ImageView android:contentDescription="@string/add_episode"
                     android:id="@+id/result_sync_add_episode"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -113,7 +115,7 @@
                     android:layout_gravity="center_vertical"
                     android:layout_marginStart="0dp"
                     android:minWidth="0dp"
-                    android:text="7/10" />
+                    tools:text="7/10" />
             </LinearLayout>
 
             <com.google.android.material.slider.Slider
@@ -144,22 +146,16 @@
                     style="@style/WatchHeaderText"
                     tools:text="Recommended" />
 
-                <ImageView
-                    android:layout_width="30dp"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="5dp"
-                    android:contentDescription="@string/home_more_info"
-                    android:src="@drawable/ic_baseline_arrow_forward_24"
-                    app:tint="?attr/textColor" />
             </FrameLayout>
 
             <ListView
-                android:id="@+id/result_sync_check"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_rowWeight="1"
-                tools:listitem="@layout/sort_bottom_single_choice" />
+            android:id="@+id/result_sync_check"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_rowWeight="1"
+            android:nestedScrollingEnabled="false"
+            tools:listitem="@layout/sort_bottom_single_choice"
+            tools:ignore="NestedScrolling" />
 
             <com.google.android.material.button.MaterialButton
                 style="@style/WhiteButton"

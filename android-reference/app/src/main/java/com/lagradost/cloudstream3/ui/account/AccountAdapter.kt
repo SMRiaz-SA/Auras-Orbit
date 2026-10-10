@@ -32,7 +32,10 @@ class AccountAdapter(
         fun View.setRippleForeground() {
             val outValue = TypedValue()
             context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
-            foreground = context.getDrawable(outValue.resourceId)
+            foreground = androidx.appcompat.content.res.AppCompatResources.getDrawable(
+                context,
+                outValue.resourceId
+            )
         }
     }
 

@@ -36,6 +36,9 @@ abstract class VideoGenerator<T : Any>(val videos: List<T>) {
     abstract val canSkipLoading: Boolean
     abstract fun getId(index : Int) : Int?
 
+    /** Metadata used when saving resume state, which may differ from a playable next item. */
+    open fun getNextMeta(index: Int): Any? = videos.getOrNull(index + 1)
+
     fun hasNext(videoIndex : Int): Boolean = videoIndex < videos.lastIndex
     fun hasPrev(videoIndex : Int): Boolean = videoIndex > 0
 

@@ -96,7 +96,7 @@ interface MpvLibrary : Library {
                 val str = getPropertyString(ctx, name) ?: return fallback
                 str.replace(",", ".").toDoubleOrNull() ?: fallback
             } catch (t: Throwable) {
-                AppLogger.e("DEBUG_MPV: getPropertyDouble failed for $name: ${t.stackTraceToString()}")
+                AppLogger.e("MPV: getPropertyDouble failed for $name: ${t.stackTraceToString()}")
                 fallback
             }
         }

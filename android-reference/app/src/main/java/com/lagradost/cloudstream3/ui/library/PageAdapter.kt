@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import com.lagradost.cloudstream3.databinding.SearchResultGridExpandedBinding
+import com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.AutofitRecyclerView
 import com.lagradost.cloudstream3.ui.BaseDiffCallback
@@ -25,7 +26,7 @@ class PageAdapter(
             a.name == b.name && a.url == b.url
         }
     })) {
-    private val coverHeight: Int get() = (resView.itemWidth / 0.68).roundToInt()
+    private val coverHeight: Int get() = (resView.itemWidth / PORTRAIT_POSTER_ASPECT_RATIO).roundToInt()
 
     override fun onCreateContent(parent: ViewGroup): ViewHolderState<Any> {
         return ViewHolderState(

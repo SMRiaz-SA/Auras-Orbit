@@ -39,7 +39,9 @@
             android:orientation="horizontal"
             android:padding="10dp">
 
+            <!-- Preserve the fixed-height poster column and its independent spacing. -->
             <LinearLayout
+                tools:ignore="UselessParent"
                 android:layout_width="match_parent"
                 android:layout_height="178dp"
                 android:layout_marginStart="10dp"
@@ -231,7 +233,9 @@
                     android:orientation="horizontal">
 
 
+                    <!-- The stacked placeholder bars need a vertical group inside this horizontal row. -->
                     <LinearLayout
+                        tools:ignore="UselessParent"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:orientation="vertical"

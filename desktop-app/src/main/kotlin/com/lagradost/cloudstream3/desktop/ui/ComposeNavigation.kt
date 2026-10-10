@@ -598,10 +598,7 @@ fun CloudstreamApp(rootComponent: RootComponent) {
 }
 
 @Composable
-internal fun GlobalDevelopmentWatermark(modifier: Modifier = Modifier) {
-    val dateStr = remember {
-        java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy.MM.dd"))
-    }
+internal fun GlobalVersionWatermark(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
@@ -621,7 +618,7 @@ internal fun GlobalDevelopmentWatermark(modifier: Modifier = Modifier) {
                     .background(MaterialTheme.colorScheme.primary),
             )
             Text(
-                text = "BETA • v${com.lagradost.cloudstream3.desktop.AppConfig.APP_VERSION} • $dateStr",
+                text = "v${com.lagradost.cloudstream3.desktop.AppConfig.APP_VERSION}",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 10.sp,
                     letterSpacing = 0.5.sp,

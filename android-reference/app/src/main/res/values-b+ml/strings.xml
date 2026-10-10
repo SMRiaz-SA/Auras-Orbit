@@ -45,7 +45,6 @@
     <string name="popup_resume_download">ഡൌൺലോഡ് തുടരുക</string>
     <string name="popup_pause_download">ഡൌൺലോഡ് നിർത്തുക</string>
     <string name="home_more_info">കൂടുതൽ വിവരം</string>
-    <string name="home_expanded_hide">ഒളിക്കുക</string>
     <string name="home_play">പ്ലേയ്</string>
     <string name="home_info">വിവരം</string>
     <string name="filter_bookmarks">ബുക്മാർക് ഫിൽറ്റർ ചെയ്യുക</string>
@@ -63,7 +62,7 @@
     <string name="subs_font">Font</string> -->
     <string name="search_provider_text_providers">സ്രോതസ് അടിസ്ഥാനത്തിൽ തിരയുക</string>
     <string name="search_provider_text_types">തരം അടിസ്ഥാനത്തിൽ തിരയുക</string>
-    <string name="benene_count_text">%d പഴം കൊടുത്തു</string>
+    <plurals name="benene_count_text"><item quantity="one">%d പഴം കൊടുത്തു</item><item quantity="other">%d പഴം കൊടുത്തു</item></plurals>
     <string name="benene_count_text_none">പഴം കൊടുത്തിട്ടില്ല</string>
     <!-- <string name="subs_auto_select_language">Auto Select Language</string>
     <string name="subs_download_languages">Download Languages</string> -->
