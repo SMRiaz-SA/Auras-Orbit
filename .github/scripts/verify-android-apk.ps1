@@ -117,14 +117,23 @@ $expectedSignerDigest = $privateKeyCertificates[0].GetCertHashString(
     [System.Security.Cryptography.HashAlgorithmName]::SHA256
 ).ToLowerInvariant()
 
-$signatureOutput = @(& $apksigner.FullName verify --print-certs $resolvedApkPath)
+$signatureOutput = @(& $apksigner.FullName verify --print-certs $resolvedApkPath 2>&1)
 if ($LASTEXITCODE -ne 0) { throw "Android APK signature verification failed with exit code $LASTEXITCODE." }
 $signatureText = [string]::Join([Environment]::NewLine, $signatureOutput)
-$signerMatch = [regex]::Match(
-    $signatureText,
-    'Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F:]+)'
-)
-if (-not $signerMatch.Success) { throw 'Could not read the APK signer certificate digest from apksigner.' }
+$digestLine = $signatureText -split '\r?\n' |
+    Where-Object { $_ -match '(?i)SHA\s*[-‐‑‒–—]?\s*256\s+digest' } |
+    Select-Object -First 1
+if ($null -eq $digestLine) {
+    $diagnosticLines = ($signatureText -split '\r?\n' |
+        Where-Object { $_ -match '(?i)signer|certificate|digest|sha' } |
+        Select-Object -First 5) -join ' | '
+    throw "apksigner did not return a SHA-256 certificate digest. Output: $diagnosticLines"
+}
+$digestText = $digestLine -replace '(?i)^.*?SHA\s*[-‐‑‒–—]?\s*256\s+digest\s*[:=]?\s*', ''
+$signerMatch = [regex]::Match($digestText, '(?i)(?<![0-9a-f])((?:[0-9a-f]{2}:?){32})(?![0-9a-f])')
+if (-not $signerMatch.Success) {
+    throw "Could not parse the APK signer certificate digest from apksigner output: $digestLine"
+}
 $actualSignerDigest = $signerMatch.Groups[1].Value.Replace(':', '').ToLowerInvariant()
 if ($actualSignerDigest -ne $expectedSignerDigest) {
     throw "Android APK signer certificate '$actualSignerDigest' does not match the configured release keystore."
