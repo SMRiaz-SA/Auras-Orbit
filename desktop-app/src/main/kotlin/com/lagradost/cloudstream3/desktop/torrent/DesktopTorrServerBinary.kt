@@ -8,6 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -111,6 +113,10 @@ class DesktopTorrServerBinary internal constructor(
         var ready = false
         try {
             if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
+            if (isPortAcceptingConnections()) {
+                throw IllegalStateException("The TorrServer port is already occupied by another process. Choose another port.")
+            }
+
             val binaryFile = runtime.resolveBinary { resolveOrDownloadBinary() }
             if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
 
@@ -189,6 +195,12 @@ class DesktopTorrServerBinary internal constructor(
     }
 
     private fun ownedProcessIsAlive(): Boolean = synchronized(lifecycleLock) { process?.isAlive == true }
+
+    private fun isPortAcceptingConnections(): Boolean = runCatching {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", port), PORT_PROBE_TIMEOUT_MS)
+        }
+    }.isSuccess
 
     private fun releaseAndTerminate(owned: Process) {
         synchronized(lifecycleLock) {
@@ -286,6 +298,7 @@ class DesktopTorrServerBinary internal constructor(
     }
 
     companion object {
+        private const val PORT_PROBE_TIMEOUT_MS = 300
         private const val STARTUP_TIMEOUT_MS = 15_000L
         private const val HEALTH_CHECK_INTERVAL_MS = 250L
     }
