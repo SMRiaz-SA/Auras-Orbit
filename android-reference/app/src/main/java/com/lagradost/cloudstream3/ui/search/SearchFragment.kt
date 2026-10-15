@@ -170,7 +170,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     private var bottomSheetDialog: BottomSheetDialog? = null
     private var peopleSearchJob: Job? = null
     private var peopleSearchState by mutableStateOf(AurasPeopleSearchState())
-    private var peopleOnlyMode by mutableStateOf(false)
+    private var searchResultScope by mutableStateOf(SearchResultScope.TITLES)
     private var advancedSearchEnabled = true
     private var searchSuggestionsEnabled = true
 
@@ -392,10 +392,10 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
             aurasPeopleSearch.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             aurasPeopleSearch.setContent {
                 com.lagradost.cloudstream3.ui.explore.AurasMobileTheme {
-                    AurasPeopleSearchPanel(
+                    AurasSearchScopePanel(
                         state = peopleSearchState,
-                        peopleOnly = peopleOnlyMode,
-                        onFilterChanged = ::changePeopleFilter,
+                        scope = searchResultScope,
+                        onScopeChanged = ::changeSearchResultScope,
                         onPersonSelected = ::openPerson,
                     )
                 }
@@ -537,7 +537,9 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                         dialog.dismissSafe()
 
                         // run search when dialog is close
-                        if (previousSelectedApis != selectedApis.toSet() || previousSelectedSearchTypes != selectedSearchTypes.toSet()) {
+                        if (searchResultScope != SearchResultScope.PEOPLE &&
+                            (previousSelectedApis != selectedApis.toSet() || previousSelectedSearchTypes != selectedSearchTypes.toSet())
+                        ) {
                             search(binding.mainSearch.query.toString())
                         }
                     }
@@ -551,6 +553,8 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         val isSearchSuggestionsEnabled = settingsManager?.getBoolean("search_suggestions_enabled", true) ?: true
 
         selectedSearchTypes = DataStoreHelper.searchPreferenceTags.toMutableList()
+        advancedSearchEnabled = isAdvancedSearch
+        searchSuggestionsEnabled = isSearchSuggestionsEnabled
 
         if (!isLayout(PHONE)) {
             binding.searchFilter.isFocusable = true
@@ -569,7 +573,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 
         binding.mainSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String): Boolean {
-                search(query)
+                if (searchResultScope != SearchResultScope.PEOPLE) search(query)
                 searchViewModel.clearSuggestions()
                 requestPeopleSearch(query)
 
@@ -590,19 +594,22 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     searchViewModel.clearSuggestions()
                 } else {
                     // Fetch suggestions when user is typing (if enabled)
-                    if (isSearchSuggestionsEnabled) {
-                        searchViewModel.fetchSuggestions(newText)
+                    val routing = searchResultScope.routeQuery(newText, isSearchSuggestionsEnabled)
+                    if (routing.fetchTitleSuggestions) {
+                        searchViewModel.fetchSuggestions(routing.normalizedQuery)
                     }
                 }
                 binding.apply {
                     advancedSearchEnabled = isAdvancedSearch
                     searchSuggestionsEnabled = isSearchSuggestionsEnabled
-                    applyPeopleSearchVisibility(this, newText)
+                    applySearchResultVisibility(this, newText)
                 }
 
                 return true
             }
         })
+        binding.mainSearch.queryHint = getString(R.string.search_titles_hint)
+        applySearchResultVisibility(binding, binding.mainSearch.query.toString())
 
         observe(searchViewModel.searchResponse) {
             when (it) {
@@ -818,7 +825,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         // Observe search suggestions
         observe(searchViewModel.searchSuggestions) { suggestions ->
             val hasSuggestions = suggestions.isNotEmpty()
-            binding.searchSuggestionsRecycler.isVisible = hasSuggestions && !peopleOnlyMode
+            binding.searchSuggestionsRecycler.isVisible = hasSuggestions && searchResultScope != SearchResultScope.PEOPLE
             (binding.searchSuggestionsRecycler.adapter as? SearchSuggestionAdapter?)?.submitList(suggestions)
 
             // On non-phone layouts, redirect focus and handle back button
@@ -842,17 +849,17 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     }
 
     private fun requestPeopleSearch(query: String) {
-        val cleanQuery = query.trim()
+        val routing = searchResultScope.routeQuery(query, titleSuggestionsEnabled = false)
+        val cleanQuery = routing.normalizedQuery
         peopleSearchJob?.cancel()
-        if (cleanQuery.length < 2) {
+        if (!routing.canSearchPeople) {
             peopleSearchState = AurasPeopleSearchState()
-            peopleOnlyMode = false
-            binding?.let { applyPeopleSearchVisibility(it, cleanQuery) }
+            binding?.let { applySearchResultVisibility(it, cleanQuery) }
             return
         }
 
         peopleSearchState = AurasPeopleSearchState(query = cleanQuery, isLoading = true)
-        binding?.let { applyPeopleSearchVisibility(it, cleanQuery) }
+        binding?.let { applySearchResultVisibility(it, cleanQuery) }
         peopleSearchJob = viewLifecycleOwner.lifecycleScope.launch {
             try {
                 delay(350)
@@ -875,37 +882,60 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         }
     }
 
-    private fun applyPeopleSearchVisibility(binding: FragmentSearchBinding, query: String) {
-        val hasQuery = query.isNotBlank()
-        val hasPeopleQuery = query.trim().length >= 2
-        binding.aurasPeopleSearch.isVisible = hasPeopleQuery
-        binding.tvtypesChipsScroll.root.isVisible = !peopleOnlyMode
-        binding.searchHistoryRecycler.isVisible = !peopleOnlyMode && !hasQuery
-        binding.searchMasterRecycler.isVisible = !peopleOnlyMode && hasQuery && advancedSearchEnabled
-        binding.searchAutofitResults.isVisible = !peopleOnlyMode && hasQuery && !advancedSearchEnabled
-        binding.searchSuggestionsRecycler.isVisible = !peopleOnlyMode && hasQuery && searchSuggestionsEnabled &&
+    private fun applySearchResultVisibility(binding: FragmentSearchBinding, query: String) {
+        val routing = searchResultScope.routeQuery(query, searchSuggestionsEnabled)
+        val hasQuery = routing.normalizedQuery.isNotEmpty()
+        val showPeople = routing.showsPeople
+        val showTitles = routing.showsTitles
+        // Keep the scope selector available even before a query is long enough for person lookup.
+        binding.aurasPeopleSearch.isVisible = true
+        binding.tvtypesChipsScroll.root.isVisible = showTitles
+        binding.searchFilter.isVisible = showTitles
+        binding.searchHistoryRecycler.isVisible = routing.showTitleHistory
+        binding.searchMasterRecycler.isVisible = showTitles && hasQuery && advancedSearchEnabled
+        binding.searchAutofitResults.isVisible = showTitles && hasQuery && !advancedSearchEnabled
+        binding.searchSuggestionsRecycler.isVisible = routing.fetchTitleSuggestions &&
             searchViewModel.searchSuggestions.value.orEmpty().isNotEmpty()
         listOf(binding.searchMasterRecycler, binding.searchAutofitResults).forEach { list ->
             val params = list.layoutParams as? LinearLayout.LayoutParams ?: return@forEach
-            params.height = if (peopleOnlyMode || hasQuery) 0 else ViewGroup.LayoutParams.MATCH_PARENT
-            params.weight = if (!peopleOnlyMode && hasQuery) 1f else 0f
+            params.height = if (showPeople || hasQuery) 0 else ViewGroup.LayoutParams.MATCH_PARENT
+            params.weight = if (showTitles && hasQuery) 1f else 0f
             list.layoutParams = params
         }
         val historyParams = binding.searchHistoryRecycler.layoutParams as? LinearLayout.LayoutParams
         historyParams?.let { params ->
-            params.height = if (!peopleOnlyMode && !hasQuery) ViewGroup.LayoutParams.MATCH_PARENT else 0
-            params.weight = if (!peopleOnlyMode && !hasQuery) 0f else 1f
+            params.height = if (showTitles && !hasQuery) ViewGroup.LayoutParams.MATCH_PARENT else 0
+            params.weight = if (showTitles && !hasQuery) 1f else 0f
             binding.searchHistoryRecycler.layoutParams = params
         }
         binding.aurasPeopleSearch.layoutParams = binding.aurasPeopleSearch.layoutParams.apply {
-            height = if (peopleOnlyMode) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
+            height = if (showPeople) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
         }
         binding.aurasPeopleSearch.requestLayout()
     }
 
-    private fun changePeopleFilter(enabled: Boolean) {
-        peopleOnlyMode = enabled
-        binding?.let { applyPeopleSearchVisibility(it, it.mainSearch.query.toString()) }
+    private fun changeSearchResultScope(scope: SearchResultScope) {
+        if (scope == searchResultScope) return
+        searchResultScope = scope
+        val query = binding?.mainSearch?.query?.toString().orEmpty()
+        val routing = scope.routeQuery(query, searchSuggestionsEnabled)
+        binding?.mainSearch?.queryHint = getString(
+            if (scope == SearchResultScope.PEOPLE) R.string.search_people_hint else R.string.search_titles_hint,
+        )
+        if (scope == SearchResultScope.TITLES) {
+            peopleSearchJob?.cancel()
+            peopleSearchState = AurasPeopleSearchState()
+            if (routing.fetchTitleSuggestions) {
+                searchViewModel.fetchSuggestions(routing.normalizedQuery)
+            }
+        } else {
+            searchViewModel.clearSuggestions()
+            requestPeopleSearch(query)
+        }
+        binding?.let { applySearchResultVisibility(it, query) }
+        if (routing.canSearchTitles && searchViewModel.lastQuery != query) {
+            search(query)
+        }
     }
 
     private fun openPerson(candidate: AndroidPersonRepository.PersonCandidate) {
@@ -946,13 +976,12 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 }
 
 @Composable
-private fun AurasPeopleSearchPanel(
+private fun AurasSearchScopePanel(
     state: AurasPeopleSearchState,
-    peopleOnly: Boolean,
-    onFilterChanged: (Boolean) -> Unit,
+    scope: SearchResultScope,
+    onScopeChanged: (SearchResultScope) -> Unit,
     onPersonSelected: (AndroidPersonRepository.PersonCandidate) -> Unit,
 ) {
-    val surface = com.lagradost.cloudstream3.ui.explore.AurasPalette.Surface
     val canvas = com.lagradost.cloudstream3.ui.explore.AurasPalette.Canvas
     val text = com.lagradost.cloudstream3.ui.explore.AurasPalette.Text
     val muted = com.lagradost.cloudstream3.ui.explore.AurasPalette.Muted
@@ -962,102 +991,60 @@ private fun AurasPeopleSearchPanel(
     fun Filters() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = !peopleOnly,
-                onClick = { onFilterChanged(false) },
-                label = { Text(stringResource(R.string.person_all)) },
+                selected = scope == SearchResultScope.TITLES,
+                onClick = { onScopeChanged(SearchResultScope.TITLES) },
+                label = { Text(stringResource(R.string.search_scope_titles)) },
             )
             FilterChip(
-                selected = peopleOnly,
-                onClick = { onFilterChanged(true) },
+                selected = scope == SearchResultScope.PEOPLE,
+                onClick = { onScopeChanged(SearchResultScope.PEOPLE) },
                 label = { Text(stringResource(R.string.person_people)) },
             )
         }
     }
 
-    if (peopleOnly) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().background(canvas),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(stringResource(R.string.person_search_people), color = text, style = MaterialTheme.typography.titleLarge)
-                    Filters()
-                    if (state.isLoading) Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = accent, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(9.dp))
-                        Text(stringResource(R.string.person_finding_people), color = muted, style = MaterialTheme.typography.bodySmall)
-                    }
-                    state.error?.let { Text(it, color = muted, style = MaterialTheme.typography.bodyMedium) }
-                    if (!state.isLoading && state.error == null && state.candidates.isEmpty()) {
-                        Text(
-                            stringResource(R.string.person_no_search_matches, state.query),
-                            color = muted,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-            }
-            items(state.candidates, key = { it.id }) { candidate ->
-                AurasPersonSearchCard(candidate, compact = false, onClick = { onPersonSelected(candidate) })
-            }
-        }
-    } else {
-        Column(
-            modifier = Modifier.fillMaxWidth().background(canvas).padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(
+        modifier = Modifier
+            .then(if (scope == SearchResultScope.PEOPLE) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+            .background(canvas)
+            .padding(horizontal = if (scope == SearchResultScope.PEOPLE) 16.dp else 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Filters()
+        if (state.query.length < 2) {
+            if (scope == SearchResultScope.PEOPLE) {
                 Text(
-                    stringResource(R.string.person_search_results),
-                    color = text,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.weight(1f))
-                Filters()
-            }
-            if (state.isLoading) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = accent, strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.person_finding_people), color = muted, style = MaterialTheme.typography.bodySmall)
-                }
-            } else if (state.candidates.isNotEmpty()) {
-                Text(stringResource(R.string.person_people), color = accent, style = MaterialTheme.typography.labelLarge)
-                LazyRow(
-                    contentPadding = PaddingValues(end = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 86.dp),
-                ) {
-                    items(state.candidates.take(4), key = { it.id }) { candidate ->
-                        AurasPersonSearchCard(candidate, compact = true, onClick = { onPersonSelected(candidate) })
-                    }
-                    if (state.candidates.size > 4) item {
-                        Card(
-                            onClick = { onFilterChanged(true) },
-                            colors = CardDefaults.cardColors(containerColor = surface),
-                            modifier = Modifier.width(112.dp).heightIn(min = 72.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize().padding(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                Text("+${state.candidates.size - 4}", color = accent, style = MaterialTheme.typography.titleMedium)
-                                Text(stringResource(R.string.person_view_all), color = text, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            } else if (state.error != null) {
-                Text(
-                    stringResource(R.string.person_search_unavailable),
+                    stringResource(R.string.search_people_min_query_hint),
                     color = muted,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
+        } else if (scope == SearchResultScope.PEOPLE) {
+            Text(stringResource(R.string.person_people), color = text, style = MaterialTheme.typography.titleLarge)
+            if (state.isLoading) Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = accent, strokeWidth = 2.dp)
+                Spacer(Modifier.width(9.dp))
+                Text(stringResource(R.string.person_finding_people), color = muted, style = MaterialTheme.typography.bodySmall)
+            }
+            state.error?.let { Text(it, color = muted, style = MaterialTheme.typography.bodyMedium) }
+            if (!state.isLoading && state.error == null && state.candidates.isEmpty()) {
+                Text(
+                    stringResource(R.string.person_no_search_matches, state.query),
+                    color = muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(state.candidates, key = { it.id }) { candidate ->
+                    AurasPersonSearchCard(candidate, compact = false, onClick = { onPersonSelected(candidate) })
+                }
+            }
+        } else {
+            Text(stringResource(R.string.search_scope_titles), color = text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         }
     }
 }

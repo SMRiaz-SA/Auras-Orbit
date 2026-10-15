@@ -111,7 +111,7 @@
                         android:paddingStart="-10dp"
                         app:iconifiedByDefault="false"
                         app:queryBackground="@color/transparent"
-                        app:queryHint="@string/search_hint"
+                        app:queryHint="@string/search_titles_hint"
                         app:searchIcon="@drawable/search_icon"
                         app:closeIcon="@drawable/ic_baseline_close_24"
                         tools:ignore="RtlSymmetry">

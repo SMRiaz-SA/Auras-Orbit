@@ -6,7 +6,7 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** **1.0.0.00**<br>
+**Current version (desktop and Android):** **1.0.0.01**<br>
 **Platform:** Windows 10 or 11, 64-bit; Android APK<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
 **Changelog:** [Release history](CHANGELOG.md)
@@ -20,6 +20,7 @@ Auras Orbit is an independent client. It does not host media or curate provider 
 Auras Orbit gives your chosen extensions a desktop home, with the discovery, playback, and library tools gathered in one app.
 
 - **Bring your own providers.** Add repositories, review the extensions they offer, and install the ones you want. Browse and search through the providers enabled in your profile.
+- **Keep search results clear.** Search in separate **Titles** and **People** scopes; title results and people matches stay in their own views on Android and Windows.
 - **Pick up where you left off.** Keep playback progress and watch history in your local profile. Save titles to your library so they are easy to find again.
 - **Make Home useful to you.** Return to in-progress titles, browse discovery shelves, and use a spotlight carousel when your enabled sources provide featured or trending items.
 - **Explore from one dashboard.** Open add-on catalogs, genres, providers, or Torrent Search from the Explore screen.

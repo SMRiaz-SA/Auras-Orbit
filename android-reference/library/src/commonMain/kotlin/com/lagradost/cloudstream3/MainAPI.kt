@@ -7,6 +7,7 @@
 package com.lagradost.cloudstream3
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
@@ -105,7 +106,10 @@ val json = Json {
 }
 
 val mapper = JsonMapper.builder().addModule(kotlinModule())
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).build()!!
+    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).build()!!.apply {
+        // Match the shared kotlinx Json instance, which is configured with explicitNulls = false.
+        setSerializationInclusion(JsonInclude.Include.NON_NULL)
+    }
 
 object APIHolder {
     val unixTimeMS: Long

@@ -30,6 +30,14 @@ data class GitHubRelease(
     val assets: List<ReleaseAsset> = emptyList(),
 )
 
+internal fun GitHubRelease.hasWindowsPackage(): Boolean {
+    val version = tag_name.removePrefix("v")
+    return assets.any { asset ->
+        asset.name.equals("Auras-Orbit-Setup.exe", ignoreCase = true) ||
+            asset.name.equals("Auras-Orbit-Portable-$version.zip", ignoreCase = true)
+    }
+}
+
 internal class ReleaseChecker(
     private val client: OkHttpClient,
     private val endpoint: () -> String,
@@ -61,8 +69,7 @@ internal class ReleaseChecker(
                         stream.readBoundedBytes(MAX_RELEASE_RESPONSE_BYTES)
                     }
                     val releases = mapper.readValue<List<GitHubRelease>>(responseBytes)
-                    val latest = selectRelease(releases)
-                    _latestRelease.value = latest?.takeIf { compareVersions(it.tag_name.removePrefix("v"), currentVersion()) > 0 }
+                    _latestRelease.value = selectWindowsUpdate(releases, currentVersion())
                 }
                 hasChecked = true
             } catch (cancelled: CancellationException) {
@@ -79,6 +86,14 @@ internal class ReleaseChecker(
     internal fun selectRelease(releases: List<GitHubRelease>): GitHubRelease? =
         releases.filter { !it.draft && !it.prerelease && VersionComparator.isStable(it.tag_name.removePrefix("v")) }
             .maxWithOrNull { a, b -> compareVersions(a.tag_name.removePrefix("v"), b.tag_name.removePrefix("v")) }
+
+    internal fun selectWindowsUpdate(releases: List<GitHubRelease>, currentVersion: String): GitHubRelease? =
+        selectRelease(
+            releases.filter { release ->
+                release.hasWindowsPackage() &&
+                    compareVersions(release.tag_name.removePrefix("v"), currentVersion) > 0
+            },
+        )
 
     internal fun compareVersions(v1: String, v2: String): Int = VersionComparator.compare(v1, v2)
 }
@@ -101,6 +116,9 @@ object AppUpdater {
 
     internal fun selectRelease(releases: List<GitHubRelease>): GitHubRelease? =
         checker.selectRelease(releases)
+
+    internal fun selectWindowsUpdate(releases: List<GitHubRelease>, currentVersion: String): GitHubRelease? =
+        checker.selectWindowsUpdate(releases, currentVersion)
 
     internal fun compareVersions(v1: String, v2: String): Int = checker.compareVersions(v1, v2)
 }

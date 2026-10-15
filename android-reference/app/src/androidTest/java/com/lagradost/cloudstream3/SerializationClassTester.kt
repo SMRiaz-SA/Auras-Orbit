@@ -11,9 +11,20 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 import kotlinx.serialization.serializerOrNull
-import org.instancio.Instancio
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.lang.reflect.Array as ReflectArray
+import java.lang.reflect.GenericArrayType
+import java.lang.reflect.Modifier
+import java.lang.reflect.ParameterizedType
+import java.lang.reflect.Type
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.net.URI
+import java.net.URL
+import java.util.Date
+import java.util.UUID
 import kotlin.reflect.KClass
 import kotlin.reflect.jvm.jvmName
 import kotlin.test.assertEquals
@@ -34,7 +45,7 @@ class SerializationClassTester {
 
         serializableClasses.forEach { kClass ->
             runCatching {
-                val instance = Instancio.of(kClass.java).withMaxDepth(10).create()
+                val instance = createSampleInstance(kClass)
 
                 val jacksonJson = jacksonMapper.writeValueAsString(instance)
                 val kotlinxJson = serializeWithKotlinx(kClass, instance)
@@ -75,7 +86,7 @@ class SerializationClassTester {
 
         serializableClasses.forEach { kClass ->
             runCatching {
-                val instance = Instancio.of(kClass.java).withMaxDepth(10).create()
+                val instance = createSampleInstance(kClass)
                 // Convert to JSON to get example JSON object
                 // We prefer jackson here because the app may have many jackson JSON strings in local storage
                 val originalJson = jacksonMapper.writeValueAsString(instance)
@@ -140,6 +151,97 @@ class SerializationClassTester {
                     && kClass.java.annotations.none { it is SkipSerializationTest }
                     && !kClass.isAbstract
             }
+    }
+
+    private fun createSampleInstance(kClass: KClass<*>): Any =
+        sampleValue(kClass.java, 0)
+            ?: error("Could not create an Android-compatible sample for ${kClass.qualifiedName}")
+
+    private fun sampleValue(type: Type, depth: Int): Any? {
+        val rawType = when (type) {
+            is Class<*> -> type
+            is ParameterizedType -> type.rawType as? Class<*> ?: return null
+            is GenericArrayType -> return arrayOf(sampleValue(type.genericComponentType, depth + 1))
+            else -> return null
+        }
+
+        when (rawType) {
+            java.lang.Boolean.TYPE, java.lang.Boolean::class.java -> return true
+            java.lang.Byte.TYPE, java.lang.Byte::class.java -> return 1.toByte()
+            java.lang.Short.TYPE, java.lang.Short::class.java -> return 1.toShort()
+            java.lang.Integer.TYPE, java.lang.Integer::class.java -> return 1
+            java.lang.Long.TYPE, java.lang.Long::class.java -> return 1L
+            java.lang.Float.TYPE, java.lang.Float::class.java -> return 1.0f
+            java.lang.Double.TYPE, java.lang.Double::class.java -> return 1.0
+            java.lang.Character.TYPE, java.lang.Character::class.java -> return 'x'
+            String::class.java -> return "audit"
+            BigInteger::class.java -> return BigInteger.ONE
+            BigDecimal::class.java -> return BigDecimal.ONE
+            UUID::class.java -> return UUID(0L, 1L)
+            URI::class.java -> return URI("https://example.com/audit")
+            URL::class.java -> return URL("https://example.com/audit")
+            File::class.java -> return File("audit")
+            Date::class.java -> return Date(1L)
+        }
+
+        if (rawType.isEnum) return rawType.enumConstants?.firstOrNull()
+        if (rawType.isArray) {
+            val value = sampleValue(rawType.componentType, depth + 1)
+            return ReflectArray.newInstance(rawType.componentType, if (value == null) 0 else 1).also {
+                if (value != null) ReflectArray.set(it, 0, value)
+            }
+        }
+        if (rawType == Pair::class.java) {
+            val arguments = (type as? ParameterizedType)?.actualTypeArguments ?: return null
+            val first = arguments.getOrNull(0)?.let { sampleValue(it, depth + 1) } ?: return null
+            val second = arguments.getOrNull(1)?.let { sampleValue(it, depth + 1) } ?: return null
+            return Pair(first, second)
+        }
+        if (rawType == Triple::class.java) {
+            val arguments = (type as? ParameterizedType)?.actualTypeArguments ?: return null
+            val first = arguments.getOrNull(0)?.let { sampleValue(it, depth + 1) } ?: return null
+            val second = arguments.getOrNull(1)?.let { sampleValue(it, depth + 1) } ?: return null
+            val third = arguments.getOrNull(2)?.let { sampleValue(it, depth + 1) } ?: return null
+            return Triple(first, second, third)
+        }
+        if (Collection::class.java.isAssignableFrom(rawType)) {
+            val elementType = (type as? ParameterizedType)?.actualTypeArguments?.firstOrNull()
+            val element = elementType?.let { sampleValue(it, depth + 1) }
+            return when {
+                Set::class.java.isAssignableFrom(rawType) -> LinkedHashSet<Any>().apply {
+                    element?.let(::add)
+                }
+                else -> ArrayList<Any>().apply { element?.let(::add) }
+            }
+        }
+        if (Map::class.java.isAssignableFrom(rawType)) {
+            val arguments = (type as? ParameterizedType)?.actualTypeArguments
+            val key = arguments?.getOrNull(0)?.let { sampleValue(it, depth + 1) }
+            val value = arguments?.getOrNull(1)?.let { sampleValue(it, depth + 1) }
+            return LinkedHashMap<Any, Any>().apply {
+                if (key != null && value != null) put(key, value)
+            }
+        }
+        if (rawType == Any::class.java || rawType == Object::class.java) return Any()
+        if (depth >= 8 || rawType.isInterface || Modifier.isAbstract(rawType.modifiers)) return null
+
+        runCatching { rawType.kotlin.objectInstance }.getOrNull()?.let { return it }
+
+        val constructors = rawType.declaredConstructors
+            .filterNot { it.isSynthetic }
+            .sortedByDescending { it.parameterTypes.size }
+        for (constructor in constructors) {
+            val arguments = constructor.genericParameterTypes.map { parameterType ->
+                sampleValue(parameterType, depth + 1) ?: return@map null
+            }
+            try {
+                constructor.isAccessible = true
+                return constructor.newInstance(*arguments.toTypedArray())
+            } catch (_: Throwable) {
+                // Try a simpler constructor, including Kotlin's generated no-arg default constructor.
+            }
+        }
+        return null
     }
 
     @OptIn(InternalSerializationApi::class)

@@ -1487,21 +1487,33 @@ public final class com/lagradost/cloudstream3/TorrentSearchResponse : com/lagrad
 	public static synthetic fun copy$default (Lcom/lagradost/cloudstream3/TorrentSearchResponse;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/lagradost/cloudstream3/TvType;Ljava/lang/String;Ljava/lang/Integer;Lcom/lagradost/cloudstream3/SearchQuality;Ljava/util/Map;Lcom/lagradost/cloudstream3/Score;ILjava/lang/Object;)Lcom/lagradost/cloudstream3/TorrentSearchResponse;
 	public fun equals (Ljava/lang/Object;)Z
 	public fun getApiName ()Ljava/lang/String;
+	public final fun getHumanSize ()Ljava/lang/String;
 	public fun getId ()Ljava/lang/Integer;
+	public final fun getInfoHash ()Ljava/lang/String;
+	public final fun getLeechers ()Ljava/lang/Integer;
 	public fun getName ()Ljava/lang/String;
 	public fun getPosterHeaders ()Ljava/util/Map;
 	public fun getPosterUrl ()Ljava/lang/String;
 	public fun getQuality ()Lcom/lagradost/cloudstream3/SearchQuality;
 	public fun getScore ()Lcom/lagradost/cloudstream3/Score;
+	public final fun getSeeders ()Ljava/lang/Integer;
+	public final fun getSizeBytes ()Ljava/lang/Long;
 	public fun getType ()Lcom/lagradost/cloudstream3/TvType;
 	public fun getUrl ()Ljava/lang/String;
 	public fun hashCode ()I
+	public final fun isVerified ()Z
+	public final fun setHumanSize (Ljava/lang/String;)V
 	public fun setId (Ljava/lang/Integer;)V
+	public final fun setInfoHash (Ljava/lang/String;)V
+	public final fun setLeechers (Ljava/lang/Integer;)V
 	public fun setPosterHeaders (Ljava/util/Map;)V
 	public fun setPosterUrl (Ljava/lang/String;)V
 	public fun setQuality (Lcom/lagradost/cloudstream3/SearchQuality;)V
 	public fun setScore (Lcom/lagradost/cloudstream3/Score;)V
+	public final fun setSeeders (Ljava/lang/Integer;)V
+	public final fun setSizeBytes (Ljava/lang/Long;)V
 	public fun setType (Lcom/lagradost/cloudstream3/TvType;)V
+	public final fun setVerified (Z)V
 	public fun toString ()Ljava/lang/String;
 }
 
@@ -8072,6 +8084,8 @@ public class com/lagradost/cloudstream3/utils/AtomicList : java/util/List, kotli
 	public fun add (Ljava/lang/Object;)Z
 	public fun addAll (ILjava/util/Collection;)Z
 	public fun addAll (Ljava/util/Collection;)Z
+	public fun addFirst (Ljava/lang/Object;)V
+	public fun addLast (Ljava/lang/Object;)V
 	public fun clear ()V
 	public fun contains (Ljava/lang/Object;)Z
 	public fun containsAll (Ljava/util/Collection;)Z
@@ -8090,6 +8104,8 @@ public class com/lagradost/cloudstream3/utils/AtomicList : java/util/List, kotli
 	public fun remove (I)Ljava/lang/Object;
 	public fun remove (Ljava/lang/Object;)Z
 	public fun removeAll (Ljava/util/Collection;)Z
+	public fun removeFirst ()Ljava/lang/Object;
+	public fun removeLast ()Ljava/lang/Object;
 	public fun replaceAll (Ljava/util/function/UnaryOperator;)V
 	public fun retainAll (Ljava/util/Collection;)Z
 	public fun set (ILjava/lang/Object;)Ljava/lang/Object;

@@ -141,7 +141,7 @@ fun UniversalUpdateDialog() {
                 Button(onClick = { UnifiedUpdateManager.installUpdate(activeUpdate) }) {
                     Text(
                         when (activeUpdate.type) {
-                            UpdateType.APP_CLIENT -> "Download Update"
+                            UpdateType.APP_CLIENT -> "Open Release Page"
                             UpdateType.TORRENT_ENGINE -> "Update Engine Now"
                             UpdateType.STREAM_RESOLVER -> "Update Resolver Now"
                         },
