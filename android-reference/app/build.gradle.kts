@@ -338,7 +338,6 @@ dependencies {
     androidTestImplementation(libs.core)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
-    androidTestImplementation(libs.instancio.core)
     androidTestImplementation(libs.junit.ktx)
     androidTestImplementation(libs.kotlin.test)
 

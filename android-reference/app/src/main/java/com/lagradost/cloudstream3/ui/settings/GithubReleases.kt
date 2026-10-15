@@ -8,8 +8,10 @@ import kotlinx.serialization.Serializable
 import kotlin.jvm.Throws
 
 object GithubReleases {
+    private val numericVersionRegex = Regex("""^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$""")
+
     @Serializable
-    private data class GithubAsset(
+    internal data class GithubAsset(
         @JsonProperty("name") @SerialName("name") val name: String,
         @JsonProperty("size") @SerialName("size") val size: Int, // Size in bytes
         @JsonProperty("browser_download_url") @SerialName("browser_download_url") val browserDownloadUrl: String,
@@ -63,29 +65,54 @@ object GithubReleases {
         val releaseAndAsset = releases.asSequence()
             .filterNot { it.draft }
             .filterNot { it.prerelease }
-            .sortedByDescending { it.createdAt }
             .mapNotNull { release ->
-                // GitHub can label APK uploads as octet-stream, so accept the .apk suffix too.
-                val asset = release.assets.firstOrNull { asset ->
-                    asset.contentType == contentType || asset.name.endsWith(".apk", ignoreCase = true)
-                } ?: return@mapNotNull null
-                release to asset
+                val versionCode = androidVersionCode(release.tagName) ?: return@mapNotNull null
+                val asset = selectApkAsset(release.assets, contentType) ?: return@mapNotNull null
+                Triple(release, asset, versionCode)
             }
-            .firstOrNull()
+            .maxByOrNull { it.third }
 
         if (releaseAndAsset == null) {
             return null
         }
 
-        val (latestRelease, foundAsset) = releaseAndAsset
+        val (latestRelease, foundAsset, _) = releaseAndAsset
 
         return GithubFile(
             digest = foundAsset.digest,
             downloadUrl = foundAsset.browserDownloadUrl,
-            displayName = foundAsset.name.substringBeforeLast("."),
+            displayName = latestRelease.tagName.removePrefix("v"),
             changeLog = latestRelease.body.orEmpty(),
             tagName = latestRelease.tagName,
             nodeId = latestRelease.nodeId
         )
+    }
+
+    internal fun isNewerStableVersion(candidate: String, current: String): Boolean {
+        val candidateVersionCode = androidVersionCode(candidate) ?: return false
+        val currentVersionCode = androidVersionCode(current) ?: return false
+        return candidateVersionCode > currentVersionCode
+    }
+
+    internal fun selectApkAsset(assets: List<GithubAsset>, contentType: String): GithubAsset? {
+        // GitHub can label APK uploads as octet-stream, so accept the .apk suffix too.
+        val apkAssets = assets.filter { asset ->
+            asset.browserDownloadUrl.isNotBlank() &&
+                (asset.contentType.equals(contentType, ignoreCase = true) ||
+                    asset.name.endsWith(".apk", ignoreCase = true))
+        }
+        return apkAssets.firstOrNull { it.name.equals("Auras-Orbit.apk", ignoreCase = true) }
+            ?: apkAssets.firstOrNull()
+    }
+
+    private fun androidVersionCode(versionName: String): Long? {
+        val match = numericVersionRegex.matchEntire(versionName.removePrefix("v")) ?: return null
+        val major = match.groupValues[1].toLongOrNull() ?: return null
+        val minor = match.groupValues[2].toLongOrNull() ?: return null
+        val patch = match.groupValues[3].toLongOrNull() ?: return null
+        val build = match.groupValues[4].takeIf(String::isNotEmpty)?.toLongOrNull() ?: 0L
+        if (major !in 0..21 || minor !in 0..99 || patch !in 0..99 || build !in 0..9999) return null
+        val versionCode = major * 100_000_000L + minor * 1_000_000L + patch * 10_000L + build
+        return versionCode.takeIf { it in 1..2_100_000_000L }
     }
 }

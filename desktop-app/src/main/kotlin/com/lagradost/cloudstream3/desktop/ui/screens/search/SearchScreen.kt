@@ -48,6 +48,7 @@ import com.lagradost.cloudstream3.desktop.ui.screens.search.components.SearchHis
 import com.lagradost.cloudstream3.desktop.ui.screens.search.components.SearchSuggestionsOverlay
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchMode
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEvent
+import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.routeQuery
 import com.lagradost.cloudstream3.desktop.ui.screens.search.dialogs.ProviderSelectionDialog
 import com.lagradost.cloudstream3.desktop.ui.screens.search.dialogs.fuzzyMatchPluginIcon
 
@@ -126,7 +127,7 @@ fun ComposeSearchScreen(
                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                 if (uiState.searchQuery.isEmpty()) {
                                     Text(
-                                        if (searchMode == SearchMode.PEOPLE) "Search people..." else "Search movies, series, anime...",
+                                        if (searchMode == SearchMode.PEOPLE) "Search people..." else "Search titles...",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 15.sp,
                                     )
@@ -308,7 +309,7 @@ fun ComposeSearchScreen(
                             item {
                                 AnimatedCategoryTab(
                                     selected = selectedCategories.isEmpty(),
-                                    label = "All",
+                                    label = "All titles",
                                     onClick = { viewModel.onEvent(SearchUiEvent.OnClearCategories) },
                                 )
                             }
@@ -326,7 +327,7 @@ fun ComposeSearchScreen(
 
                 // ── Floating Search Suggestions Dropdown Overlay ──────────────────────
                 SearchSuggestionsOverlay(
-                    visible = searchMode == SearchMode.TITLES && (uiState.showSuggestions || uiState.isLoadingSuggestions) && uiState.searchQuery.isNotEmpty(),
+                    visible = searchMode.showsTitles && (uiState.showSuggestions || uiState.isLoadingSuggestions) && uiState.searchQuery.isNotEmpty(),
                     suggestions = uiState.searchSuggestions,
                     isLoading = uiState.isLoadingSuggestions,
                     selectedIndex = selectedSuggestionIndex,
@@ -360,11 +361,14 @@ fun ComposeSearchScreen(
                     }
                 },
         ) {
-            val hasResults = if (searchMode == SearchMode.PEOPLE) uiState.peopleResults.isNotEmpty() else !searchResultsGrouped.isNullOrEmpty()
+            val routing = searchMode.routeQuery(uiState.searchQuery)
+            val hasResults = if (routing.showsPeople) uiState.peopleResults.isNotEmpty() else !searchResultsGrouped.isNullOrEmpty()
             val hasQuery = uiState.searchQuery.isNotBlank()
             val showInitialState = !hasResults && !isLoadingSearch && !hasQuery
             val showHistory = showInitialState && searchHistory.isNotEmpty()
             val showNoResults = !hasResults && !isLoadingSearch && hasQuery && !uiState.awaitingSearchSubmission
+            val needsMorePeopleInput =
+                routing.showsPeople && routing.normalizedQuery.isNotEmpty() && !routing.canSearchPeople
 
             if (showHistory) {
                 SearchHistoryView(
@@ -394,7 +398,7 @@ fun ComposeSearchScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        if (searchMode == SearchMode.PEOPLE) "Find a person" else "Search your favorite movies, series, or anime",
+                        if (searchMode == SearchMode.PEOPLE) "Find a person" else "Search titles",
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         fontWeight = FontWeight.Medium,
@@ -438,7 +442,19 @@ fun ComposeSearchScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     )
                 }
-            } else if (searchMode == SearchMode.PEOPLE && isLoadingSearch) {
+            } else if (needsMorePeopleInput) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(top = 56.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "Enter at least 2 characters to search people.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    )
+                }
+            } else if (routing.showsPeople && isLoadingSearch) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -479,7 +495,7 @@ fun ComposeSearchScreen(
                     )
                 }
             } else {
-                if (searchMode == SearchMode.PEOPLE) {
+                if (searchMode.showsPeople) {
                     androidx.compose.foundation.lazy.LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),

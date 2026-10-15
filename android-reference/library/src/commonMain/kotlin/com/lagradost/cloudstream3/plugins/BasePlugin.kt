@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.plugins
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.MainAPI
@@ -61,6 +62,7 @@ abstract class BasePlugin {
         }
     var filename: String? = null
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Serializable
     class Manifest {
         @JsonProperty("name") @SerialName("name")

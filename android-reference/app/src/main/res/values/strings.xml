@@ -10,6 +10,10 @@
     <string name="person_choose_match">Choose the person that matches %1$s</string>
     <string name="person_loading">Loading person and credits…</string>
     <string name="person_all">All</string>
+    <string name="search_scope_titles">Titles</string>
+    <string name="search_titles_hint">Search titles…</string>
+    <string name="search_people_hint">Search people…</string>
+    <string name="search_people_min_query_hint">Enter at least 2 characters to search people.</string>
     <string name="person_movies">Movies</string>
     <string name="person_tv">TV</string>
     <string name="person_filter_credits">Filter credits</string>

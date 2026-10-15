@@ -57,9 +57,9 @@ object MainActivityScreen : Screen {
                 isDebug = BuildConfig.DEBUG,
                 settings = settings,
                 updater = ApkUpdater
-            )/*.apply {
-                onAction(AutoSearchForUpdate) // Remove this for now
-            }*/
+            ).apply {
+                onAction(AutoSearchForUpdate)
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.mvvm.safe
+import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream4.AppSettings
 import com.lagradost.cloudstream4.compose.ActionHandler
@@ -156,7 +157,7 @@ class GithubViewModel(
             }
 
             GithubAction.AutoSearchForUpdate -> {
-                if (!isDebug && settings.updates.showAppUpdates.get()) {
+                if (!isDebug && !PluginManager.isSafeMode() && settings.updates.showAppUpdates.get()) {
                     ioSafe {
                         searchForUpdate(fromUser = false)
                     }
@@ -241,10 +242,8 @@ class GithubViewModel(
             return@dispatchUpdate
         }
 
-        // Release tags, rather than asset filenames, are the version source.
-        val releaseVersion = release.tagName.removePrefix("v")
-        val installedVersion = versionName.removePrefix("v")
-        if (releaseVersion == installedVersion) {
+        // Release tags, rather than asset filenames, are the version source. Only offer upgrades.
+        if (!GithubReleases.isNewerStableVersion(release.tagName, versionName)) {
             updateState {
                 copy(dialog = baseDialog.copy(state = GithubUpdateDialogState.NoUpdateFound))
             }

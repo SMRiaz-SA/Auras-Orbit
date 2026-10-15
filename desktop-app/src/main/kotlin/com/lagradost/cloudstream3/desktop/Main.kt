@@ -175,7 +175,16 @@ fun main(args: Array<String> = emptyArray()) {
                     // Run updates in the background so they don't block the UI if the network is down or slow
                     launch(Dispatchers.IO) {
                         launchAutoUpdater()
-                        com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager.checkAllUpdates()
+                        try {
+                            com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager.checkAllUpdates()
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            com.lagradost.common.logging.AppLogger.e(
+                                "Startup update checks failed; continuing without update results",
+                                error,
+                            )
+                        }
                     }
                 }
 

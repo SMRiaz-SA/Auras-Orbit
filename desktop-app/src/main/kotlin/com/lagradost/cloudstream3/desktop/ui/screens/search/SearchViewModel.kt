@@ -8,11 +8,11 @@ import com.lagradost.cloudstream3.desktop.domain.plugins.repository.PluginReposi
 import com.lagradost.cloudstream3.desktop.domain.providers.repository.ActiveProviderRepository
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.screens.details.TmdbEnrichmentService
-import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchMode
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchProviderPagination
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEffect
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiEvent
 import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.SearchUiState
+import com.lagradost.cloudstream3.desktop.ui.screens.search.contract.routeQuery
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +113,8 @@ class SearchViewModel(
                 .distinctUntilChanged()
                 .debounce(200)
                 .collectLatest { (searchMode, query) ->
-                    if (searchMode == SearchMode.PEOPLE) {
+                    val routing = searchMode.routeQuery(query)
+                    if (!routing.fetchTitleSuggestions) {
                         updateState {
                             if (searchQuery == query) {
                                 copy(searchSuggestions = emptyList(), showSuggestions = false, isLoadingSuggestions = false)
@@ -123,8 +124,7 @@ class SearchViewModel(
                         }
                         return@collectLatest
                     }
-                    val trimmed = query.trim()
-                    if (trimmed.length >= 2 && query != suppressSuggestionsForQuery) {
+                    if (query != suppressSuggestionsForQuery) {
                         updateState {
                             if (searchQuery == query) {
                                 copy(
@@ -137,7 +137,10 @@ class SearchViewModel(
                             }
                         }
                         try {
-                            val suggestions = SearchSuggestionApi.getSuggestions(trimmed, uiState.value.searchHistory)
+                            val suggestions = SearchSuggestionApi.getSuggestions(
+                                routing.normalizedQuery,
+                                uiState.value.searchHistory,
+                            )
                             updateState {
                                 if (searchQuery == query && query != suppressSuggestionsForQuery) {
                                     copy(searchSuggestions = suggestions, showSuggestions = suggestions.isNotEmpty())
@@ -187,7 +190,7 @@ class SearchViewModel(
                 if (event.mode == uiState.value.searchMode) return
                 invalidateSearchWork()
                 lastSearchedQuery = ""
-                suppressSuggestionsForQuery = if (event.mode == SearchMode.PEOPLE) uiState.value.searchQuery else null
+                suppressSuggestionsForQuery = if (event.mode.showsPeople) uiState.value.searchQuery else null
                 updateState {
                     copy(
                         searchMode = event.mode,
@@ -400,6 +403,26 @@ class SearchViewModel(
         val query = searchState.searchQuery
         if (query.isBlank() || (!force && query == lastSearchedQuery)) return
 
+        val routing = searchState.searchMode.routeQuery(query)
+        if (routing.showsPeople && !routing.canSearchPeople) {
+            invalidateSearchWork()
+            lastSearchedQuery = query
+            updateState {
+                if (searchQuery == query && searchMode == searchState.searchMode) {
+                    copy(
+                        peopleResults = emptyList(),
+                        peopleSearchFailed = false,
+                        isLoadingSearch = false,
+                        isLoadingMore = false,
+                        awaitingSearchSubmission = false,
+                    )
+                } else {
+                    this
+                }
+            }
+            return
+        }
+
         invalidateSearchWork()
         val generation = searchGeneration
         lastSearchedQuery = query
@@ -421,8 +444,8 @@ class SearchViewModel(
 
         searchJob = viewModelScope.launch {
             try {
-                if (searchState.searchMode == SearchMode.PEOPLE) {
-                    val people = TmdbEnrichmentService.searchPeople(query)
+                if (routing.canSearchPeople) {
+                    val people = TmdbEnrichmentService.searchPeople(routing.normalizedQuery)
                     updateSearchState(generation, query) {
                         copy(peopleResults = people, peopleSearchFailed = false)
                     }
@@ -483,7 +506,7 @@ class SearchViewModel(
                 throw e
             } catch (e: Throwable) {
                 if (generation == searchGeneration) {
-                    if (searchState.searchMode == SearchMode.PEOPLE) {
+                    if (searchState.searchMode.showsPeople) {
                         updateSearchState(generation, query) { copy(peopleSearchFailed = true) }
                     } else {
                         DesktopErrorReporter.report("Search failed", e)
