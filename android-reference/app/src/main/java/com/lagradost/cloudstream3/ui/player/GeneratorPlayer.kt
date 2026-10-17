@@ -914,10 +914,14 @@ class GeneratorPlayer : FullScreenPlayer() {
                 if (uri == null) return@safe
                 val ctx = context ?: CloudStreamApp.context ?: return@safe
                 // RW perms for the path
-                ctx.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (e: SecurityException) {
+                    logError(e)
+                }
 
                 val file = SafeFile.fromUri(ctx, uri)
                 val fileName = file?.name()

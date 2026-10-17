@@ -67,7 +67,11 @@ object SettingsGeneralScreen : SearchableSettings {
                     val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
-                    context.contentResolver.takePersistableUriPermission(uri, flags)
+                    try {
+                        context.contentResolver.takePersistableUriPermission(uri, flags)
+                    } catch (e: SecurityException) {
+                        logError(e)
+                    }
 
                     val filePath = SafeFile.fromUri(context, uri)?.filePath()
                     println("Selected URI path: $uri - Full path: $filePath")
@@ -221,7 +225,8 @@ object SettingsGeneralScreen : SearchableSettings {
                         entries = integerArrayResource(R.array.dns_pref_values).zip(
                             stringArrayResource(R.array.dns_pref)
                         ).toMap(),
-                        onValueChanged = {
+                        onValueChanged = { newValue ->
+                            settings.general.dns.set(newValue)
                             (CloudStreamApp.context)?.let { ctx ->
                                 app.initClient(ctx, ignoreSSL = false)
                                 @OptIn(UnsafeSSL::class)

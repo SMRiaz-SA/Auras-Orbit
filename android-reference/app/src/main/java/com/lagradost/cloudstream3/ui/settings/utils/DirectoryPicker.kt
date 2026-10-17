@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import com.lagradost.cloudstream3.CloudStreamApp
+import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.safefile.SafeFile
 
 fun Fragment.getChooseFolderLauncher(dirSelected: (uri: Uri?, path: String?) -> Unit) =
@@ -19,7 +20,11 @@ fun Fragment.getChooseFolderLauncher(dirSelected: (uri: Uri?, path: String?) -> 
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
-        context.contentResolver.takePersistableUriPermission(uri, flags)
+        try {
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+        } catch (e: SecurityException) {
+            logError(e)
+        }
 
         val filePath = SafeFile.fromUri(context, uri)?.filePath()
         println("Selected URI path: $uri - Full path: $filePath")

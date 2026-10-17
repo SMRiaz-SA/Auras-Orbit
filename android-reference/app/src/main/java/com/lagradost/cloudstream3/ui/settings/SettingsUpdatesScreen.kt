@@ -54,7 +54,11 @@ object SettingsUpdatesScreen : SearchableSettings {
                     val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
-                    context.contentResolver.takePersistableUriPermission(uri, flags)
+                    try {
+                        context.contentResolver.takePersistableUriPermission(uri, flags)
+                    } catch (e: SecurityException) {
+                        logError(e)
+                    }
 
                     val filePath = SafeFile.fromUri(context, uri)?.filePath()
                     println("Selected URI path: $uri - Full path: $filePath")
