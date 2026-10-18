@@ -105,18 +105,35 @@
 
             </LinearLayout>
 
-            <ListView
-                android:id="@+id/subtitle_adapter"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
 
-                android:layout_rowWeight="1"
-                android:background="?attr/primaryBlackBackground"
-                android:nextFocusLeft="@id/sort_providers"
-                android:nextFocusRight="@id/cancel_btt"
-                android:requiresFadingEdge="vertical"
-                tools:listfooter="@layout/sort_bottom_footer_add_choice"
-                tools:listitem="@layout/sort_bottom_single_choice" />
+                <ListView
+                    android:id="@+id/subtitle_adapter"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+
+                    android:layout_rowWeight="1"
+                    android:background="?attr/primaryBlackBackground"
+                    android:nextFocusLeft="@id/sort_providers"
+                    android:nextFocusRight="@id/cancel_btt"
+                    android:requiresFadingEdge="vertical"
+                    tools:listfooter="@layout/sort_bottom_footer_add_choice"
+                    tools:listitem="@layout/sort_bottom_single_choice" />
+
+                <TextView
+                    android:id="@+id/subtitle_search_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:text="@string/subtitle_search_no_results"
+                    android:textColor="?attr/textColor"
+                    android:visibility="gone" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
 

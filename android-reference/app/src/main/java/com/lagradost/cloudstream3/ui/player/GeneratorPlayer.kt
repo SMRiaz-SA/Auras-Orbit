@@ -678,6 +678,8 @@ class GeneratorPlayer : FullScreenPlayer() {
         binding.searchLoadingBar.progressTintList = color
         binding.searchLoadingBar.indeterminateTintList = color
 
+        var subtitleSearchRequest = 0
+
         observeNullable(viewModel.currentSubtitleYear) {
             // When year is changed search again
             binding.subtitlesSearch.setQuery(binding.subtitlesSearch.query, true)
@@ -715,11 +717,17 @@ class GeneratorPlayer : FullScreenPlayer() {
         binding.subtitlesSearch.setOnQueryTextListener(object :
             androidx.appcompat.widget.SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
+                val searchQuery = query ?: run {
+                    binding.searchLoadingBar.hide()
+                    return true
+                }
+                val requestId = ++subtitleSearchRequest
+                binding.subtitleSearchEmpty.isGone = true
                 binding.searchLoadingBar.show()
                 ioSafe {
-                    val search =
-                        SubtitleSearch(
-                            query = query ?: return@ioSafe,
+                    try {
+                        val search = SubtitleSearch(
+                            query = searchQuery,
                             imdbId = loadResponse?.getImdbId(),
                             tmdbId = loadResponse?.getTMDbId()?.toInt(),
                             malId = loadResponse?.getMalId()?.toInt(),
@@ -730,38 +738,32 @@ class GeneratorPlayer : FullScreenPlayer() {
                             year = viewModel.currentSubtitleYear.value
                         )
 
-                    // TODO Make ui a lot better, like search with tabs
-                    val results = providers.amap {
-                        when (val response = Resource.fromResult(it.search(search))) {
-                            is Resource.Success -> {
-                                response.value
-                            }
-
-                            is Resource.Loading -> {
-                                emptyList()
-                            }
-
-                            is Resource.Failure -> {
-                                showToast(response.errorString)
-                                emptyList()
+                        // TODO Make ui a lot better, like search with tabs
+                        val results = providers.amap {
+                            when (val response = Resource.fromResult(it.search(search))) {
+                                is Resource.Success -> response.value
+                                is Resource.Loading -> emptyList()
+                                is Resource.Failure -> {
+                                    showToast(response.errorString)
+                                    emptyList()
+                                }
                             }
                         }
-                    }
-                    val max = results.maxOfOrNull { it.size } ?: return@ioSafe
+                        // Interleave providers so one source cannot dominate the first results.
+                        val items = interleaveSubtitleResults(results)
 
-                    // very ugly
-                    val items = ArrayList<AbstractSubtitleEntities.SubtitleEntity>()
-                    val arrays = results.size
-                    for (index in 0 until max) {
-                        for (i in 0 until arrays) {
-                            items.add(results[i].getOrNull(index) ?: continue)
+                        runOnMainThread {
+                            if (requestId == subtitleSearchRequest) {
+                                setSubtitlesList(items)
+                                binding.subtitleSearchEmpty.isVisible = items.isEmpty()
+                            }
                         }
-                    }
-
-                    // ugly ik
-                    activity?.runOnUiThread {
-                        setSubtitlesList(items)
-                        binding.searchLoadingBar.hide()
+                    } finally {
+                        runOnMainThread {
+                            if (requestId == subtitleSearchRequest) {
+                                binding.searchLoadingBar.hide()
+                            }
+                        }
                     }
                 }
 

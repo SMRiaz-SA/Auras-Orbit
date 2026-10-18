@@ -26,7 +26,11 @@ kotlin {
         // If this is the same com.lagradost.cloudstream3.R stops working
         namespace = "com.lagradost.api"
 
-        compileSdk = libs.versions.compileSdk.get().toInt()
+        compileSdk {
+            version = release(libs.versions.compileSdk.get().toInt()) {
+                minorApiLevel = 0
+            }
+        }
         minSdk = libs.versions.minSdk.get().toInt()
 
         withHostTest {

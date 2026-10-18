@@ -2989,9 +2989,13 @@
             align-items: center;
             justify-content: space-between;
             padding: 12px 16px;
+            width: 100%;
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.08);
+            color: inherit;
+            font: inherit;
+            text-align: left;
             cursor: pointer;
             transition: all 0.15s ease;
         }
@@ -3218,9 +3222,12 @@
         .desktop-color-dot {
             width: 20px;
             height: 20px;
+            padding: 0;
             border-radius: 50%;
             cursor: pointer;
             border: 1px solid rgba(255, 255, 255, 0.2);
+            color: inherit;
+            appearance: none;
             transition: transform 0.15s, box-shadow 0.15s;
             position: relative;
         }
@@ -3298,6 +3305,7 @@
         .chip {
             padding: 6px 14px; background: rgba(255,255,255,0.08);
             border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer;
+            appearance: none; font-family: inherit; color: inherit; line-height: normal; text-align: center;
             transition: background 0.15s, color 0.15s, transform 0.1s; border: 1px solid transparent;
         }
         .chip:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
@@ -3801,6 +3809,13 @@
         }
         .ctx-item:hover {
             background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        .ctx-item:focus-visible,
+        .ctx-sub-item:focus-visible {
+            outline: 2px solid var(--accent-color, #7C4DFF);
+            outline-offset: -2px;
+            background: rgba(255, 255, 255, 0.12);
             color: #fff;
         }
         .ctx-item-left {
@@ -5044,4 +5059,21 @@ body.audio-playing .audio-cover-case {
     -webkit-appearance: none; width: 10px; height: 10px;
     border-radius: 50%; background: #ffffff; cursor: pointer;
     box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+/* Keep keyboard focus visible even on controls with custom, reset outlines. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a[href]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+    outline: 2px solid var(--accent-color, #7C4DFF);
+    outline-offset: 3px;
+}
+
+#seekWrap:focus-within {
+    outline: 2px solid var(--accent-color, #7C4DFF);
+    outline-offset: 4px;
+    border-radius: 4px;
 }

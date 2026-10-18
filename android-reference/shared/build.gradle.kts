@@ -10,7 +10,11 @@ kotlin {
     android {
         // Must be unique
         namespace = "com.lagradost.cloudstream4"
-        compileSdk = libs.versions.compileSdk.get().toInt()
+        compileSdk {
+            version = release(libs.versions.compileSdk.get().toInt()) {
+                minorApiLevel = 0
+            }
+        }
         minSdk = libs.versions.minSdk.get().toInt()
 
         androidResources {

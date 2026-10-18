@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.snackbar.Snackbar
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.APIHolder.allProviders
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
@@ -376,6 +377,9 @@ class LibraryFragment : BaseFragment<FragmentLibraryBinding>(
                                 emptyListTextview.setText(R.string.empty_library_no_accounts_message)
                             }
                         }
+                        emptyListTextview.setOnClickListener(null)
+                        emptyListTextview.isClickable = false
+                        emptyListTextview.isFocusable = false
 
                         (viewpager.adapter as? ViewpagerAdapter)?.submitList(pages.map {
                             it.copy(
@@ -477,14 +481,41 @@ class LibraryFragment : BaseFragment<FragmentLibraryBinding>(
                 }
 
                 is Resource.Loading -> {
+                    binding.emptyListTextview.isVisible = false
+                    binding.emptyListTextview.setOnClickListener(null)
+                    binding.emptyListTextview.isClickable = false
+                    binding.emptyListTextview.isFocusable = false
                     // Only start loading after 200ms to prevent loading cached lists
                     handler.postDelayed(startLoading, 200)
                 }
 
                 is Resource.Failure -> {
+                    handler.removeCallbacks(startLoading)
+                    handler.removeCallbacks(stopLoading)
                     stopLoading.run()
-                    // No user indication it failed :(
-                    // TODO
+                    if ((binding.viewpager.adapter?.itemCount ?: 0) > 0) {
+                        binding.emptyListTextview.isVisible = false
+                        binding.emptyListTextview.setOnClickListener(null)
+                        Snackbar.make(
+                            binding.root,
+                            R.string.library_load_failed,
+                            Snackbar.LENGTH_INDEFINITE,
+                        ).setAction(R.string.library_retry) {
+                            libraryViewModel.reloadPages(true)
+                        }.show()
+                    } else {
+                        binding.emptyListTextview.apply {
+                            setText(R.string.library_load_failed_retry)
+                            contentDescription = context.getString(R.string.library_load_failed_retry)
+                            isClickable = true
+                            isFocusable = true
+                            setOnClickListener {
+                                libraryViewModel.reloadPages(true)
+                            }
+                            isVisible = true
+                            bringToFront()
+                        }
+                    }
                 }
             }
         }

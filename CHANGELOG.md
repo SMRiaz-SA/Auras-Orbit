@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0.02 — 2026-10-18
+
+### Stable release
+
+- Show actionable Android library errors, let catalog requests retry the selected source, and ensure subtitle searches finish loading with useful empty or error results.
+- Connect Orbit to the VLC process it launches through a private loopback Remote Control session, adding pause, resume, and seek controls plus playback position and duration status for watch-progress tracking.
+- Expand fixture coverage for HLS rewriting of relative URLs, keys and maps, byte ranges, query strings, and live and VOD playlists.
+- Restore keyboard focus and accessible names for player controls, with keyboard interaction for buttons, sliders, overlays, and the context menu.
+
 ## 1.0.0.01 — 2026-10-15
 
 ### Stable release

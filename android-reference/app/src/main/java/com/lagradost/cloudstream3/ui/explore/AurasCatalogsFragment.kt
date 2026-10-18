@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,7 @@ class AurasCatalogsFragment : Fragment() {
                     onSourceClick = { sourcePickerVisible = true },
                     onSourceDismiss = { sourcePickerVisible = false },
                     onSourceSelect = ::selectSource,
+                    onRetrySource = ::retrySource,
                     onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
                     onHelpClick = { openDestination(R.id.navigation_auras_help) },
                     onOpenTitle = ::openTitle,
@@ -124,7 +127,6 @@ class AurasCatalogsFragment : Fragment() {
 
                 is Resource.Loading -> browseState.copy(loading = true, error = null)
                 is Resource.Failure -> browseState.copy(
-                    shelves = emptyList(),
                     loading = false,
                     error = resource.errorString,
                 )
@@ -161,6 +163,13 @@ class AurasCatalogsFragment : Fragment() {
         homeViewModel.loadAndCancel(option.key, forceReload = true, fromUI = true)
     }
 
+    private fun retrySource() {
+        val sourceName = browseState.sourceName ?: homeViewModel.apiName.value
+            ?: DataStoreHelper.currentHomePage ?: return
+        browseState = browseState.copy(loading = true, error = null)
+        homeViewModel.loadAndCancel(sourceName, forceReload = true)
+    }
+
     private fun openTitle(item: SearchResponse, index: Int) {
         val view = view ?: return
         SearchHelper.handleSearchClickCallback(
@@ -192,6 +201,7 @@ private fun AurasCatalogsScreen(
     onSourceClick: () -> Unit,
     onSourceDismiss: () -> Unit,
     onSourceSelect: (AurasSourceOption) -> Unit,
+    onRetrySource: () -> Unit,
     onConnectSource: () -> Unit,
     onHelpClick: () -> Unit,
     onOpenTitle: (SearchResponse, Int) -> Unit,
@@ -226,13 +236,16 @@ private fun AurasCatalogsScreen(
                     AurasQuietButton(stringResource(R.string.auras_catalogs_back), onBack)
                 }
             }
-            if (state.error != null && state.shelves.isEmpty()) {
+            if (state.error != null) {
                 item {
                     AurasEmptyPanel(
-                        title = stringResource(R.string.auras_catalogs_unreachable_title),
+                        title = stringResource(
+                            if (state.shelves.isEmpty()) R.string.auras_catalogs_unreachable_title
+                            else R.string.auras_catalogs_refresh_error_title
+                        ),
                         body = state.error,
-                        button = stringResource(R.string.auras_explore_choose_source),
-                        onClick = onSourceClick,
+                        button = stringResource(R.string.auras_catalog_retry),
+                        onClick = onRetrySource,
                     )
                 }
             } else if (state.sources.isEmpty() && state.shelves.isEmpty() && !state.loading) {
@@ -246,6 +259,23 @@ private fun AurasCatalogsScreen(
                 }
             } else if (state.loading && state.shelves.isEmpty()) {
                 item { AurasLoadingPanelForCatalogs() }
+            } else if (state.loading) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = AurasPalette.Accent,
+                            strokeWidth = 2.dp,
+                        )
+                        Text(
+                            text = stringResource(R.string.auras_catalogs_refreshing),
+                            color = AurasPalette.Muted,
+                        )
+                    }
+                }
             }
             state.shelves.forEach { shelf ->
                 item(key = "catalog-${shelf.name}") {

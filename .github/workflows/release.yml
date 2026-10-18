@@ -160,28 +160,6 @@ jobs:
         $archive = Join-Path $env:GITHUB_WORKSPACE "desktop-app/build/outputs/Auras-Orbit-Portable-$version.zip"
         [System.IO.Compression.ZipFile]::CreateFromDirectory($package, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
-    - name: Remove previous Android APK assets
-      shell: pwsh
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        $headers = @{
-          Authorization = "Bearer $env:GITHUB_TOKEN"
-          Accept = 'application/vnd.github+json'
-          'X-GitHub-Api-Version' = '2022-11-28'
-        }
-        $release = $null
-        try {
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$env:GITHUB_REF_NAME" -Headers $headers
-        } catch {
-          $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
-          if ($statusCode -ne 404) { throw }
-          Write-Host "No release exists for $env:GITHUB_REF_NAME yet; skipping previous APK cleanup."
-        }
-        foreach ($asset in @($release.assets | Where-Object { $_.name -match '(?i)\.apk$' })) {
-          Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$($asset.id)" -Headers $headers
-        }
-
     - name: Publish Release
       uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
       with:
@@ -191,4 +169,5 @@ jobs:
           desktop-app/build/outputs/Auras-Orbit.apk
         generate_release_notes: true
         prerelease: false
-        overwrite_files: true
+        # On reruns, preserve existing release assets and upload only missing files.
+        overwrite_files: false

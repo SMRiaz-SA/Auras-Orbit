@@ -224,7 +224,11 @@ android {
 
     }
 
-    compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdk {
+        version = release(libs.versions.compileSdk.get().toInt()) {
+            minorApiLevel = 0
+        }
+    }
 
     defaultConfig {
         applicationId = "com.auras.orbit"

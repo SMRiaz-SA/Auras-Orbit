@@ -79,6 +79,7 @@ class AurasExploreFragment : Fragment() {
                         onSourceClick = { sourcePickerVisible = true },
                         onSourceDismiss = { sourcePickerVisible = false },
                         onSourceSelect = { option -> selectSource(option) },
+                        onRetrySource = ::retrySource,
                         onOpenCatalogs = { openCatalogs() },
                         onOpenSearch = { openDestination(R.id.navigation_search) },
                         onConnectSource = { openDestination(R.id.navigation_settings_extensions) },
@@ -148,7 +149,6 @@ class AurasExploreFragment : Fragment() {
 
                 is Resource.Loading -> browseState.copy(loading = true, error = null)
                 is Resource.Failure -> browseState.copy(
-                    shelves = emptyList(),
                     loading = false,
                     error = resource.errorString,
                 )
@@ -186,6 +186,13 @@ class AurasExploreFragment : Fragment() {
             error = null,
         )
         homeViewModel.loadAndCancel(option.key, forceReload = true, fromUI = true)
+    }
+
+    private fun retrySource() {
+        val sourceName = browseState.sourceName ?: homeViewModel.apiName.value
+            ?: DataStoreHelper.currentHomePage ?: return
+        browseState = browseState.copy(loading = true, error = null)
+        homeViewModel.loadAndCancel(sourceName, forceReload = true)
     }
 
     private fun openItem(item: SearchResponse, index: Int, action: Int) {
@@ -226,6 +233,7 @@ private fun AurasExploreScreen(
     onSourceClick: () -> Unit,
     onSourceDismiss: () -> Unit,
     onSourceSelect: (AurasSourceOption) -> Unit,
+    onRetrySource: () -> Unit,
     onOpenCatalogs: () -> Unit,
     onOpenSearch: () -> Unit,
     onConnectSource: () -> Unit,
@@ -288,14 +296,23 @@ private fun AurasExploreScreen(
             }
             if (state.loading) {
                 item { AurasLoadingPanel() }
-            } else if (state.shelves.isEmpty() && state.resumeItems.isEmpty()) {
+            } else if (state.error != null) {
                 item {
                     AurasEmptyPanel(
                         title = stringResource(
-                            if (state.error == null) R.string.auras_explore_empty_title
-                            else R.string.auras_explore_load_error_title
+                            if (state.shelves.isEmpty()) R.string.auras_explore_load_error_title
+                            else R.string.auras_explore_refresh_error_title
                         ),
-                        body = state.error ?: stringResource(R.string.auras_explore_empty_body),
+                        body = state.error,
+                        button = stringResource(R.string.auras_catalog_retry),
+                        onClick = onRetrySource,
+                    )
+                }
+            } else if (state.shelves.isEmpty() && state.resumeItems.isEmpty()) {
+                item {
+                    AurasEmptyPanel(
+                        title = stringResource(R.string.auras_explore_empty_title),
+                        body = stringResource(R.string.auras_explore_empty_body),
                         button = stringResource(
                             if (state.sources.isEmpty()) R.string.auras_explore_connect_source
                             else R.string.auras_explore_choose_source

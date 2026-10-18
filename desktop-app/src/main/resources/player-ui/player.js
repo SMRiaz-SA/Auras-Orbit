@@ -145,6 +145,17 @@
     let activeLyricIndex = -1;
     let hasShownMaturityAdvisoryThisSession = false;
 
+    const syncAudioScrubAccessibility = (positionMs = currentPosMs) => {
+        const scrubBar = document.getElementById('audioScrubBar');
+        if (!scrubBar) return;
+        const hasDuration = durationMs > 0;
+        const clampedPosition = hasDuration ? Math.max(0, Math.min(durationMs, positionMs || 0)) : 0;
+        const percent = hasDuration ? (clampedPosition / durationMs) * 100 : 0;
+        scrubBar.setAttribute('aria-disabled', String(!hasDuration));
+        scrubBar.setAttribute('aria-valuenow', percent.toFixed(1));
+        scrubBar.setAttribute('aria-valuetext', hasDuration ? `${fmt(clampedPosition)} of ${fmt(durationMs)}` : '0:00');
+    };
+
     // ── Synced Lyrics Engine Helpers (Top-Level Scope) ───────────────────
     function parseLyrics(text) {
         if (!text || typeof text !== 'string') return [];
@@ -281,6 +292,7 @@
         pendingResumeMs = 0;
         durationMs = 0;
         currentPosMs = 0;
+        syncAudioScrubAccessibility(0);
         isSeeking = false;
         isCurrentlyLoading = false;
         globalIsLoading = false;
@@ -619,6 +631,10 @@
     let lastMouseX = -1;
     let lastMouseY = -1;
     let isHoveringControls = false;
+    const playerControlFocusScope = '#overlay, .panel.open, #contextMenuOverlay, #resumeOverlay, #videoEndedOverlay, #audioStation';
+    const playerInteractiveTargetSelector = 'button, input, select, textarea, a[href], [contenteditable], [role="button"], [role="slider"], [tabindex]:not([tabindex="-1"])';
+    const isPlayerControlFocused = (target) => target instanceof Element && !!target.closest(playerControlFocusScope);
+    const isPlayerInteractiveTarget = (target) => target instanceof Element && !!target.closest(playerInteractiveTargetSelector);
 
     // Do not hide controls if the user's mouse is actively resting on the top bar, bottom bar, or open panels
     document.querySelectorAll('.top-bar, .bottom-bar, .panel').forEach(el => {
@@ -665,7 +681,7 @@
         }
         if (!isMenuOpen && !isSeeking && (forceHide || !isHoveringControls)) {
             hideTimer = setTimeout(() => {
-                if (!isHoveringControls && !isSeeking && !isMenuOpen) {
+                if (!isHoveringControls && !isSeeking && !isMenuOpen && !isPlayerControlFocused(document.activeElement)) {
                     overlay.classList.add('hidden-controls');
                     document.body.classList.add('hidden-controls');
                 }
@@ -705,14 +721,23 @@
 
     document.addEventListener('mousemove', showControls);
     
-    // Global Focus Lock Prevention: Never allow buttons, sliders, or panels to trap keyboard focus.
-    // Use capture phase (true) so it executes before any stopPropagation() in child elements.
+    // Keep the player controls visible while keyboard focus is inside them.
+    // Use capture phase so this still runs when a child stops propagation.
     document.addEventListener('focusin', (e) => {
-        if (!e.target.closest('input[type="text"], input[type="search"], textarea, [contenteditable]')) {
-            if (e.target instanceof HTMLElement) {
-                e.target.blur();
-            }
+        if (!isPlayerControlFocused(e.target) || !isPlayerInteractiveTarget(e.target)) return;
+        if (document.body.classList.contains('keyboard-seeking')) {
+            if (keyboardSeekingTimer) clearTimeout(keyboardSeekingTimer);
+            keyboardSeekingTimer = null;
+            document.body.classList.remove('keyboard-seeking');
         }
+        showControls(e);
+    }, true);
+
+    document.addEventListener('focusout', (e) => {
+        if (!isPlayerControlFocused(e.target) || isPlayerControlFocused(e.relatedTarget)) return;
+        setTimeout(() => {
+            if (!isPlayerControlFocused(document.activeElement)) showControls(null, true);
+        }, 0);
     }, true);
 
     document.addEventListener('pointerdown', (e) => {
@@ -724,10 +749,6 @@
     }, true);
 
     document.addEventListener('click', e => {
-        // Blur active element so buttons don't retain focus when UI hides
-        if (!e.target.closest('input[type="text"], input[type="search"], textarea, [contenteditable]') && document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur();
-        }
         showControls(e);
     });
     
@@ -759,7 +780,10 @@
     });
 
     // Panel Management
+    const panelReturnFocus = new Map();
     const closeAllPanels = () => {
+        const focusedPanel = document.activeElement instanceof Element ? document.activeElement.closest('.panel.open') : null;
+        const returnFocusTarget = focusedPanel ? panelReturnFocus.get(focusedPanel.id) : null;
         panels.forEach(id => document.getElementById(id)?.classList.remove('open'));
         document.getElementById('playerModalBackdrop')?.classList.remove('active');
         document.getElementById('qualityServerBtn')?.classList.remove('active');
@@ -767,6 +791,9 @@
         if (typeof switchToSubTracksView === 'function') switchToSubTracksView();
         isMenuOpen = false;
         showControls();
+        if (returnFocusTarget instanceof HTMLElement && returnFocusTarget.isConnected) {
+            returnFocusTarget.focus({ preventScroll: true });
+        }
     };
     // Expose on window so inline onclick="closeAllPanels()" attributes work
     window.closeAllPanels = closeAllPanels;
@@ -774,6 +801,10 @@
         const el = document.getElementById(id);
         if (!el) return;
         const wasOpen = el.classList.contains('open');
+        const activeElement = document.activeElement;
+        if (!wasOpen && activeElement instanceof HTMLElement && !activeElement.closest('.panel')) {
+            panelReturnFocus.set(id, activeElement);
+        }
         closeAllPanels();
         if (!wasOpen) {
             el.classList.add('open');
@@ -1110,6 +1141,7 @@
             const bufPct = Math.max(0, Math.min(100, (s.bufferMs / durationMs) * 100));
             audioScrubBuf.style.width = `${bufPct}%`;
         }
+        syncAudioScrubAccessibility(currentPosMs);
 
         // Update Synced Lyrics active line
         if (typeof updateSyncedLyrics === 'function') {
@@ -4348,6 +4380,7 @@
             audioCurrentTime.innerText = fmt(Math.round(pct * durationMs));
         }
         renderAudioWaveform(pct);
+        syncAudioScrubAccessibility(Math.round(pct * durationMs));
         return pct;
     };
 
@@ -4381,6 +4414,29 @@
 
         audioScrubBar.addEventListener('pointerup', finishAudioScrub);
         audioScrubBar.addEventListener('pointercancel', finishAudioScrub);
+        audioScrubBar.addEventListener('keydown', e => {
+            if (durationMs <= 0) return;
+
+            let targetMs;
+            const fineStepMs = e.shiftKey ? 10000 : 5000;
+            switch (e.key) {
+                case 'ArrowLeft': case 'ArrowDown': targetMs = currentPosMs - fineStepMs; break;
+                case 'ArrowRight': case 'ArrowUp': targetMs = currentPosMs + fineStepMs; break;
+                case 'PageDown': targetMs = currentPosMs - 60000; break;
+                case 'PageUp': targetMs = currentPosMs + 60000; break;
+                case 'Home': targetMs = 0; break;
+                case 'End': targetMs = durationMs; break;
+                default: return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
+            targetMs = Math.max(0, Math.min(durationMs, targetMs));
+            const rect = audioScrubBar.getBoundingClientRect();
+            updateAudioScrubPosition(rect.left + (targetMs / durationMs) * rect.width);
+            currentPosMs = targetMs;
+            send('seekTo', targetMs);
+        });
     }
 
     // Dedicated Audio Volume & Mute
@@ -4406,6 +4462,14 @@
 
     // Settings Controls
     // Speed
+    const setPressedSelection = (items, selectedItem) => {
+        items.forEach(item => {
+            const isSelected = item === selectedItem;
+            item.classList.toggle('active', isSelected);
+            item.setAttribute('aria-pressed', String(isSelected));
+        });
+    };
+
     const speedMapping = [0.25, 0.35, 0.5, 0.65, 0.75, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
     const syncSpeedBadge = (val) => {
         const valStr = Number.isInteger(val) ? val.toFixed(1) : val.toString();
@@ -4429,11 +4493,9 @@
         // Sync speed chips active state
         document.querySelectorAll('#speedChipsRow .cs-speed-chip, #speedChips .chip').forEach(chip => {
             const sp = parseFloat(chip.dataset.speed);
-            if (Math.abs(val - sp) < 0.01) {
-                chip.classList.add('active');
-            } else {
-                chip.classList.remove('active');
-            }
+            const isSelected = Math.abs(val - sp) < 0.01;
+            chip.classList.toggle('active', isSelected);
+            if (chip.matches('#speedChips .chip')) chip.setAttribute('aria-pressed', String(isSelected));
         });
 
         // Sync slider position and progress fill
@@ -4587,8 +4649,7 @@
         dots.forEach(d => {
             d.addEventListener('click', e => {
                 e.stopPropagation();
-                dots.forEach(x => x.classList.remove('active'));
-                d.classList.add('active');
+                setPressedSelection(dots, d);
                 onSelect(d.dataset.color);
                 window.updateSubtitlePreview();
             });
@@ -4737,14 +4798,20 @@
             if (subBlurSlider && subBlurVal) { subBlurSlider.value = 0; subBlurVal.innerText = '0px'; }
             if (subPosSlider && subPosVal) { subPosSlider.value = 100; subPosVal.innerText = '100%'; }
             
-            document.querySelectorAll('#subTextColorPalette .desktop-color-dot').forEach(d => d.classList.remove('active'));
-            document.querySelector('#subTextColorPalette .desktop-color-dot[data-color="#FFFFFF"]')?.classList.add('active');
+            setPressedSelection(
+                document.querySelectorAll('#subTextColorPalette .desktop-color-dot'),
+                document.querySelector('#subTextColorPalette .desktop-color-dot[data-color="#FFFFFF"]')
+            );
 
-            document.querySelectorAll('#subBorderColorPalette .desktop-color-dot').forEach(d => d.classList.remove('active'));
-            document.querySelector('#subBorderColorPalette .desktop-color-dot[data-color="#000000"]')?.classList.add('active');
+            setPressedSelection(
+                document.querySelectorAll('#subBorderColorPalette .desktop-color-dot'),
+                document.querySelector('#subBorderColorPalette .desktop-color-dot[data-color="#000000"]')
+            );
             
-            document.querySelectorAll('#subShadowColorPalette .desktop-color-dot').forEach(d => d.classList.remove('active'));
-            document.querySelector('#subShadowColorPalette .desktop-color-dot[data-color="#000000"]')?.classList.add('active');
+            setPressedSelection(
+                document.querySelectorAll('#subShadowColorPalette .desktop-color-dot'),
+                document.querySelector('#subShadowColorPalette .desktop-color-dot[data-color="#000000"]')
+            );
 
             if (btnSubBold) btnSubBold.classList.remove('active');
             if (btnSubItalic) btnSubItalic.classList.remove('active');
@@ -4763,8 +4830,7 @@
     document.querySelectorAll('#aspectChips .chip').forEach(c => {
         c.addEventListener('click', e => {
             e.stopPropagation();
-            document.querySelectorAll('#aspectChips .chip').forEach(x => x.classList.remove('active'));
-            c.classList.add('active');
+            setPressedSelection(document.querySelectorAll('#aspectChips .chip'), c);
             const aspect = c.dataset.aspect;
             if (aspect === 'original') {
                 send('setMpvProperty', 'keepaspect:yes');
@@ -4790,8 +4856,10 @@
     document.getElementById('btnResetVideo').addEventListener('click', e => {
         e.stopPropagation();
         // Reset Aspect
-        document.querySelectorAll('#aspectChips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector('#aspectChips .chip[data-aspect="original"]').classList.add('active');
+        setPressedSelection(
+            document.querySelectorAll('#aspectChips .chip'),
+            document.querySelector('#aspectChips .chip[data-aspect="original"]')
+        );
         send('setMpvProperty', 'keepaspect:yes');
         send('setMpvProperty', 'video-aspect-override:no');
         
@@ -4802,8 +4870,10 @@
         send('setMpvProperty', 'video-zoom:0');
         
         // Reset Scale
-        document.querySelectorAll('#scaleChips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector('#scaleChips .chip[data-scale="spline36"]').classList.add('active');
+        setPressedSelection(
+            document.querySelectorAll('#scaleChips .chip'),
+            document.querySelector('#scaleChips .chip[data-scale="spline36"]')
+        );
         send('setMpvProperty', 'scale:spline36');
     });
 
@@ -4811,8 +4881,7 @@
     document.querySelectorAll('#scaleChips .chip').forEach(c => {
         c.addEventListener('click', e => {
             e.stopPropagation();
-            document.querySelectorAll('#scaleChips .chip').forEach(x => x.classList.remove('active'));
-            c.classList.add('active');
+            setPressedSelection(document.querySelectorAll('#scaleChips .chip'), c);
             send('setMpvProperty', `scale:${c.dataset.scale}`);
         });
     });
@@ -4897,6 +4966,78 @@
     let isLooping = false;
     let ctxActiveSubmenu = null;
     let ctxSubmenuCloseTimer = null;
+    let ctxKeyboardOpened = false;
+    let ctxReturnFocusTarget = null;
+
+    const getVisibleContextItems = (container, selector) => Array.from(container?.querySelectorAll(selector) || [])
+        .filter(item => item.getClientRects().length > 0);
+
+    const focusContextItem = (item) => {
+        if (!item || !ctxMenu) return;
+        ctxMenu.querySelectorAll('.ctx-item, .ctx-sub-item').forEach(menuItem => menuItem.setAttribute('tabindex', '-1'));
+        item.setAttribute('tabindex', '0');
+        item.focus({ preventScroll: true });
+    };
+
+    const getTopLevelContextItems = () => Array.from(ctxMenu?.children || [])
+        .filter(child => child.classList.contains('ctx-item') && child.style.display !== 'none');
+
+    const openContextSubmenu = (item, focusFirstItem = false) => {
+        if (!item) return;
+        if (ctxSubmenuCloseTimer) {
+            clearTimeout(ctxSubmenuCloseTimer);
+            ctxSubmenuCloseTimer = null;
+        }
+
+        const sub = item.querySelector('.ctx-submenu');
+        if (!sub) return;
+
+        document.querySelectorAll('.ctx-submenu').forEach(otherSub => {
+            if (otherSub !== sub) {
+                otherSub.classList.remove('open');
+                otherSub.style.display = 'none';
+                otherSub.closest('.ctx-parent')?.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        sub.style.display = 'block';
+        sub.classList.add('open');
+        item.setAttribute('aria-expanded', 'true');
+        ctxActiveSubmenu = sub;
+
+        // Viewport boundary and quadrant collision
+        const zoom = parseFloat(getComputedStyle(document.body).zoom) || 1;
+        const itemRect = item.getBoundingClientRect();
+        const winW = window.innerWidth / zoom;
+        const winH = window.innerHeight / zoom;
+        const subW = sub.offsetWidth || 230;
+        const subH = sub.offsetHeight || 250;
+
+        if ((itemRect.right / zoom) + subW > winW - 12) {
+            sub.style.left = 'auto';
+            sub.style.right = '100%';
+            sub.style.marginRight = '6px';
+            sub.style.marginLeft = '0px';
+        } else {
+            sub.style.left = '100%';
+            sub.style.right = 'auto';
+            sub.style.marginLeft = '6px';
+            sub.style.marginRight = '0px';
+        }
+
+        const scaledTop = itemRect.top / zoom;
+        if (scaledTop + subH > winH - 12) {
+            const overflow = (scaledTop + subH) - (winH - 12);
+            const clampedTop = Math.max(-(scaledTop - 12), -overflow);
+            sub.style.top = `${clampedTop}px`;
+        } else {
+            sub.style.top = '0px';
+        }
+
+        if (focusFirstItem) {
+            focusContextItem(getVisibleContextItems(sub, '.ctx-sub-item')[0]);
+        }
+    };
 
     function closeAllSubmenus() {
         if (ctxSubmenuCloseTimer) {
@@ -4906,6 +5047,7 @@
         document.querySelectorAll('.ctx-submenu').forEach(sub => {
             sub.classList.remove('open');
             sub.style.display = 'none';
+            sub.closest('.ctx-parent')?.setAttribute('aria-expanded', 'false');
         });
         ctxActiveSubmenu = null;
     }
@@ -5150,78 +5292,63 @@
     }
 
     function setupContextSubmenus() {
+        ctxMenu?.querySelectorAll('.ctx-item').forEach(item => {
+            item.setAttribute('role', 'menuitem');
+            item.setAttribute('tabindex', '-1');
+            const sub = item.querySelector('.ctx-submenu');
+            if (sub) {
+                item.setAttribute('aria-haspopup', 'menu');
+                item.setAttribute('aria-expanded', sub.classList.contains('open') ? 'true' : 'false');
+                sub.setAttribute('role', 'menu');
+                sub.setAttribute('tabindex', '-1');
+                const label = item.querySelector('.ctx-item-left')?.textContent?.trim();
+                if (label) sub.setAttribute('aria-label', `${label} options`);
+            }
+        });
+        ctxMenu?.querySelectorAll('.ctx-sub-item').forEach(item => {
+            item.setAttribute('role', 'menuitem');
+            item.setAttribute('tabindex', '-1');
+        });
+        ctxMenu?.querySelectorAll('.ctx-divider').forEach(divider => divider.setAttribute('role', 'separator'));
+        ctxMenu?.querySelectorAll('.ctx-sub-header').forEach(header => header.setAttribute('role', 'presentation'));
+
         document.querySelectorAll('.ctx-parent').forEach(item => {
             if (item._ctxBound) return;
             item._ctxBound = true;
 
             item.addEventListener('mouseenter', () => {
-                if (ctxSubmenuCloseTimer) {
-                    clearTimeout(ctxSubmenuCloseTimer);
-                    ctxSubmenuCloseTimer = null;
-                }
-
-                const sub = item.querySelector('.ctx-submenu');
-                if (!sub) return;
-
-                document.querySelectorAll('.ctx-submenu').forEach(s => {
-                    if (s !== sub) {
-                        s.classList.remove('open');
-                        s.style.display = 'none';
-                    }
-                });
-
-                sub.style.display = 'block';
-                sub.classList.add('open');
-                ctxActiveSubmenu = sub;
-
-                // Viewport boundary and quadrant collision
-                const zoom = parseFloat(getComputedStyle(document.body).zoom) || 1;
-                const itemRect = item.getBoundingClientRect();
-                const winW = window.innerWidth / zoom;
-                const winH = window.innerHeight / zoom;
-
-                const subW = sub.offsetWidth || 230;
-                const subH = sub.offsetHeight || 250;
-
-                // Horizontal inversion: flip left if near right viewport edge
-                if ((itemRect.right / zoom) + subW > winW - 12) {
-                    sub.style.left = 'auto';
-                    sub.style.right = '100%';
-                    sub.style.marginRight = '6px';
-                    sub.style.marginLeft = '0px';
-                } else {
-                    sub.style.left = '100%';
-                    sub.style.right = 'auto';
-                    sub.style.marginLeft = '6px';
-                    sub.style.marginRight = '0px';
-                }
-
-                // Vertical clamping: if overflowing bottom, shift upward
-                const scaledTop = itemRect.top / zoom;
-                if (scaledTop + subH > winH - 12) {
-                    const overflow = (scaledTop + subH) - (winH - 12);
-                    const clampedTop = Math.max(-(scaledTop - 12), -overflow);
-                    sub.style.top = `${clampedTop}px`;
-                } else {
-                    sub.style.top = '0px';
-                }
+                openContextSubmenu(item);
             });
 
             item.addEventListener('mouseleave', () => {
                 const sub = item.querySelector('.ctx-submenu');
                 if (!sub) return;
                 ctxSubmenuCloseTimer = setTimeout(() => {
+                    ctxSubmenuCloseTimer = null;
+                    if (sub.contains(document.activeElement)) return;
                     sub.classList.remove('open');
                     sub.style.display = 'none';
+                    item.setAttribute('aria-expanded', 'false');
                     if (ctxActiveSubmenu === sub) ctxActiveSubmenu = null;
                 }, 120);
             });
         });
     }
 
-    window.showContextMenu = (x, y) => {
+    window.showContextMenu = (x, y, options = {}) => {
         if (!ctxMenu) return;
+        ctxKeyboardOpened = Boolean(options.keyboard);
+        const requestedReturnTarget = options.returnFocusTarget;
+        ctxReturnFocusTarget = ctxKeyboardOpened && requestedReturnTarget instanceof HTMLElement && requestedReturnTarget !== document.body
+            ? requestedReturnTarget
+            : (ctxKeyboardOpened ? document.getElementById('playPauseBtn') : null);
         closeAllPanels();
+        if (ctxReturnFocusTarget && ctxReturnFocusTarget.getClientRects().length === 0) {
+            const currentFocusTarget = document.activeElement;
+            ctxReturnFocusTarget = currentFocusTarget instanceof HTMLElement && currentFocusTarget !== document.body
+                ? currentFocusTarget
+                : document.getElementById('playPauseBtn');
+        }
         closeAllSubmenus();
 
         try {
@@ -5255,11 +5382,26 @@
 
         ctxMenu.style.left = `${posX}px`;
         ctxMenu.style.top = `${posY}px`;
+
+        if (ctxKeyboardOpened && options.focusFirst) {
+            focusContextItem(getTopLevelContextItems()[0]);
+        }
     };
 
-    window.closeContextMenu = () => {
+    window.closeContextMenu = (restoreKeyboardFocus = true) => {
+        const shouldRestoreFocus = restoreKeyboardFocus && ctxKeyboardOpened;
         if (ctxMenu) ctxMenu.style.display = 'none';
         closeAllSubmenus();
+        ctxMenu?.querySelectorAll('.ctx-item, .ctx-sub-item').forEach(item => item.setAttribute('tabindex', '-1'));
+        const returnFocusTarget = ctxReturnFocusTarget;
+        ctxKeyboardOpened = false;
+        ctxReturnFocusTarget = null;
+        if (shouldRestoreFocus) {
+            const target = returnFocusTarget instanceof HTMLElement && returnFocusTarget.isConnected
+                ? returnFocusTarget
+                : document.getElementById('playPauseBtn');
+            target?.focus({ preventScroll: true });
+        }
     };
 
     window.toggleLoopFromContext = () => {
@@ -5272,30 +5414,48 @@
         }
     };
 
+    let pauseInfoModalReturnFocus = null;
+    const restorePauseInfoModalFocus = () => {
+        const returnFocusTarget = pauseInfoModalReturnFocus || document.getElementById('playPauseBtn');
+        pauseInfoModalReturnFocus = null;
+        if (returnFocusTarget instanceof HTMLElement && returnFocusTarget.isConnected) {
+            returnFocusTarget.focus({ preventScroll: true });
+        }
+    };
+
     window.openPauseInfoModal = () => {
         closeContextMenu();
         const modal = document.getElementById('pauseInfoModalOverlay');
         if (!modal) return;
+        const activeElement = document.activeElement;
+        pauseInfoModalReturnFocus = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
         // Update selected class on options
         document.querySelectorAll('.pause-modal-option[data-mode]').forEach(el => {
-            if (el.getAttribute('data-mode') === pauseInfoMode) {
+            const isSelected = el.getAttribute('data-mode') === pauseInfoMode;
+            if (isSelected) {
                 el.classList.add('selected');
             } else {
                 el.classList.remove('selected');
             }
+            el.setAttribute('aria-pressed', String(isSelected));
         });
         const castOpt = document.getElementById('pauseModalOptionCast');
         if (castOpt) {
             if (showPauseCast) castOpt.classList.add('checked');
             else castOpt.classList.remove('checked');
+            castOpt.setAttribute('aria-pressed', String(showPauseCast));
         }
         modal.style.display = 'flex';
+        modal.querySelector('.pause-modal-option.selected')?.focus({ preventScroll: true });
     };
 
     window.closePauseInfoModal = (e) => {
         if (e && e.target !== e.currentTarget && !e.target.classList.contains('shortcuts-close-btn')) return;
         const modal = document.getElementById('pauseInfoModalOverlay');
-        if (modal) modal.style.display = 'none';
+        if (modal && modal.style.display !== 'none') {
+            modal.style.display = 'none';
+            restorePauseInfoModalFocus();
+        }
     };
 
     window.togglePauseShowCast = (e) => {
@@ -5306,6 +5466,7 @@
         if (castOpt) {
             if (showPauseCast) castOpt.classList.add('checked');
             else castOpt.classList.remove('checked');
+            castOpt.setAttribute('aria-pressed', String(showPauseCast));
         }
         showHudToast(showPauseCast ? 'Starring Cast: Enabled' : 'Starring Cast: Disabled');
         const pauseCast = document.getElementById('pauseInfoCast');
@@ -5321,7 +5482,10 @@
         updatePauseInfoBadge();
         send('set_pause_info_mode', mode);
         const modal = document.getElementById('pauseInfoModalOverlay');
-        if (modal) modal.style.display = 'none';
+        if (modal && modal.style.display !== 'none') {
+            modal.style.display = 'none';
+            restorePauseInfoModalFocus();
+        }
         const labelMap = {
             'delay_5s': 'Pause Info: 5s Delay',
             'delay_10s': 'Pause Info: 10s Delay',
@@ -5394,39 +5558,212 @@
     // Dismiss when clicking anywhere outside the menu
     document.addEventListener('mousedown', e => {
         if (ctxMenu && ctxMenu.style.display === 'block' && !ctxMenu.contains(e.target)) {
-            closeContextMenu();
+            closeContextMenu(false);
         }
     });
+
+    const handleOpenContextMenuKey = (e, target) => {
+        const isContextMenuKey = e.key === 'ContextMenu' || e.code === 'ContextMenu' || (e.shiftKey && e.key === 'F10');
+        if (!isContextMenuKey) return false;
+
+        const activeElement = target instanceof Element ? target : document.activeElement;
+        if (activeElement instanceof Element && activeElement.closest('input, textarea, select, [contenteditable="true"]')) return true;
+        e.preventDefault();
+
+        if (ctxMenu && ctxMenu.style.display === 'block') {
+            closeContextMenu();
+            return true;
+        }
+
+        const returnFocusTarget = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
+        const rect = returnFocusTarget?.getBoundingClientRect();
+        const x = rect && rect.width > 0 ? rect.left + Math.min(rect.width / 2, 24) : window.innerWidth / 2;
+        const y = rect && rect.height > 0 ? rect.bottom : window.innerHeight / 2;
+        window.showContextMenu(x, y, { keyboard: true, focusFirst: true, returnFocusTarget });
+        return true;
+    };
+
+    const handleOpenContextMenuNavigation = (e) => {
+        if (!ctxMenu || ctxMenu.style.display !== 'block') return false;
+
+        const activeElement = document.activeElement instanceof Element ? document.activeElement : e.target;
+        let menuItem = activeElement instanceof Element ? activeElement.closest('.ctx-item, .ctx-sub-item') : null;
+        const submenu = menuItem?.closest('.ctx-submenu') || null;
+        const parentItem = submenu?.closest('.ctx-parent') || null;
+        const isActivate = e.key === 'Enter' || e.key === ' ' || e.code === 'Space';
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (submenu && parentItem) {
+                closeAllSubmenus();
+                focusContextItem(parentItem);
+            } else {
+                closeContextMenu();
+            }
+            return true;
+        }
+
+        if (e.key === 'Tab') {
+            closeContextMenu();
+            return true;
+        }
+
+        const isNavigationKey = ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key);
+        if (!menuItem) {
+            if (!isNavigationKey && !isActivate) return false;
+            const firstItem = getTopLevelContextItems()[0];
+            if (!firstItem) return false;
+            e.preventDefault();
+            focusContextItem(firstItem);
+            return true;
+        }
+
+        if (e.key === 'ArrowRight' && !submenu && menuItem.classList.contains('ctx-parent')) {
+            e.preventDefault();
+            openContextSubmenu(menuItem, true);
+            return true;
+        }
+
+        if (e.key === 'ArrowLeft' && submenu && parentItem) {
+            e.preventDefault();
+            closeAllSubmenus();
+            focusContextItem(parentItem);
+            return true;
+        }
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') {
+            const items = submenu
+                ? getVisibleContextItems(submenu, '.ctx-sub-item')
+                : getTopLevelContextItems();
+            if (items.length === 0) {
+                e.preventDefault();
+                return true;
+            }
+            e.preventDefault();
+            if (!submenu) closeAllSubmenus();
+            const currentIndex = items.indexOf(menuItem);
+            const nextIndex = e.key === 'Home' ? 0
+                : e.key === 'End' ? items.length - 1
+                : e.key === 'ArrowUp' ? (currentIndex <= 0 ? items.length - 1 : currentIndex - 1)
+                : (currentIndex < 0 || currentIndex >= items.length - 1 ? 0 : currentIndex + 1);
+            focusContextItem(items[nextIndex]);
+            return true;
+        }
+
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            return true;
+        }
+
+        if (isActivate) {
+            e.preventDefault();
+            if (!submenu && menuItem.classList.contains('ctx-parent')) {
+                openContextSubmenu(menuItem, true);
+            } else {
+                menuItem.click();
+            }
+            return true;
+        }
+
+        return false;
+    };
 
     // Keyboard Shortcuts
     // Prevent UI zooming
     document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 
-    document.addEventListener('keydown', e => {
-        if (e.ctrlKey && (e.key === '=' || e.key === '-' || e.key === '0')) { e.preventDefault(); return; }
-        if (e.target.closest('input, textarea, [contenteditable]')) return;
-        if (document.activeElement && (document.activeElement.matches('input, textarea, [contenteditable]') || document.activeElement.closest('input, textarea, [contenteditable]'))) return;
-        if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-            document.activeElement.blur();
+    let shortcutsModalReturnFocus = null;
+    window.openShortcutsModal = () => {
+        const shortcutsModal = document.getElementById('shortcutsModalOverlay');
+        if (!shortcutsModal) return;
+        const activeElement = document.activeElement;
+        shortcutsModalReturnFocus = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
+        closeContextMenu();
+        shortcutsModal.style.display = 'flex';
+        document.getElementById('shortcutsModalCloseBtn')?.focus({ preventScroll: true });
+    };
+    window.closeShortcutsModal = (e) => {
+        if (e && e.target !== e.currentTarget && !e.target.classList.contains('shortcuts-close-btn')) return;
+        const shortcutsModal = document.getElementById('shortcutsModalOverlay');
+        if (!shortcutsModal || shortcutsModal.style.display === 'none') return;
+        shortcutsModal.style.display = 'none';
+        const returnFocusTarget = shortcutsModalReturnFocus || document.getElementById('playPauseBtn');
+        shortcutsModalReturnFocus = null;
+        if (returnFocusTarget instanceof HTMLElement && returnFocusTarget.isConnected) {
+            returnFocusTarget.focus({ preventScroll: true });
         }
+    };
 
-        // Dismiss context menu first on any keypress
-        if (ctxMenu && ctxMenu.style.display === 'block') {
-            closeContextMenu();
-            if (e.key === 'Escape') return;
-        }
+    document.addEventListener('keydown', e => {
+        const shortcutTarget = e.target instanceof Element ? e.target : document.activeElement;
+        const isEscape = e.key === 'Escape';
 
         const shortcutsModal = document.getElementById('shortcutsModalOverlay');
         if (shortcutsModal && shortcutsModal.style.display === 'flex') {
-            if (e.key === 'Escape') { closeShortcutsModal(); }
+            if (isEscape) { e.preventDefault(); closeShortcutsModal(); }
+            else if (e.key === 'Tab') {
+                const focusable = Array.from(shortcutsModal.querySelectorAll('button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])'))
+                    .filter(el => el.getClientRects().length > 0);
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (first && last && e.shiftKey && (shortcutTarget === first || !shortcutsModal.contains(shortcutTarget))) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (first && last && !e.shiftKey && (shortcutTarget === last || !shortcutsModal.contains(shortcutTarget))) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
             return;
         }
 
         const pauseModal = document.getElementById('pauseInfoModalOverlay');
         if (pauseModal && pauseModal.style.display === 'flex') {
-            if (e.key === 'Escape') { closePauseInfoModal(); }
+            if (isEscape) { e.preventDefault(); closePauseInfoModal(); }
+            else if (e.key === 'Tab') {
+                const focusable = Array.from(pauseModal.querySelectorAll('button:not(:disabled), input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])'))
+                    .filter(el => el.getClientRects().length > 0);
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (first && last && e.shiftKey && (shortcutTarget === first || !pauseModal.contains(shortcutTarget))) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (first && last && !e.shiftKey && (shortcutTarget === last || !pauseModal.contains(shortcutTarget))) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
             return;
         }
+
+        if (handleOpenContextMenuKey(e, shortcutTarget)) return;
+        if (ctxMenu && ctxMenu.style.display === 'block') {
+            if (handleOpenContextMenuNavigation(e)) return;
+            closeContextMenu();
+        }
+
+        if (isEscape) {
+            e.preventDefault();
+            const videoEndedOverlay = document.getElementById('videoEndedOverlay');
+            if (videoEndedOverlay && videoEndedOverlay.style.display === 'flex') {
+                document.getElementById('btnDismissEnded')?.click();
+                return;
+            }
+            const resumeOverlay = document.getElementById('resumeOverlay');
+            if (resumeOverlay && resumeOverlay.style.display === 'flex') {
+                document.getElementById('btnDismissResume')?.click();
+                return;
+            }
+            closeAllPanels();
+            return;
+        }
+
+        if (isPlayerInteractiveTarget(shortcutTarget)) {
+            const buttonTarget = shortcutTarget.closest('button, [role="button"]');
+            const isNativeButtonActivation = e.key === 'Enter' || e.key === ' ' || e.code === 'Space';
+            if (!buttonTarget || isNativeButtonActivation) return;
+        }
+        if (e.ctrlKey && (e.key === '=' || e.key === '-' || e.key === '0')) { e.preventDefault(); return; }
 
         // Percentage seek (0-9)
         if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key >= '0' && e.key <= '9') {
@@ -5566,11 +5903,6 @@
                     openShortcutsModal();
                 }
                 break;
-            case 'Escape':
-                closeContextMenu();
-                closeShortcutsModal();
-                closeAllPanels();
-                break;
         }
     });
 
@@ -5641,8 +5973,7 @@
     audioNormChips.forEach(chip => {
         chip.addEventListener('click', (e) => {
             e.stopPropagation();
-            audioNormChips.forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
+            setPressedSelection(audioNormChips, chip);
             send('setAudioNormStrength', chip.getAttribute('data-val'));
         });
     });
@@ -5651,8 +5982,7 @@
     audioEqChips.forEach(chip => {
         chip.addEventListener('click', (e) => {
             e.stopPropagation();
-            audioEqChips.forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
+            setPressedSelection(audioEqChips, chip);
             send('setAudioEqPreset', chip.getAttribute('data-val'));
         });
     });

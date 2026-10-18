@@ -112,6 +112,7 @@
     <string name="auras_explore_resume_see_all">View all</string>
     <string name="auras_explore_empty_title">Your Orbit is waiting</string>
     <string name="auras_explore_load_error_title">We couldn’t load this catalog</string>
+    <string name="auras_explore_refresh_error_title">This catalog couldn’t be refreshed</string>
     <string name="auras_explore_empty_body">Connect a catalog to bring its collections and titles into Auras Orbit.</string>
     <string name="auras_explore_connect_source">Connect a catalog</string>
     <string name="auras_explore_choose_source">Choose a catalog</string>
@@ -120,6 +121,8 @@
     <string name="auras_catalogs_subtitle">Browse collections from your connected sources.</string>
     <string name="auras_catalogs_back">Back to Explore</string>
     <string name="auras_catalogs_unreachable_title">This catalog is out of reach</string>
+    <string name="auras_catalogs_refresh_error_title">This catalog couldn’t be refreshed</string>
+    <string name="auras_catalogs_refreshing">Refreshing collections…</string>
     <string name="auras_catalogs_empty_title">Bring your catalogs into Orbit</string>
     <string name="auras_catalogs_empty_body">Connect a catalog to browse its collections and discover titles here.</string>
     <string name="auras_source_picker_title">Choose your source</string>
@@ -601,6 +604,7 @@
     <string name="player_loaded_subtitles" formatted="true">Loaded %s</string>
     <string name="player_load_subtitles">Load from file</string>
     <string name="player_load_subtitles_online">Load from Internet</string>
+    <string name="subtitle_search_no_results">No online subtitles found.</string>
     <string name="player_load_one_subtitle_online">Load first available</string>
     <string name="downloaded_file">Downloaded file</string>
     <string name="actor_main">Main</string>
@@ -792,6 +796,9 @@
     <string name="empty_library_no_accounts_message">Your library is empty :(
 \nLog in on a library account or add shows to your local library.</string>
     <string name="empty_library_logged_in_message">This list is empty. Try switching to another one.</string>
+    <string name="library_load_failed">Couldn’t refresh your library.</string>
+    <string name="library_load_failed_retry">Couldn’t load your library. Tap here to try again.</string>
+    <string name="library_retry">Retry</string>
     <string name="safe_mode_file">Safe mode file found!\nNot loading any extensions on startup until file is removed.</string>
     <string name="revert">Revert</string>
     <string name="subscription_in_progress_notification">Updating subscribed shows</string>

@@ -501,19 +501,19 @@
                 <div class="settings-row">
                     <span class="settings-label-text">Font Size</span>
                     <div class="desktop-slider-container">
-                        <input type="range" class="desktop-slider" id="subSizeSlider" min="20" max="100" value="45">
+                        <input type="range" class="desktop-slider" id="subSizeSlider" min="20" max="100" value="45" aria-label="Subtitle font size">
                         <span class="settings-val-badge" id="subSizeVal">45px</span>
                     </div>
                 </div>
                 <div class="settings-row">
                     <span class="settings-label-text">Text Color</span>
-                    <div class="desktop-color-palette" id="subTextColorPalette">
-                        <div class="desktop-color-dot active" style="background:#FFFFFF" data-color="#FFFFFF"></div>
-                        <div class="desktop-color-dot" style="background:#FFFF00" data-color="#FFFF00"></div>
-                        <div class="desktop-color-dot" style="background:#00FFFF" data-color="#00FFFF"></div>
-                        <div class="desktop-color-dot" style="background:#FF9900" data-color="#FF9900"></div>
-                        <div class="desktop-color-dot" style="background:#FF5555" data-color="#FF5555"></div>
-                        <div class="desktop-color-dot" style="background:#55FF55" data-color="#55FF55"></div>
+                    <div class="desktop-color-palette" id="subTextColorPalette" role="group" aria-label="Subtitle text color">
+                        <button type="button" class="desktop-color-dot active" style="background:#FFFFFF" data-color="#FFFFFF" aria-label="White" aria-pressed="true"></button>
+                        <button type="button" class="desktop-color-dot" style="background:#FFFF00" data-color="#FFFF00" aria-label="Yellow" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot" style="background:#00FFFF" data-color="#00FFFF" aria-label="Cyan" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot" style="background:#FF9900" data-color="#FF9900" aria-label="Orange" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot" style="background:#FF5555" data-color="#FF5555" aria-label="Red" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot" style="background:#55FF55" data-color="#55FF55" aria-label="Green" aria-pressed="false"></button>
                     </div>
                 </div>
                 <div class="settings-row">
@@ -530,46 +530,46 @@
                 <div class="settings-card-title">Border & Shadow</div>
                 <div class="settings-row">
                     <span class="settings-label-text">Border Color</span>
-                    <div class="desktop-color-palette" id="subBorderColorPalette">
-                        <div class="desktop-color-dot border-dot active" style="background:#000000" data-color="#000000"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#FFFFFF" data-color="#FFFFFF"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#FFFF00" data-color="#FFFF00"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#00FFFF" data-color="#00FFFF"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#FF9900" data-color="#FF9900"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#FF5555" data-color="#FF5555"></div>
-                        <div class="desktop-color-dot border-dot" style="background:#55FF55" data-color="#55FF55"></div>
+                    <div class="desktop-color-palette" id="subBorderColorPalette" role="group" aria-label="Subtitle border color">
+                        <button type="button" class="desktop-color-dot border-dot active" style="background:#000000" data-color="#000000" aria-label="Black" aria-pressed="true"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#FFFFFF" data-color="#FFFFFF" aria-label="White" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#FFFF00" data-color="#FFFF00" aria-label="Yellow" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#00FFFF" data-color="#00FFFF" aria-label="Cyan" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#FF9900" data-color="#FF9900" aria-label="Orange" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#FF5555" data-color="#FF5555" aria-label="Red" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot border-dot" style="background:#55FF55" data-color="#55FF55" aria-label="Green" aria-pressed="false"></button>
                     </div>
                 </div>
                 <div class="settings-row">
                     <span class="settings-label-text">Border Size</span>
                     <div class="desktop-slider-container">
-                        <input type="range" class="desktop-slider" id="subBorderSizeSlider" min="0" max="10" step="1" value="3">
+                        <input type="range" class="desktop-slider" id="subBorderSizeSlider" min="0" max="10" step="1" value="3" aria-label="Subtitle border size">
                         <span class="settings-val-badge" id="subBorderSizeVal">3px</span>
                     </div>
                 </div>
                 <div class="settings-row">
                     <span class="settings-label-text">Shadow Color</span>
-                    <div class="desktop-color-palette" id="subShadowColorPalette">
-                        <div class="desktop-color-dot shadow-dot active" style="background:#000000" data-color="#000000"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#FFFFFF" data-color="#FFFFFF"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#FFFF00" data-color="#FFFF00"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#00FFFF" data-color="#00FFFF"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#FF9900" data-color="#FF9900"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#FF5555" data-color="#FF5555"></div>
-                        <div class="desktop-color-dot shadow-dot" style="background:#55FF55" data-color="#55FF55"></div>
+                    <div class="desktop-color-palette" id="subShadowColorPalette" role="group" aria-label="Subtitle shadow color">
+                        <button type="button" class="desktop-color-dot shadow-dot active" style="background:#000000" data-color="#000000" aria-label="Black" aria-pressed="true"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#FFFFFF" data-color="#FFFFFF" aria-label="White" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#FFFF00" data-color="#FFFF00" aria-label="Yellow" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#00FFFF" data-color="#00FFFF" aria-label="Cyan" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#FF9900" data-color="#FF9900" aria-label="Orange" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#FF5555" data-color="#FF5555" aria-label="Red" aria-pressed="false"></button>
+                        <button type="button" class="desktop-color-dot shadow-dot" style="background:#55FF55" data-color="#55FF55" aria-label="Green" aria-pressed="false"></button>
                     </div>
                 </div>
                 <div class="settings-row">
                     <span class="settings-label-text">Shadow Offset</span>
                     <div class="desktop-slider-container">
-                        <input type="range" class="desktop-slider" id="subShadowOffsetSlider" min="0" max="10" step="1" value="0">
+                        <input type="range" class="desktop-slider" id="subShadowOffsetSlider" min="0" max="10" step="1" value="0" aria-label="Subtitle shadow offset">
                         <span class="settings-val-badge" id="subShadowOffsetVal">0px</span>
                     </div>
                 </div>
                 <div class="settings-row">
                     <span class="settings-label-text">Shadow Blur</span>
                     <div class="desktop-slider-container">
-                        <input type="range" class="desktop-slider" id="subBlurSlider" min="0" max="10" step="1" value="0">
+                        <input type="range" class="desktop-slider" id="subBlurSlider" min="0" max="10" step="1" value="0" aria-label="Subtitle shadow blur">
                         <span class="settings-val-badge" id="subBlurVal">0px</span>
                     </div>
                 </div>
@@ -589,7 +589,7 @@
                 <div class="settings-row">
                     <span class="settings-label-text">Vertical Position</span>
                     <div class="desktop-slider-container">
-                        <input type="range" class="desktop-slider" id="subPosSlider" min="0" max="100" value="100">
+                        <input type="range" class="desktop-slider" id="subPosSlider" min="0" max="100" value="100" aria-label="Subtitle vertical position">
                         <span class="settings-val-badge" id="subPosVal">100%</span>
                     </div>
                 </div>
@@ -620,11 +620,11 @@
                 <div class="settings-card-title">Video Quality & Rendering</div>
                 <div class="settings-row-col">
                     <span class="settings-label-text">Upscale Scaling Filter</span>
-                    <div class="chip-row" id="scaleChips" style="margin-top: 4px;">
-                        <div class="chip active" data-scale="spline36">Spline36</div>
-                        <div class="chip" data-scale="lanczos">Lanczos</div>
-                        <div class="chip" data-scale="bicubic">Bicubic</div>
-                        <div class="chip" data-scale="bilinear">Bilinear</div>
+                    <div class="chip-row" id="scaleChips" role="group" aria-label="Upscale scaling filter" style="margin-top: 4px;">
+                        <button type="button" class="chip active" data-scale="spline36" aria-pressed="true">Spline36</button>
+                        <button type="button" class="chip" data-scale="lanczos" aria-pressed="false">Lanczos</button>
+                        <button type="button" class="chip" data-scale="bicubic" aria-pressed="false">Bicubic</button>
+                        <button type="button" class="chip" data-scale="bilinear" aria-pressed="false">Bilinear</button>
                     </div>
                 </div>
                 <div class="settings-row" style="margin-top: 12px;">
@@ -703,10 +703,10 @@
                 </div>
                 <div class="settings-row-col" style="margin-top: 10px;">
                     <span class="settings-label-text">Normalization Strength</span>
-                    <div class="chip-row" id="audioNormChips" style="margin-top: 4px;">
-                        <div class="chip" data-val="Low">Low</div>
-                        <div class="chip active" data-val="Medium">Medium</div>
-                        <div class="chip" data-val="Aggressive">Aggressive</div>
+                    <div class="chip-row" id="audioNormChips" role="group" aria-label="Normalization strength" style="margin-top: 4px;">
+                        <button type="button" class="chip" data-val="Low" aria-pressed="false">Low</button>
+                        <button type="button" class="chip active" data-val="Medium" aria-pressed="true">Medium</button>
+                        <button type="button" class="chip" data-val="Aggressive" aria-pressed="false">Aggressive</button>
                     </div>
                 </div>
                 <div class="settings-row" style="margin-top: 12px;">
@@ -724,11 +724,11 @@
                 <div class="settings-card-title">Equalizer & Surround</div>
                 <div class="settings-row-col">
                     <span class="settings-label-text">Equalizer Preset</span>
-                    <div class="chip-row" id="audioEqChips" style="margin-top: 4px;">
-                        <div class="chip active" data-val="Flat">Flat</div>
-                        <div class="chip" data-val="Bass Boost">Bass</div>
-                        <div class="chip" data-val="Vocal Boost">Vocal</div>
-                        <div class="chip" data-val="Cinematic">Cinema</div>
+                    <div class="chip-row" id="audioEqChips" role="group" aria-label="Equalizer preset" style="margin-top: 4px;">
+                        <button type="button" class="chip active" data-val="Flat" aria-pressed="true">Flat</button>
+                        <button type="button" class="chip" data-val="Bass Boost" aria-pressed="false">Bass</button>
+                        <button type="button" class="chip" data-val="Vocal Boost" aria-pressed="false">Vocal</button>
+                        <button type="button" class="chip" data-val="Cinematic" aria-pressed="false">Cinema</button>
                     </div>
                 </div>
                 <div class="settings-row" style="margin-top: 12px;">
@@ -743,7 +743,7 @@
                 <div class="settings-row" style="margin-top: 12px;">
                     <span class="settings-label-text">Audio Sync</span>
                     <div class="desktop-slider-container">
-                        <input type="range" id="audioDelaySlider" class="desktop-slider" min="-1" max="1" step="0.05" value="0">
+                        <input type="range" id="audioDelaySlider" class="desktop-slider" min="-1" max="1" step="0.05" value="0" aria-label="Audio delay">
                         <span class="settings-val-badge" id="audioDelayVal">0.00s</span>
                     </div>
                 </div>
@@ -779,18 +779,18 @@
                 <div class="settings-label" style="margin-bottom: 0;">Aspect Ratio</div>
                 <button id="btnResetVideo" style="background: rgba(255,255,255,0.08); border: none; color: white; border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: bold; cursor: pointer; transition: background 0.15s;">RESET ALL</button>
             </div>
-            <div class="chip-row" id="aspectChips">
-                <div class="chip active" data-aspect="original">Original</div>
-                <div class="chip" data-aspect="16:9">16:9</div>
-                <div class="chip" data-aspect="4:3">4:3</div>
-                <div class="chip" data-aspect="stretch">Stretch</div>
+            <div class="chip-row" id="aspectChips" role="group" aria-label="Aspect ratio">
+                <button type="button" class="chip active" data-aspect="original" aria-pressed="true">Original</button>
+                <button type="button" class="chip" data-aspect="16:9" aria-pressed="false">16:9</button>
+                <button type="button" class="chip" data-aspect="4:3" aria-pressed="false">4:3</button>
+                <button type="button" class="chip" data-aspect="stretch" aria-pressed="false">Stretch</button>
             </div>
             <div class="style-row" style="margin-top: 16px;">
                 <span>Video Zoom</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span id="zoomVal" style="font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.7; min-width: 20px; text-align: right;">0</span>
                     <div class="desktop-slider-container" style="max-width: 160px; width: 160px;">
-                        <input type="range" class="desktop-slider" id="zoomSlider" min="0" max="3" step="0.25" value="0">
+                        <input type="range" class="desktop-slider" id="zoomSlider" min="0" max="3" step="0.25" value="0" aria-label="Video zoom">
                     </div>
                 </div>
             </div>
@@ -806,13 +806,13 @@
     <div class="panel-body" style="padding: 16px 20px;">
         <div class="settings-section" style="border-bottom: none; padding-bottom: 0;">
             <!-- Speed Preset Chips -->
-            <div class="chip-row" id="speedChips" style="margin-bottom: 16px;">
-                <div class="chip" data-speed="0.5">0.5×</div>
-                <div class="chip" data-speed="0.75">0.75×</div>
-                <div class="chip active" data-speed="1.0">1.0× Normal</div>
-                <div class="chip" data-speed="1.25">1.25×</div>
-                <div class="chip" data-speed="1.5">1.5×</div>
-                <div class="chip" data-speed="2.0">2.0×</div>
+            <div class="chip-row" id="speedChips" role="group" aria-label="Playback speed presets" style="margin-bottom: 16px;">
+                <button type="button" class="chip" data-speed="0.5" aria-pressed="false">0.5×</button>
+                <button type="button" class="chip" data-speed="0.75" aria-pressed="false">0.75×</button>
+                <button type="button" class="chip active" data-speed="1.0" aria-pressed="true">1.0× Normal</button>
+                <button type="button" class="chip" data-speed="1.25" aria-pressed="false">1.25×</button>
+                <button type="button" class="chip" data-speed="1.5" aria-pressed="false">1.5×</button>
+                <button type="button" class="chip" data-speed="2.0" aria-pressed="false">2.0×</button>
             </div>
 
             <!-- Custom Speed Stepper & Slider -->
@@ -826,7 +826,7 @@
             </div>
 
             <div class="desktop-slider-container" style="max-width: 100%; width: 100%; margin-top: 6px;">
-                <input type="range" class="desktop-slider" id="speedSlider" min="-6" max="6" step="1" value="0">
+                <input type="range" class="desktop-slider" id="speedSlider" min="-6" max="6" step="1" value="0" aria-label="Playback speed">
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 10.5px; opacity: 0.5; margin-top: 6px; padding: 0 2px;">
                 <span>0.25×</span>
@@ -910,7 +910,7 @@
     <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; pointer-events: none; z-index: var(--z-player-controls);">
         
         <div class="top-bar" style="pointer-events: auto;">
-            <button class="back-btn" id="backBtn">
+            <button class="back-btn" id="backBtn" title="Back to app" aria-label="Back to app">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
             </button>
     <span id="titleDisplay" class="player-title">Auras Orbit Player</span>
@@ -998,7 +998,7 @@
                 <div class="seek-buffer" id="seekBuffer"></div>
                 <div class="seek-fill" id="seekFill"></div>
                 <div class="seek-chapters" id="seekChapters"></div>
-                <input type="range" id="seekBar" class="seek-slider" min="0" max="1000" value="0" step="0.1">
+                <input type="range" id="seekBar" class="seek-slider" min="0" max="1000" value="0" step="0.1" aria-label="Seek position">
                 <div class="seek-tooltip" id="seekTooltip">0:00</div>
             </div>
         </div>
@@ -1009,7 +1009,7 @@
             <!-- Left: playback controls -->
             <div class="ctrl-group">
                 <!-- Play/Pause -->
-                <button id="playPauseBtn" class="icon-btn large">
+                <button id="playPauseBtn" class="icon-btn large" title="Play or pause" aria-label="Play or pause">
                     <svg viewBox="0 0 24 24" fill="none" width="100%" height="100%" class="play-pause-svg">
                         <path class="play-path" d="M8 5.14v14l11-7-11-7z" fill="currentColor"/>
                         <path class="pause-path" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/>
@@ -1035,7 +1035,7 @@
                         </svg>
                     </button>
                     <div class="vol-slider-wrap">
-                        <input type="range" id="volumeBar" class="vol-slider" min="0" max="100" value="100">
+                        <input type="range" id="volumeBar" class="vol-slider" min="0" max="100" value="100" aria-label="Volume">
                     </div>
                 </div>
                 <!-- Time Display -->
@@ -1172,7 +1172,7 @@
         <!-- Audio Progress / Timeline Bar -->
         <div class="audio-scrub-row">
             <span id="audioCurrentTime" class="audio-time-label">0:00</span>
-            <div id="audioScrubBar" class="audio-scrub-bar">
+            <div id="audioScrubBar" class="audio-scrub-bar" role="slider" tabindex="0" aria-label="Audio seek position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true">
                 <canvas id="audioWaveformCanvas" class="audio-waveform-canvas"></canvas>
                 <div id="audioScrubBuffered" class="audio-scrub-buffered"></div>
                 <div id="audioScrubProgress" class="audio-scrub-progress">
@@ -1216,7 +1216,7 @@
                 <button id="audioMuteBtn" class="audio-ctrl-btn vol-btn" title="Mute / Unmute">
                     <svg class="vol-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
                 </button>
-                <input id="audioVolumeSlider" type="range" min="0" max="100" value="100" class="audio-volume-slider" />
+                <input id="audioVolumeSlider" type="range" min="0" max="100" value="100" class="audio-volume-slider" aria-label="Audio volume" />
             </div>
         </div>
     </div>
@@ -1275,7 +1275,7 @@
 </div>
 
 <!-- ── Right-Click Context Menu ──────────────────────────────────────── -->
-<div id="contextMenuOverlay" style="display: none;">
+<div id="contextMenuOverlay" role="menu" aria-label="Player actions" tabindex="-1" style="display: none;">
     <!-- Media Streams Tier -->
     <div class="ctx-item ctx-parent" id="ctxItemAudio">
         <div class="ctx-item-left">
@@ -1402,14 +1402,14 @@
 </div>
 
 <!-- ── Keyboard Shortcuts Modal ─────────────────────────────────────── -->
-<div id="shortcutsModalOverlay" onclick="closeShortcutsModal(event)" style="display: none;">
+<div id="shortcutsModalOverlay" role="dialog" aria-modal="true" aria-labelledby="shortcutsModalTitle" onclick="closeShortcutsModal(event)" style="display: none;">
     <div class="shortcuts-dialog" onclick="event.stopPropagation()">
         <div class="shortcuts-header">
-            <h3>
+            <h3 id="shortcutsModalTitle">
                 <svg viewBox="0 0 24 24" fill="var(--accent-color)" width="22" height="22"><path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
                 Keyboard Shortcuts
             </h3>
-            <button class="shortcuts-close-btn" onclick="closeShortcutsModal()">&times;</button>
+            <button class="shortcuts-close-btn" id="shortcutsModalCloseBtn" type="button" aria-label="Close keyboard shortcuts" onclick="closeShortcutsModal()">&times;</button>
         </div>
         <div class="shortcuts-content">
             <div class="shortcut-group">
@@ -1446,61 +1446,61 @@
 </div>
 
 <!-- ── Pause Info Selection Modal ────────────────────────────────────── -->
-<div id="pauseInfoModalOverlay" onclick="closePauseInfoModal(event)" style="display: none;">
+<div id="pauseInfoModalOverlay" role="dialog" aria-modal="true" aria-labelledby="pauseInfoModalTitle" onclick="closePauseInfoModal(event)" style="display: none;">
     <div class="pause-info-modal-dialog" onclick="event.stopPropagation()">
         <div class="shortcuts-header">
-            <h3>
+            <h3 id="pauseInfoModalTitle">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 Pause Metadata Overlay
             </h3>
-            <button class="shortcuts-close-btn" onclick="closePauseInfoModal()">&times;</button>
+            <button class="shortcuts-close-btn" id="pauseInfoModalCloseBtn" type="button" aria-label="Close pause metadata settings" onclick="closePauseInfoModal()">&times;</button>
         </div>
         <p class="pause-modal-desc">Choose when title, synopsis, and rating badges appear on pause:</p>
         <div class="pause-modal-options" id="pauseModalOptions">
-            <div class="pause-modal-option" data-mode="delay_5s" onclick="selectPauseInfoMode('delay_5s')">
-                <div class="pause-modal-option-info">
+            <button type="button" class="pause-modal-option" data-mode="delay_5s" aria-pressed="false" onclick="selectPauseInfoMode('delay_5s')">
+                <span class="pause-modal-option-info">
                     <span class="pause-modal-option-title">5 Seconds Idle (Recommended)</span>
                     <span class="pause-modal-option-sub">Keeps the frame clean on pause; info fades in if idle</span>
-                </div>
-                <div class="pause-modal-radio"></div>
-            </div>
-            <div class="pause-modal-option" data-mode="delay_10s" onclick="selectPauseInfoMode('delay_10s')">
-                <div class="pause-modal-option-info">
+                </span>
+                <span class="pause-modal-radio"></span>
+            </button>
+            <button type="button" class="pause-modal-option" data-mode="delay_10s" aria-pressed="false" onclick="selectPauseInfoMode('delay_10s')">
+                <span class="pause-modal-option-info">
                     <span class="pause-modal-option-title">10 Seconds Idle</span>
                     <span class="pause-modal-option-sub">Longer delay for reading subtitles and scene inspection</span>
-                </div>
-                <div class="pause-modal-radio"></div>
-            </div>
-            <div class="pause-modal-option" data-mode="delay_20s" onclick="selectPauseInfoMode('delay_20s')">
-                <div class="pause-modal-option-info">
+                </span>
+                <span class="pause-modal-radio"></span>
+            </button>
+            <button type="button" class="pause-modal-option" data-mode="delay_20s" aria-pressed="false" onclick="selectPauseInfoMode('delay_20s')">
+                <span class="pause-modal-option-info">
                     <span class="pause-modal-option-title">20 Seconds Idle</span>
                     <span class="pause-modal-option-sub">Ambient screensaver info for stepping away</span>
-                </div>
-                <div class="pause-modal-radio"></div>
-            </div>
-            <div class="pause-modal-option" data-mode="immediate" onclick="selectPauseInfoMode('immediate')">
-                <div class="pause-modal-option-info">
+                </span>
+                <span class="pause-modal-radio"></span>
+            </button>
+            <button type="button" class="pause-modal-option" data-mode="immediate" aria-pressed="false" onclick="selectPauseInfoMode('immediate')">
+                <span class="pause-modal-option-info">
                     <span class="pause-modal-option-title">Immediately on Pause</span>
                     <span class="pause-modal-option-sub">Displays metadata cards instantly when pausing</span>
-                </div>
-                <div class="pause-modal-radio"></div>
-            </div>
-            <div class="pause-modal-option" data-mode="off" onclick="selectPauseInfoMode('off')">
-                <div class="pause-modal-option-info">
+                </span>
+                <span class="pause-modal-radio"></span>
+            </button>
+            <button type="button" class="pause-modal-option" data-mode="off" aria-pressed="false" onclick="selectPauseInfoMode('off')">
+                <span class="pause-modal-option-info">
                     <span class="pause-modal-option-title">Disabled (Always Clean Frame)</span>
                     <span class="pause-modal-option-sub">Never displays metadata overlay on pause</span>
-                </div>
-                <div class="pause-modal-radio"></div>
-            </div>
+                </span>
+                <span class="pause-modal-radio"></span>
+            </button>
         </div>
         <div class="pause-modal-divider"></div>
-        <div class="pause-modal-option checked" id="pauseModalOptionCast" onclick="togglePauseShowCast(event)">
-            <div class="pause-modal-option-info">
+        <button type="button" class="pause-modal-option checked" id="pauseModalOptionCast" aria-pressed="true" onclick="togglePauseShowCast(event)">
+            <span class="pause-modal-option-info">
                 <span class="pause-modal-option-title">Show Starring Cast</span>
                 <span class="pause-modal-option-sub">Display lead actors alongside synopsis when paused</span>
-            </div>
-            <div class="pause-modal-checkbox"></div>
-        </div>
+            </span>
+            <span class="pause-modal-checkbox"></span>
+        </button>
     </div>
 </div>
 

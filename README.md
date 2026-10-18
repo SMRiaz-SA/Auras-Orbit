@@ -6,7 +6,7 @@ Auras Orbit brings the providers you choose into one Windows desktop library. Br
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** **1.0.0.01**<br>
+**Current version (desktop and Android):** **1.0.0.02**<br>
 **Platform:** Windows 10 or 11, 64-bit; Android APK<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
 **Changelog:** [Release history](CHANGELOG.md)
@@ -80,7 +80,7 @@ Catalog results can be checked against enabled Stremio stream add-ons using the 
 
 ## Playback and torrents
 
-Orbit includes its MPV native library in the portable package. You can use MPV inside Orbit or select VLC as an external player when VLC is installed. VLC is optional and must be installed separately; Orbit detects a standard VLC installation or a VLC executable on PATH and launches it in its own window. Some links that need additional request headers are routed to MPV for compatibility. When using VLC, control playback in VLC itself; Orbit's pause and seek controls are not currently connected to the external player. MPV settings include audio adjustments such as equalization, volume normalization, and audio delay.
+Orbit includes its MPV native library in the portable package. You can use MPV inside Orbit or select VLC as an external player when VLC is installed. VLC is optional and must be installed separately; Orbit detects a standard VLC installation or a VLC executable on PATH and launches it in its own window. Orbit connects to the VLC process it launches through a private loopback control session, enabling pause, resume, and seeking from Orbit and reporting playback position and duration for watch-progress tracking. Some links that need additional request headers are routed to MPV for compatibility. MPV settings include audio adjustments such as equalization, volume normalization, and audio delay.
 
 Windows must provide the Microsoft Edge **WebView2 Evergreen Runtime** for Orbit's embedded player interface. WebView2 is an app component, not the Edge browser, and it does not change your default browser.
 
