@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0.03 — 2026-10-27
+
+### Stable release
+
+- Bring Android TV Explore closer to the phone experience with source selection, searchable provider lists, resume progress, discovery shelves, retry and paging actions, and Help.
+- Route TV catalog browsing to Orbit's Auras catalog screen and preserve hidden poster title text with accessible labels and D-pad focus.
+- Add a D-pad accessible **Open local video** action to TV downloads and connect it to the existing local file picker.
+
 ## 1.0.0.02 — 2026-10-18
 
 ### Stable release

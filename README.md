@@ -2,12 +2,12 @@
 
 ### Your extensions. Your watchlist. Your screen.
 
-Auras Orbit brings the providers you choose into one Windows desktop library. Browse add-on catalogs, find something to watch, play it on your PC, and return to your own progress later. Build a home screen that feels personal, switch between local profiles, and keep bookmarks and watch history close at hand.
+Auras Orbit brings the providers you choose into a personal discovery and watch library on Windows desktop, Android phones, and Android TV. Browse add-on catalogs, find something to watch, play videos, and return to your own progress later. Build a home screen that feels personal, switch between local profiles, and keep bookmarks and watch history close at hand.
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** **1.0.0.02**<br>
-**Platform:** Windows 10 or 11, 64-bit; Android APK<br>
+**Current version (desktop and Android):** **1.0.0.03**<br>
+**Platform:** Windows 10 or 11, 64-bit; Android phones and TVs<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
 **Changelog:** [Release history](CHANGELOG.md)
 
@@ -21,6 +21,7 @@ Auras Orbit gives your chosen extensions a desktop home, with the discovery, pla
 
 - **Bring your own providers.** Add repositories, review the extensions they offer, and install the ones you want. Browse and search through the providers enabled in your profile.
 - **Keep search results clear.** Search in separate **Titles** and **People** scopes; title results and people matches stay in their own views on Android and Windows.
+- **Use Orbit on your TV.** Android TV brings Orbit's Explore shelves, source picker, watch progress, and catalog browsing to the big screen with remote navigation. Search the provider list, open local videos, and use accessible poster labels without displaying extra title text over artwork.
 - **Pick up where you left off.** Keep playback progress and watch history in your local profile. Save titles to your library so they are easy to find again.
 - **Make Home useful to you.** Return to in-progress titles, browse discovery shelves, and use a spotlight carousel when your enabled sources provide featured or trending items.
 - **Explore from one dashboard.** Open add-on catalogs, genres, providers, or Torrent Search from the Explore screen.

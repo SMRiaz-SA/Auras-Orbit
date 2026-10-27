@@ -1,15 +1,13 @@
 package com.lagradost.cloudstream3.ui.explore
 
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,12 +18,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,26 +43,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.fragment.app.Fragment
-import androidx.navigation.fragment.findNavController
 import androidx.compose.ui.unit.Dp
-import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.R
-import com.lagradost.cloudstream3.ui.settings.Globals.TV
-import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.ui.APIRepository
+import com.lagradost.cloudstream3.utils.DataStoreHelper
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 private object AurasExplorePalette {
     val Background = Color(0xFF17151F)
@@ -75,13 +80,34 @@ private object AurasExplorePalette {
 @Composable
 internal fun AurasExploreTvScreen(
     isTv: Boolean,
-    providerCount: Int,
+    state: AurasBrowseState,
+    sourcePickerVisible: Boolean,
+    onSourceClick: () -> Unit,
+    onSourceDismiss: () -> Unit,
+    onSourceSelect: (AurasSourceOption) -> Unit,
+    onRetrySource: () -> Unit,
+    onLoadMoreShelf: (String) -> Unit,
     onCatalogs: () -> Unit,
     onSearch: () -> Unit,
     onSources: () -> Unit,
     onLibrary: () -> Unit,
+    onHelp: () -> Unit,
+    onOpenTitle: (SearchResponse, Int) -> Unit,
+    onResumeTitle: (SearchResponse, Int) -> Unit,
+    onSeeAllTrending: (String) -> Unit,
 ) {
     val firstActionFocus = remember { FocusRequester() }
+    val providerCount = state.sources.count { it.key != APIRepository.randomApi.name }
+    val selectedSourceLabel = state.sources.firstOrNull { it.key == state.sourceName }?.label
+        ?: state.sourceName?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.auras_explore_source_choose)
+    val resumeProgressByUrl = state.resumeItems.mapNotNull { item ->
+        val watchPos = (item as? DataStoreHelper.ResumeWatchingResult)?.watchPos
+            ?: return@mapNotNull null
+        if (watchPos.duration <= 0L) return@mapNotNull null
+        item.url to (watchPos.position.toFloat() / watchPos.duration.toFloat()).coerceIn(0f, 1f)
+    }.distinctBy { it.first }.toMap()
+
     LaunchedEffect(isTv) {
         if (isTv) firstActionFocus.requestFocus()
     }
@@ -112,7 +138,7 @@ internal fun AurasExploreTvScreen(
                 .padding(horizontal = contentPadding, vertical = if (wide) 34.dp else 24.dp),
             verticalArrangement = Arrangement.spacedBy(if (wide) 28.dp else 22.dp),
         ) {
-            BrandHeading()
+            BrandHeading(onHelp)
 
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Text(
@@ -139,6 +165,99 @@ internal fun AurasExploreTvScreen(
                 onCatalogs = onCatalogs,
                 onSearch = onSearch,
             )
+
+            ExploreSourceSelector(
+                sourceName = selectedSourceLabel,
+                hasSources = state.sources.isNotEmpty(),
+                onClick = onSourceClick,
+            )
+
+            if (state.resumeItems.isNotEmpty()) {
+                TvPosterRail(
+                    title = stringResource(R.string.auras_explore_resume_title),
+                    items = state.resumeItems,
+                    posterWidth = if (wide) 150.dp else 124.dp,
+                    progressByUrl = resumeProgressByUrl,
+                    onOpen = onResumeTitle,
+                    actionLabel = stringResource(R.string.auras_explore_resume_see_all),
+                    onAction = onLibrary,
+                )
+            }
+
+            when {
+                state.loading -> ExploreLoadingPanel()
+                state.error != null -> ExploreMessagePanel(
+                    title = stringResource(
+                        if (state.shelves.isEmpty()) R.string.auras_explore_load_error_title
+                        else R.string.auras_explore_refresh_error_title
+                    ),
+                    body = state.error,
+                    actionLabel = stringResource(R.string.auras_catalog_retry),
+                    onAction = onRetrySource,
+                )
+                state.shelves.isEmpty() && state.resumeItems.isEmpty() -> ExploreMessagePanel(
+                    title = stringResource(R.string.auras_explore_empty_title),
+                    body = stringResource(R.string.auras_explore_empty_body),
+                    actionLabel = stringResource(
+                        if (state.sources.isEmpty()) R.string.auras_explore_connect_source
+                        else R.string.auras_explore_choose_source
+                    ),
+                    onAction = if (state.sources.isEmpty()) onSources else onSourceClick,
+                )
+            }
+
+            state.shelves
+                .filter { it.items.isNotEmpty() || it.hasNext || it.pageError != null }
+                .forEach { shelf ->
+                    val isTrending = shelf.isTrendingShelf()
+                    val hasFullList = isTrending || shelf.items.size > 10 || shelf.hasNext
+                    val pageActionLabel = when {
+                        !shelf.hasNext -> null
+                        shelf.isLoadingMore -> stringResource(R.string.auras_catalog_loading_more)
+                        shelf.pageError != null -> stringResource(R.string.auras_catalog_retry)
+                        else -> stringResource(R.string.auras_catalog_more)
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (shelf.items.isEmpty()) {
+                            ExploreShelfHeading(shelf.name)
+                            Text(
+                                text = shelf.pageError?.let {
+                                    stringResource(R.string.auras_catalog_page_error, it)
+                                } ?: stringResource(R.string.auras_catalog_empty_shelf),
+                                color = if (shelf.pageError == null) AurasExplorePalette.Muted else AurasExplorePalette.LavenderBright,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                            )
+                        } else {
+                            TvPosterRail(
+                                title = if (isTrending) stringResource(R.string.auras_trending_section_title) else shelf.name,
+                                items = if (isTrending) shelf.items.take(10) else shelf.items,
+                                posterWidth = if (wide) 150.dp else 124.dp,
+                                onOpen = onOpenTitle,
+                                actionLabel = when {
+                                    isTrending -> stringResource(R.string.auras_trending_see_all)
+                                    hasFullList -> stringResource(R.string.auras_collection_see_all)
+                                    else -> null
+                                },
+                                onAction = if (hasFullList) ({ onSeeAllTrending(shelf.name) }) else null,
+                            )
+                        }
+                        shelf.pageError?.takeIf { shelf.items.isNotEmpty() }?.let { message ->
+                            Text(
+                                stringResource(R.string.auras_catalog_page_error, message),
+                                color = AurasExplorePalette.LavenderBright,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        if (shelf.hasNext) {
+                            QuietAction(
+                                label = pageActionLabel.orEmpty(),
+                                onClick = { onLoadMoreShelf(shelf.name) },
+                                enabled = !shelf.isLoadingMore,
+                            )
+                        }
+                    }
+                }
 
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
@@ -230,11 +349,343 @@ internal fun AurasExploreTvScreen(
                 }
             }
         }
+
+        ExploreSourcePicker(
+            visible = sourcePickerVisible,
+            selectedKey = state.sourceName,
+            options = state.sources,
+            onDismiss = onSourceDismiss,
+            onSelect = onSourceSelect,
+            onConnectSource = onSources,
+        )
     }
 }
 
 @Composable
-private fun BrandHeading() {
+private fun ExploreSourceSelector(
+    sourceName: String,
+    hasSources: Boolean,
+    onClick: () -> Unit,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        color = if (isFocused) AurasExplorePalette.SurfaceHover else AurasExplorePalette.Surface,
+        contentColor = AurasExplorePalette.Text,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            if (isFocused) 2.dp else 1.dp,
+            if (isFocused) AurasExplorePalette.LavenderBright else AurasExplorePalette.Stroke,
+        ),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused },
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (hasSources) R.string.auras_explore_current_source
+                    else R.string.auras_explore_source_not_connected
+                ),
+                color = AurasExplorePalette.Muted,
+                fontSize = 12.sp,
+                letterSpacing = 0.8.sp,
+            )
+            Text(
+                text = sourceName,
+                color = AurasExplorePalette.Text,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(
+                    if (hasSources) R.string.auras_explore_source_change_hint
+                    else R.string.auras_explore_source_connect_hint
+                ),
+                color = AurasExplorePalette.Muted,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TvPosterRail(
+    title: String,
+    items: List<SearchResponse>,
+    posterWidth: Dp,
+    onOpen: (SearchResponse, Int) -> Unit,
+    progressByUrl: Map<String, Float> = emptyMap(),
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    if (items.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = title,
+                color = AurasExplorePalette.Text,
+                fontSize = 21.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (actionLabel != null && onAction != null) {
+                QuietAction(label = actionLabel, onClick = onAction)
+            }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(vertical = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            itemsIndexed(
+                items = items,
+                key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" },
+            ) { index, item ->
+                TvPosterCard(
+                    item = item,
+                    width = posterWidth,
+                    progress = progressByUrl[item.url],
+                    onClick = { onOpen(item, index) },
+                )
+            }
+        }
+    }
+}
+
+/** Poster cards keep titles hidden visually while retaining accessible labels and D-pad focus. */
+@Composable
+private fun TvPosterCard(
+    item: SearchResponse,
+    width: Dp,
+    progress: Float? = null,
+    onClick: () -> Unit,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(18.dp)
+    Card(
+        onClick = onClick,
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = AurasExplorePalette.Surface),
+        border = androidx.compose.foundation.BorderStroke(
+            if (isFocused) 3.dp else 1.dp,
+            if (isFocused) AurasExplorePalette.LavenderBright else AurasExplorePalette.Stroke,
+        ),
+        modifier = Modifier
+            .width(width)
+            .onFocusChanged { isFocused = it.isFocused }
+            .semantics(mergeDescendants = true) { contentDescription = item.name },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.67f)
+                .clip(shape),
+        ) {
+            AurasArtwork(
+                url = item.posterUrl,
+                headers = item.posterHeaders,
+                modifier = Modifier.fillMaxSize(),
+            )
+            progress?.let { value ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 9.dp, vertical = 10.dp)
+                        .height(5.dp)
+                        .background(AurasExplorePalette.Text.copy(alpha = 0.35f), CircleShape),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(value.coerceIn(0f, 1f))
+                            .fillMaxSize()
+                            .background(AurasExplorePalette.LavenderBright, CircleShape),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExploreShelfHeading(title: String) {
+    Text(
+        text = title,
+        color = AurasExplorePalette.Text,
+        fontSize = 21.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun ExploreLoadingPanel() {
+    Surface(
+        color = AurasExplorePalette.Surface,
+        shape = RoundedCornerShape(22.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AurasExplorePalette.Stroke),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(15.dp),
+        ) {
+            CircularProgressIndicator(color = AurasExplorePalette.LavenderBright)
+            Text(
+                stringResource(R.string.auras_catalogs_refreshing),
+                color = AurasExplorePalette.Text,
+                fontSize = 15.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExploreMessagePanel(
+    title: String,
+    body: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    Surface(
+        color = AurasExplorePalette.Surface,
+        shape = RoundedCornerShape(22.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AurasExplorePalette.Stroke),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(title, color = AurasExplorePalette.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text(body, color = AurasExplorePalette.Muted, fontSize = 14.sp, lineHeight = 20.sp)
+            PrimaryAction(label = actionLabel, onClick = onAction)
+        }
+    }
+}
+
+@Composable
+private fun ExploreSourcePicker(
+    visible: Boolean,
+    selectedKey: String?,
+    options: List<AurasSourceOption>,
+    onDismiss: () -> Unit,
+    onSelect: (AurasSourceOption) -> Unit,
+    onConnectSource: () -> Unit,
+) {
+    if (!visible) return
+    var query by remember { mutableStateOf("") }
+    val matchingOptions = remember(options, query) {
+        options.filter { it.label.contains(query.trim(), ignoreCase = true) }
+    }
+    val searchFocus = remember { FocusRequester() }
+    val optionFocus = remember { FocusRequester() }
+    val initialOption = options.firstOrNull { it.key == selectedKey } ?: options.firstOrNull()
+    val initialOptionIndex = initialOption?.let { option -> options.indexOf(option) } ?: -1
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialOptionIndex.coerceAtLeast(0))
+    LaunchedEffect(visible) {
+        if (visible) {
+            if (initialOptionIndex >= 0) {
+                optionFocus.requestFocus()
+            } else {
+                searchFocus.requestFocus()
+            }
+        }
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            color = AurasExplorePalette.BackgroundRaised,
+            contentColor = AurasExplorePalette.Text,
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, AurasExplorePalette.Stroke),
+            modifier = Modifier.fillMaxWidth(0.82f).widthIn(max = 620.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.auras_source_picker_title),
+                    color = AurasExplorePalette.Text,
+                    fontSize = 23.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.auras_source_picker_search)) },
+                )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.heightIn(max = 440.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    itemsIndexed(matchingOptions, key = { _, option -> option.key }) { _, option ->
+                        var isFocused by remember(option.key) { mutableStateOf(false) }
+                        val selected = option.key == selectedKey
+                        Surface(
+                            onClick = { onSelect(option) },
+                            color = when {
+                                isFocused -> AurasExplorePalette.SurfaceHover
+                                selected -> Color(0xFF302A42)
+                                else -> AurasExplorePalette.Surface
+                            },
+                            contentColor = AurasExplorePalette.Text,
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                if (isFocused) 2.dp else 1.dp,
+                                if (isFocused) AurasExplorePalette.LavenderBright else AurasExplorePalette.Stroke,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (option.key == initialOption?.key) Modifier.focusRequester(optionFocus) else Modifier)
+                                .onFocusChanged { isFocused = it.isFocused },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(option.label, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (selected) Text("●", color = AurasExplorePalette.LavenderBright)
+                            }
+                        }
+                    }
+                    if (matchingOptions.isEmpty()) item {
+                        Text(
+                            stringResource(R.string.auras_source_picker_no_results),
+                            color = AurasExplorePalette.Muted,
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                }
+                QuietAction(
+                    label = stringResource(R.string.auras_welcome_connect),
+                    onClick = {
+                        onDismiss()
+                        onConnectSource()
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun AurasShelf.isTrendingShelf(): Boolean =
+    Regex("\\btrending\\b", RegexOption.IGNORE_CASE).containsMatchIn(name)
+
+@Composable
+private fun BrandHeading(onHelp: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
         androidx.compose.foundation.Image(
             painter = painterResource(R.drawable.auras_orbit_mark),
@@ -255,6 +706,7 @@ private fun BrandHeading() {
                 fontSize = 12.sp,
             )
         }
+        QuietAction(label = stringResource(R.string.auras_welcome_help), onClick = onHelp)
     }
 }
 
@@ -482,12 +934,13 @@ private fun PrimaryAction(
 }
 
 @Composable
-private fun QuietAction(label: String, onClick: () -> Unit) {
+private fun QuietAction(label: String, onClick: () -> Unit, enabled: Boolean = true) {
     var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
+        enabled = enabled,
         color = Color.White.copy(alpha = 0.055f),
-        contentColor = AurasExplorePalette.Text,
+        contentColor = if (enabled) AurasExplorePalette.Text else AurasExplorePalette.Muted,
         shape = RoundedCornerShape(15.dp),
         border = androidx.compose.foundation.BorderStroke(
             if (isFocused) 2.dp else 1.dp,

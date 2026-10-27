@@ -239,6 +239,11 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
                 isGone = isLayout(TV)
                 setOnClickListener { showStreamInputDialog(it.context) }
             }
+            openLocalVideoButtonTv.apply {
+                isVisible = isLayout(TV)
+                isFocusableInTouchMode = isLayout(TV)
+                setOnClickListener { openLocalVideo() }
+            }
 
             downloadQueueButton.setOnClickListener {
                 activity?.navigate(R.id.action_navigation_global_to_navigation_download_queue)
@@ -249,6 +254,7 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
             downloadStreamButtonTv.setOnClickListener { showStreamInputDialog(it.context) }
             steamImageviewHolder.isVisible = isLayout(TV)
+            localVideoImageviewHolder.isVisible = isLayout(TV)
         }
 
         binding.downloadList.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->

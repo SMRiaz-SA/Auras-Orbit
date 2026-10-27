@@ -39,7 +39,6 @@ import com.lagradost.cloudstream3.ui.search.SEARCH_ACTION_LOAD
 import com.lagradost.cloudstream3.ui.search.SEARCH_ACTION_PLAY_FILE
 import com.lagradost.cloudstream3.ui.search.SearchClickCallback
 import com.lagradost.cloudstream3.ui.search.SearchHelper
-import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.ui.APIRepository
@@ -64,13 +63,27 @@ class AurasExploreFragment : Fragment() {
                 if (isLayout(TV)) {
                     AurasExploreTvScreen(
                         isTv = true,
-                        providerCount = browseState.sources.count {
-                            it.key != APIRepository.randomApi.name
+                        state = browseState,
+                        sourcePickerVisible = sourcePickerVisible,
+                        onSourceClick = {
+                            if (browseState.sources.isEmpty()) {
+                                openDestination(R.id.navigation_settings_extensions)
+                            } else {
+                                sourcePickerVisible = true
+                            }
                         },
+                        onSourceDismiss = { sourcePickerVisible = false },
+                        onSourceSelect = ::selectSource,
+                        onRetrySource = ::retrySource,
+                        onLoadMoreShelf = { name -> homeViewModel.expand(name) },
                         onCatalogs = { openCatalogs() },
                         onSearch = { openDestination(R.id.navigation_search) },
                         onSources = { openDestination(R.id.navigation_settings_extensions) },
                         onLibrary = { openDestination(R.id.navigation_library) },
+                        onHelp = { openDestination(R.id.navigation_auras_help) },
+                        onOpenTitle = { item, index -> openItem(item, index, SEARCH_ACTION_LOAD) },
+                        onResumeTitle = { item, index -> openItem(item, index, SEARCH_ACTION_PLAY_FILE) },
+                        onSeeAllTrending = { name -> openTrending(name) },
                     )
                 } else {
                     AurasExploreScreen(
@@ -201,14 +214,7 @@ class AurasExploreFragment : Fragment() {
     }
 
     private fun openCatalogs() {
-        val destination = if (isLayout(PHONE)) {
-            R.id.navigation_auras_catalogs
-        } else if (isLayout(TV)) {
-            R.id.navigation_catalogs
-        } else {
-            R.id.navigation_auras_catalogs
-        }
-        openDestination(destination)
+        openDestination(R.id.navigation_auras_catalogs)
     }
 
     private fun openTrending(shelfName: String) {
