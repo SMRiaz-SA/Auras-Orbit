@@ -385,5 +385,4 @@ object AppDownloadManager {
     private fun cancelCalls(generationId: String) {
         activeCalls[generationId]?.toList()?.forEach(Call::cancel)
     }
-
 }
