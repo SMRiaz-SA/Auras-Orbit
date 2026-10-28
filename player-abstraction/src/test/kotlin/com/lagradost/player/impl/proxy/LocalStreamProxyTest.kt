@@ -7,11 +7,13 @@ import org.junit.jupiter.api.Test
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LocalStreamProxyTest {
@@ -104,6 +106,101 @@ class LocalStreamProxyTest {
         }
     }
 
+    @Test
+    fun initSegmentCacheIsScopedToAuthenticatedSessionForSameUrl() {
+        val authRequests = AtomicInteger()
+        val payloadA = ftyp("AAAA")
+        val payloadB = ftyp("BBBB")
+        val mediaPayloadA = mdat("alpha-media".toByteArray(Charsets.US_ASCII))
+        val mediaPayloadB = mdat("beta-media".toByteArray(Charsets.US_ASCII))
+        val origin = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            val respondByAuthorization: com.sun.net.httpserver.HttpHandler = { exchange ->
+                authRequests.incrementAndGet()
+                val payload = when (exchange.requestHeaders.getFirst("Authorization")) {
+                    "Bearer alpha" -> if (exchange.requestURI.path == "/init.mp4") payloadA else mediaPayloadA
+                    "Bearer beta" -> if (exchange.requestURI.path == "/init.mp4") payloadB else mediaPayloadB
+                    else -> ByteArray(0)
+                }
+                exchange.responseHeaders.add("Content-Type", "video/mp4")
+                exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, payload.size.toLong())
+                exchange.responseBody.use { it.write(payload) }
+            }
+            createContext("/init.mp4", respondByAuthorization)
+            createContext("/media.mp4", respondByAuthorization)
+            start()
+        }
+        val alphaSession = LocalStreamProxy.registerSession(mapOf("Authorization" to "Bearer alpha"))
+        val betaSession = LocalStreamProxy.registerSession(mapOf("Authorization" to "Bearer beta"))
+        val initUrl = "http://127.0.0.1:${origin.address.port}/init.mp4"
+        val mediaUrl = "http://127.0.0.1:${origin.address.port}/media.mp4"
+        val kid = "00".repeat(16)
+        val key = "11".repeat(16)
+        try {
+            val alpha = request(LocalStreamProxy.buildProxyUrl(alphaSession, initUrl, action = "init_decrypt"))
+            val beta = request(LocalStreamProxy.buildProxyUrl(betaSession, initUrl, action = "init_decrypt"))
+            val alphaMedia = request(LocalStreamProxy.buildProxyUrl(alphaSession, mediaUrl, action = "decrypt") + "&kid=$kid&k=$key")
+            val betaMedia = request(LocalStreamProxy.buildProxyUrl(betaSession, mediaUrl, action = "decrypt") + "&kid=$kid&k=$key")
+
+            assertEquals(HttpURLConnection.HTTP_OK, alpha.first)
+            assertEquals(HttpURLConnection.HTTP_OK, beta.first)
+            assertContentEquals(payloadA, alpha.second)
+            assertContentEquals(payloadB, beta.second)
+            assertEquals(HttpURLConnection.HTTP_OK, alphaMedia.first)
+            assertEquals(HttpURLConnection.HTTP_OK, betaMedia.first)
+            assertContentEquals(mediaPayloadA, alphaMedia.second)
+            assertContentEquals(mediaPayloadB, betaMedia.second)
+            assertEquals(4, authRequests.get(), "each authenticated session must fetch its own init and media content")
+        } finally {
+            LocalStreamProxy.unregisterSession(alphaSession)
+            LocalStreamProxy.unregisterSession(betaSession)
+            origin.stop(0)
+        }
+    }
+
+    @Test
+    fun initSegmentCacheEnforcesByteBudgetAndExpiry() {
+        var now = 0L
+        val cache = BoundedTtlByteArrayCache<String>(maxBytes = 4, ttlMillis = 10) { now }
+        cache.put("first", byteArrayOf(1, 2))
+        cache.put("second", byteArrayOf(3, 4))
+        assertContentEquals(byteArrayOf(1, 2), cache.get("first")) // make first most recently used
+
+        cache.put("third", byteArrayOf(5, 6))
+        assertNull(cache.get("second"), "least-recently-used entry should be evicted to stay within budget")
+        assertEquals(4L, cache.byteSize())
+        cache.put("oversized", byteArrayOf(7, 8, 9, 10, 11))
+        assertNull(cache.get("oversized"), "an entry larger than the whole budget must not be cached")
+        assertEquals(4L, cache.byteSize())
+
+        now = 10L
+        cache.put("fresh", byteArrayOf(12)) // writes also purge expired entries
+        assertEquals(1, cache.size())
+        assertEquals(1L, cache.byteSize())
+        now = 20L
+        assertNull(cache.get("fresh"), "expired entries must not be returned")
+        assertEquals(0, cache.size())
+        assertEquals(0L, cache.byteSize())
+    }
+
+    @Test
+    fun stoppingProxyClearsInitSegmentCache() {
+        @Suppress("UNCHECKED_CAST")
+        val cache = LocalStreamProxy::class.java.getDeclaredField("initSegmentCache").let { field ->
+            field.isAccessible = true
+            field.get(LocalStreamProxy) as BoundedTtlByteArrayCache<Any>
+        }
+        cache.clear()
+        cache.put("raw-fixture", byteArrayOf(1, 2, 3))
+        assertEquals(1, cache.size())
+
+        try {
+            LocalStreamProxy.stop()
+            assertEquals(0, cache.size())
+        } finally {
+            LocalStreamProxy.start()
+        }
+    }
+
     private fun request(url: String): Pair<Int, ByteArray> {
         val connection = URI(url).toURL().openConnection() as HttpURLConnection
         connection.connectTimeout = 2_000
@@ -118,6 +215,18 @@ class LocalStreamProxyTest {
             connection.disconnect()
         }
     }
+
+    private fun ftyp(brand: String): ByteArray = ByteBuffer.allocate(12)
+        .putInt(12)
+        .put("ftyp".toByteArray(Charsets.US_ASCII))
+        .put(brand.toByteArray(Charsets.US_ASCII))
+        .array()
+
+    private fun mdat(payload: ByteArray): ByteArray = ByteBuffer.allocate(8 + payload.size)
+        .putInt(8 + payload.size)
+        .put("mdat".toByteArray(Charsets.US_ASCII))
+        .put(payload)
+        .array()
 
     @Test
     fun testResolveUrlTokenInheritance() {

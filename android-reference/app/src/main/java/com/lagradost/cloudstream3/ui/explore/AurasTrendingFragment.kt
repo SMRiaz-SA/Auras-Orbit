@@ -246,7 +246,12 @@ private fun AurasTrendingListScreen(
                 shelf != null -> {
                     itemsIndexed(
                         items = shelf.items,
-                        key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" },
+                        key = { index, item ->
+                            aurasUniqueLazyKey(
+                                item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}",
+                                index,
+                            )
+                        },
                     ) { index, item ->
                         AurasRankedTrendingRow(
                             item = item,

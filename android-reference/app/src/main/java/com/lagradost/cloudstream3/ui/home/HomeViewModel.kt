@@ -32,9 +32,11 @@ import com.lagradost.cloudstream3.ui.search.SearchHelper
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.utils.AppContextUtils.addProgramsToContinueWatching
+import com.lagradost.cloudstream3.utils.AppContextUtils.beginResumeWatchingSync
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterHomePageListByFilmQuality
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferredMedia
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterSearchResultByFilmQuality
+import com.lagradost.cloudstream3.utils.AppContextUtils.isResumeWatchingSyncCurrent
 import com.lagradost.cloudstream3.utils.AppContextUtils.loadResult
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.DOWNLOAD_HEADER_CACHE
@@ -56,7 +58,64 @@ import kotlinx.coroutines.withContext
 import java.util.EnumSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicLong
+
+internal data class HomePageRequestToken(
+    val generation: Long,
+    val profileIdentity: String,
+    val requestedSource: String?,
+)
+
+/** Synchronous request ordering so dispatch order cannot override the user's latest source choice. */
+internal class HomePageRequestGate {
+    private var generation = 0L
+    private var latest: HomePageRequestToken? = null
+
+    @Synchronized
+    fun begin(profileIdentity: String, requestedSource: String?): HomePageRequestToken {
+        val token = HomePageRequestToken(++generation, profileIdentity, requestedSource)
+        latest = token
+        return token
+    }
+
+    @Synchronized
+    fun beginFromUiSelection(
+        profileIdentity: String,
+        requestedSource: String?,
+        persistSource: (String) -> Unit,
+    ): HomePageRequestToken {
+        val token = HomePageRequestToken(++generation, profileIdentity, requestedSource)
+        latest = token
+        requestedSource?.let(persistSource)
+        return token
+    }
+
+    @Synchronized
+    fun current(): HomePageRequestToken? = latest
+
+    @Synchronized
+    fun isCurrent(token: HomePageRequestToken, profileIdentity: String): Boolean =
+        latest == token && token.profileIdentity == profileIdentity
+
+    @Synchronized
+    fun commitIfCurrent(
+        token: HomePageRequestToken,
+        profileIdentity: String,
+        action: () -> Unit,
+    ): Boolean {
+        if (!isCurrent(token, profileIdentity)) return false
+        action()
+        return true
+    }
+}
+
+/** Read the persisted source only after entering the same lock used by UI source changes. */
+internal fun <T> withStoredHomeSourceDispatch(
+    dispatchLock: Any,
+    readSource: () -> String?,
+    dispatch: (String?) -> T,
+): T = synchronized(dispatchLock) {
+    dispatch(readSource())
+}
 
 class HomeViewModel : ViewModel() {
     companion object {
@@ -102,7 +161,10 @@ class HomeViewModel : ViewModel() {
                         resume.parentId,
                         resume.episode,
                         resume.season,
-                        resume.isFromDownload
+                        resume.isFromDownload,
+                        posterHeaders = data.posterHeaders,
+                        episodePosterUrl = resume.episodePoster,
+                        episodePosterHeaders = resume.episodePosterHeaders,
                     )
                 }
             }
@@ -152,16 +214,24 @@ class HomeViewModel : ViewModel() {
     val resumeWatching: LiveData<List<SearchResponse>> = _resumeWatching
     val preview: LiveData<Resource<Pair<Boolean, List<LoadResponse>>>> = _preview
 
-    private fun loadResumeWatching() = viewModelScope.launchSafe {
-        val resumeWatchingResult = getResumeWatching()
-        if (isLayout(TV) && resumeWatchingResult != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ioSafe {
-                // this WILL crash on non tvs, so keep this inside a try catch
-                activity?.addProgramsToContinueWatching(resumeWatchingResult)
+    private fun loadResumeWatching() {
+        // Capture the selected profile and advance the request before the asynchronous reads
+        // begin. A slower old snapshot must not supersede a later removal or account switch.
+        val request = beginResumeWatchingSync(DataStoreHelper.currentAccount)
+        viewModelScope.launchSafe {
+            val resumeWatchingResult = getResumeWatching()
+            if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) {
+                return@launchSafe
             }
-        }
-        resumeWatchingResult?.let {
-            _resumeWatching.postValue(it)
+            if (isLayout(TV) && resumeWatchingResult != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ioSafe {
+                    // this WILL crash on non tvs, so keep this inside a try catch
+                    activity?.applicationContext?.addProgramsToContinueWatching(resumeWatchingResult, request)
+                }
+            }
+            if (isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) {
+                resumeWatchingResult?.let { _resumeWatching.postValue(it) }
+            }
         }
     }
 
@@ -212,12 +282,6 @@ class HomeViewModel : ViewModel() {
 
     private var onGoingLoad: Job? = null
     private var isCurrentlyLoadingName: String? = null
-    private fun loadAndCancel(api: MainAPI, generation: Long) {
-        //println("loaded ${api.name}")
-        onGoingLoad?.cancel()
-        isCurrentlyLoadingName = api.name
-        onGoingLoad = load(api, generation)
-    }
 
     data class ExpandableHomepageList(
         var list: HomePageList,
@@ -232,74 +296,98 @@ class HomeViewModel : ViewModel() {
         MutableLiveData<Resource<Map<String, ExpandableHomepageList>>>(Resource.Loading())
     val page: LiveData<Resource<Map<String, ExpandableHomepageList>>> = _page
 
-    private val pageLoadGeneration = AtomicLong(0L)
+    private val pageRequestGate = HomePageRequestGate()
+    private val pageLoadDispatchLock = Any()
     private val lock = ConcurrentHashMap.newKeySet<Pair<Long, String>>()
+    private var repoRequest: HomePageRequestToken? = null
+    private var expandableRequest: HomePageRequestToken? = null
+
+    private fun isCurrentPageRequest(request: HomePageRequestToken): Boolean =
+        pageRequestGate.isCurrent(request, DataStoreHelper.currentAccount)
+
+    private fun commitPageRequest(request: HomePageRequestToken, action: () -> Unit): Boolean =
+        pageRequestGate.commitIfCurrent(request, DataStoreHelper.currentAccount, action)
 
     suspend fun expandAndReturn(name: String): ExpandableHomepageList? {
-        val generation = pageLoadGeneration.get()
+        val request = pageRequestGate.current() ?: return null
+        if (!isCurrentPageRequest(request)) return null
+        if (repoRequest != request || expandableRequest != request) return null
+        val generation = request.generation
         val current = expandable[name] ?: return null
         if (!current.hasNext) return current
 
         val requestKey = generation to name
         if (!lock.add(requestKey)) return current
 
-        current.isLoadingMore = true
-        current.pageError = null
-        _page.postValue(Resource.Success(expandable.toMap()))
+        if (!commitPageRequest(request) {
+                current.isLoadingMore = true
+                current.pageError = null
+                _page.postValue(Resource.Success(expandable.toMap()))
+            }
+        ) return null
 
         try {
-            val currentRepo = repo
-            if (currentRepo == null) {
-                current.pageError = "The selected source is not ready. Try again."
-                return current
-            }
+            val currentRepo = repo?.takeIf { repoRequest == request } ?: return null
 
             currentRepo.waitForHomeDelay()
-            if (generation != pageLoadGeneration.get() || expandable[name] !== current) return null
+            if (!isCurrentPageRequest(request) || expandable[name] !== current) return null
 
             val catalogIndex = currentRepo.mainPage.indexOfFirst { it.name == name }
             if (catalogIndex < 0) {
-                current.pageError = "This catalog is no longer available from the selected source."
-                return current
+                val committed = commitPageRequest(request) {
+                    current.pageError = "This catalog is no longer available from the selected source."
+                }
+                return current.takeIf { committed }
             }
 
             val nextPage = current.currentPage + 1
             when (val result = currentRepo.getMainPage(nextPage, catalogIndex)) {
                 is Resource.Success -> {
-                    if (generation != pageLoadGeneration.get() || expandable[name] !== current) return null
-
-                    val response = result.value.filterNotNull().firstOrNull { page ->
-                        page.items.any { it.name == name }
-                    }
-                    val nextCatalog = response?.items?.firstOrNull { it.name == name }
-                    if (response == null || nextCatalog == null) {
-                        current.pageError = "The source did not return this catalog page. Try again."
-                    } else {
-                        current.list.list = CopyOnWriteArrayList(
-                            (current.list.list + nextCatalog.list).distinctBy { it.url }
-                        )
-                        current.currentPage = nextPage
-                        current.hasNext = response.hasNext
-                        current.pageError = null
+                    if (!commitPageRequest(request) {
+                            if (expandable[name] === current) {
+                                val response = result.value.filterNotNull().firstOrNull { page ->
+                                    page.items.any { it.name == name }
+                                }
+                                val nextCatalog = response?.items?.firstOrNull { it.name == name }
+                                if (response == null || nextCatalog == null) {
+                                    current.pageError = "The source did not return this catalog page. Try again."
+                                } else {
+                                    current.list.list = CopyOnWriteArrayList(
+                                        (current.list.list + nextCatalog.list).distinctBy { it.url }
+                                    )
+                                    current.currentPage = nextPage
+                                    current.hasNext = response.hasNext
+                                    current.pageError = null
+                                }
+                            }
+                        }
+                    ) {
+                        return null
                     }
                 }
 
-                is Resource.Failure -> current.pageError = result.errorString
-                is Resource.Loading -> current.pageError = "The catalog page could not be loaded. Try again."
+                is Resource.Failure -> commitPageRequest(request) { current.pageError = result.errorString }
+                is Resource.Loading -> commitPageRequest(request) {
+                    current.pageError = "The catalog page could not be loaded. Try again."
+                }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            current.pageError = error.message ?: "The catalog page could not be loaded. Try again."
+            commitPageRequest(request) {
+                current.pageError = error.message ?: "The catalog page could not be loaded. Try again."
+            }
         } finally {
-            current.isLoadingMore = false
             lock.remove(requestKey)
-            if (generation == pageLoadGeneration.get() && expandable[name] === current) {
-                _page.postValue(Resource.Success(expandable.toMap()))
+            commitPageRequest(request) {
+                if (expandable[name] === current) {
+                    current.isLoadingMore = false
+                    _page.postValue(Resource.Success(expandable.toMap()))
+                }
             }
         }
 
-        return current.takeIf { generation == pageLoadGeneration.get() && expandable[name] === current }
+        return current.takeIf { isCurrentPageRequest(request) && expandable[name] === current }
     }
 
     // this is soo over engineered, but idk how I can make it clean without making the main api harder to use :pensive:
@@ -312,68 +400,92 @@ class HomeViewModel : ViewModel() {
         current: MutableList<LoadResponse>,
         alreadyAdded: MutableSet<String>,
         shuffledList: List<SearchResponse>,
-        size: Int
+        size: Int,
+        repository: APIRepository,
+        request: HomePageRequestToken,
     ): Int {
-        var count = 0
+        if (!isCurrentPageRequest(request)) return 0
+        val addItems = shuffledList.asSequence()
+            .filterNot { alreadyAdded.contains(it.url) }
+            .take(size.coerceAtLeast(0))
+            .toList()
+        if (addItems.isEmpty()) return 0
 
-        val addItems = arrayListOf<SearchResponse>()
-        for (searchResponse in shuffledList) {
-            if (!alreadyAdded.contains(searchResponse.url)) {
-                addItems.add(searchResponse)
-                previewResponsesAdded.add(searchResponse.url)
-                if (++count >= size) {
-                    break
-                }
-            }
-        }
-
+        if (!commitPageRequest(request) { alreadyAdded.addAll(addItems.map { it.url }) }) return 0
         val add = addItems.amap { searchResponse ->
-            repo?.load(searchResponse.url)
-        }.mapNotNull { if (it != null && it is Resource.Success) it.value else null }
-        current.addAll(add)
+            repository.load(searchResponse.url)
+        }.mapNotNull { if (it is Resource.Success) it.value else null }
+        if (!commitPageRequest(request) { current.addAll(add) }) return 0
         return add.size
     }
 
     private var addJob: Job? = null
     fun loadMoreHomeScrollResponses() {
+        val request = pageRequestGate.current() ?: return
+        val currentRepo = repo ?: return
+        val shuffledList = currentShuffledList
         addJob = ioSafe {
-            updatePreviewResponses(previewResponses, previewResponsesAdded, currentShuffledList, 1)
-            _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
+            updatePreviewResponses(
+                previewResponses,
+                previewResponsesAdded,
+                shuffledList,
+                1,
+                currentRepo,
+                request,
+            )
+            commitPageRequest(request) {
+                _preview.postValue(Resource.Success((previewResponsesAdded.size < shuffledList.size) to previewResponses))
+            }
         }
     }
 
-    private fun load(api: MainAPI, generation: Long): Job = ioSafe {
+    private fun load(api: MainAPI, request: HomePageRequestToken): Job = ioSafe {
+        if (!isCurrentPageRequest(request)) return@ioSafe
         val newRepo = APIRepository(api)
-        if (pageLoadGeneration.get() != generation) return@ioSafe
-        repo = newRepo
+        if (!commitPageRequest(request) {
+                repo = newRepo
+                repoRequest = request
+                _apiName.postValue(newRepo.name)
+                _randomItems.postValue(listOf())
+            }
+        ) return@ioSafe
         //} else {
         //    autoloadRepo()
         //}
 
-        _apiName.postValue(repo?.name)
-        _randomItems.postValue(listOf())
-
-        if (repo?.hasMainPage != true) {
-            _page.postValue(Resource.Success(emptyMap()))
-            _preview.postValue(Resource.Failure(false, "No homepage"))
+        if (!newRepo.hasMainPage) {
+            commitPageRequest(request) {
+                expandable.clear()
+                expandableRequest = request
+                previewResponses.clear()
+                previewResponsesAdded.clear()
+                currentShuffledList = emptyList()
+                _page.postValue(Resource.Success(emptyMap()))
+                _preview.postValue(Resource.Failure(false, "No homepage"))
+                isCurrentlyLoadingName = null
+            }
             return@ioSafe
         }
 
-
-        _page.postValue(Resource.Loading())
-        _preview.postValue(Resource.Loading())
+        if (!commitPageRequest(request) {
+                _page.postValue(Resource.Loading())
+                _preview.postValue(Resource.Loading())
+            }
+        ) return@ioSafe
         // cancel the current preview expand as that is no longer relevant
         addJob?.cancel()
 
-        when (val data = repo?.getMainPage(1, null)) {
+        val data = newRepo.getMainPage(1, null)
+        if (!isCurrentPageRequest(request)) return@ioSafe
+        when (data) {
             is Resource.Success -> {
                 try {
-                    expandable.clear()
+                    val newShelves = linkedMapOf<String, ExpandableHomepageList>()
                     data.value.forEach { home ->
                         home?.items?.forEach { list ->
                             val filteredList =
                                 context?.filterHomePageListByFilmQuality(list) ?: list
-                            expandable[list.name] =
+                            newShelves[list.name] =
                                 ExpandableHomepageList(
                                     filteredList.copy(
                                         list = CopyOnWriteArrayList(
@@ -384,15 +496,18 @@ class HomeViewModel : ViewModel() {
                         }
                     }
 
-                    // Publish the provider shelves as soon as they are ready. Preview details
-                    // can take much longer to load and should not keep the homepage in Loading.
-                    _page.postValue(Resource.Success(expandable.toMap()))
-
                     val items = data.value.mapNotNull { it?.items }.flatten()
-
-
-                    previewResponses.clear()
-                    previewResponsesAdded.clear()
+                    if (!commitPageRequest(request) {
+                            expandable.clear()
+                            expandable.putAll(newShelves)
+                        expandableRequest = request
+                            previewResponses.clear()
+                            previewResponsesAdded.clear()
+                            currentShuffledList = emptyList()
+                            // Publish shelves before slower preview details finish loading.
+                            _page.postValue(Resource.Success(expandable.toMap()))
+                        }
+                    ) return@ioSafe
 
                     //val home = data.value
                     if (items.isNotEmpty()) {
@@ -410,39 +525,48 @@ class HomeViewModel : ViewModel() {
                                 previewResponses,
                                 previewResponsesAdded,
                                 randomItems,
-                                3
+                                3,
+                                newRepo,
+                                request,
                             )
 
-                            _randomItems.postValue(randomItems)
-                            currentShuffledList = randomItems
+                            if (!commitPageRequest(request) {
+                                    _randomItems.postValue(randomItems)
+                                    currentShuffledList = randomItems
+                                }
+                            ) return@ioSafe
                         }
                     }
-                    if (previewResponses.isEmpty()) {
-                        _preview.postValue(
-                            Resource.Failure(
-                                false,
-                                "No homepage responses"
+                    commitPageRequest(request) {
+                        if (previewResponses.isEmpty()) {
+                            _preview.postValue(
+                                Resource.Failure(
+                                    false,
+                                    "No homepage responses"
+                                )
                             )
-                        )
-                    } else {
-                        _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
+                        } else {
+                            _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
+                        }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
-                    _randomItems.postValue(emptyList())
+                    commitPageRequest(request) { _randomItems.postValue(emptyList()) }
                     logError(e)
                 }
             }
 
             is Resource.Failure -> {
-                @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                _page.postValue(data!!)
-                @Suppress("UNNECESSARY_NOT_NULL_ASSERTION")
-                _preview.postValue(data!!)
+                commitPageRequest(request) {
+                    _page.postValue(data)
+                    _preview.postValue(data)
+                }
             }
 
             else -> Unit
         }
-        isCurrentlyLoadingName = null
+        commitPageRequest(request) { isCurrentlyLoadingName = null }
     }
 
     fun click(callback: SearchClickCallback) {
@@ -466,15 +590,23 @@ class HomeViewModel : ViewModel() {
     }
 
     private fun afterPluginsLoaded(forceReload: Boolean) {
-        loadAndCancel(DataStoreHelper.currentHomePage, forceReload)
+        loadAndCancelFromStoredSource(forceReload)
     }
 
     private fun afterMainPluginsLoaded(unused: Boolean = false) {
-        loadAndCancel(DataStoreHelper.currentHomePage, false)
+        loadAndCancelFromStoredSource(false)
     }
 
     private fun reloadHome(unused: Boolean = false) {
-        loadAndCancel(DataStoreHelper.currentHomePage, true)
+        loadAndCancelFromStoredSource(true)
+    }
+
+    private fun loadAndCancelFromStoredSource(forceReload: Boolean) {
+        withStoredHomeSourceDispatch(
+            dispatchLock = pageLoadDispatchLock,
+            readSource = { DataStoreHelper.currentHomePage },
+            dispatch = { source -> loadAndCancel(source, forceReload) },
+        )
     }
 
     private fun reloadAccount(unused: Boolean = false) {
@@ -531,8 +663,8 @@ class HomeViewModel : ViewModel() {
         preferredApiName: String?,
         forceReload: Boolean = true,
         fromUI: Boolean = false
-    ) =
-        ioSafe {
+    ): Job? {
+        val request = synchronized(pageLoadDispatchLock) {
             //println("trying to load $preferredApiName")
             // Since plugins are loaded in stages this function can get called multiple times.
             // The issue with this is that the homepage may be fetched multiple times while the first request is loading
@@ -542,44 +674,79 @@ class HomeViewModel : ViewModel() {
             // if we don't need to reload and we have a valid homepage or currently loading the same thing then return
             val currentLoading = isCurrentlyLoadingName
             if (!forceReload && (currentPage is Resource.Success && currentPage.value.isNotEmpty() || (currentLoading != null && currentLoading == preferredApiName))) {
-                return@ioSafe
+                return onGoingLoad
             }
 
-            // Invalidate in-flight page requests even when the requested source is no longer
-            // installed and this call can only publish a loading state.
-            val generation = pageLoadGeneration.incrementAndGet()
+            val profileIdentity = DataStoreHelper.currentAccount
+            val token = if (fromUI) {
+                pageRequestGate.beginFromUiSelection(profileIdentity, preferredApiName) {
+                    DataStoreHelper.currentHomePage = it
+                }
+            } else {
+                pageRequestGate.begin(profileIdentity, preferredApiName)
+            }
+            onGoingLoad?.cancel()
+            onGoingLoad = null
+            addJob?.cancel()
+            isCurrentlyLoadingName = preferredApiName
+            pageRequestGate.commitIfCurrent(token, DataStoreHelper.currentAccount) {
+                repo = null
+                repoRequest = null
+                expandableRequest = null
+                _page.postValue(Resource.Loading())
+                _preview.postValue(Resource.Loading())
+                _randomItems.postValue(emptyList())
+            }
+            token
+        }
 
+        return ioSafe {
+            if (!isCurrentPageRequest(request)) return@ioSafe
             val api = getApiFromNameNull(preferredApiName)
+            if (!isCurrentPageRequest(request)) return@ioSafe
             if (preferredApiName == noneApi.name) {
                 // just set to random
-                if (fromUI) DataStoreHelper.currentHomePage = noneApi.name
-                loadAndCancel(noneApi, generation)
+                startLoad(noneApi, request)
             } else if (preferredApiName == randomApi.name) {
                 // randomize the api, if none exist like if not loaded or not installed
                 // then use nothing
                 val validAPIs = context?.filterProviderByPreferredMedia()
+                if (!isCurrentPageRequest(request)) return@ioSafe
                 if (validAPIs.isNullOrEmpty()) {
-                    loadAndCancel(noneApi, generation)
+                    startLoad(noneApi, request)
                 } else {
                     val apiRandom = validAPIs.random()
-                    loadAndCancel(apiRandom, generation)
-                    if (fromUI) DataStoreHelper.currentHomePage = apiRandom.name
+                    if (fromUI && !commitPageRequest(request) {
+                            DataStoreHelper.currentHomePage = apiRandom.name
+                        }
+                    ) return@ioSafe
+                    startLoad(apiRandom, request)
                 }
             } else if (api == null) {
                 // API is not found aka not loaded or removed, post the loading
                 // progress if waiting for plugins, otherwise nothing
                 if (PluginManager.loadedOnlinePlugins || PluginManager.isSafeMode()) {
-                    loadAndCancel(noneApi, generation)
+                    startLoad(noneApi, request)
                 } else {
-                    _page.postValue(Resource.Loading())
-                    if (preferredApiName != null)
-                        _apiName.postValue(preferredApiName)
+                    commitPageRequest(request) {
+                        isCurrentlyLoadingName = null
+                        _page.postValue(Resource.Loading())
+                        if (preferredApiName != null) _apiName.postValue(preferredApiName)
+                    }
                 }
             } else {
-                // if the api is found, then set it to it and save key
-                if (fromUI) DataStoreHelper.currentHomePage = api.name
-                loadAndCancel(api, generation)
+                // fromUI sources were recorded with the request token before dispatch.
+                startLoad(api, request)
             }
-            reloadAccount()
+            if (isCurrentPageRequest(request)) reloadAccount()
         }
+    }
+
+    private fun startLoad(api: MainAPI, request: HomePageRequestToken) {
+        synchronized(pageLoadDispatchLock) {
+            if (!isCurrentPageRequest(request)) return
+            isCurrentlyLoadingName = api.name
+            onGoingLoad = load(api, request)
+        }
+    }
 }

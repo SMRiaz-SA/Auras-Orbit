@@ -34,6 +34,74 @@ import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** A synchronized access-order cache whose aggregate payload size and entry age are bounded. */
+internal class BoundedTtlByteArrayCache<K : Any>(
+    private val maxBytes: Long,
+    private val ttlMillis: Long,
+    private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+) {
+    private data class Entry(val data: ByteArray, val timestamp: Long)
+
+    private val entries = java.util.LinkedHashMap<K, Entry>(16, 0.75f, true)
+    private var cachedBytes = 0L
+
+    @Synchronized
+    fun get(key: K): ByteArray? {
+        removeExpired(nowMillis())
+        return entries[key]?.data
+    }
+
+    @Synchronized
+    fun put(key: K, data: ByteArray) {
+        val now = nowMillis()
+        removeExpired(now)
+        remove(key)
+        if (maxBytes <= 0 || data.isEmpty() || data.size.toLong() > maxBytes) return
+
+        entries[key] = Entry(data, now)
+        cachedBytes += data.size
+        while (cachedBytes > maxBytes) {
+            val iterator = entries.entries.iterator()
+            val eldest = iterator.next()
+            cachedBytes -= eldest.value.data.size
+            iterator.remove()
+        }
+    }
+
+    @Synchronized
+    fun clear() {
+        entries.clear()
+        cachedBytes = 0L
+    }
+
+    @Synchronized
+    fun size(): Int {
+        removeExpired(nowMillis())
+        return entries.size
+    }
+
+    @Synchronized
+    fun byteSize(): Long {
+        removeExpired(nowMillis())
+        return cachedBytes
+    }
+
+    private fun removeExpired(now: Long) {
+        val iterator = entries.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next().value
+            if (now - entry.timestamp >= ttlMillis) {
+                cachedBytes -= entry.data.size
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun remove(key: K) {
+        entries.remove(key)?.let { cachedBytes -= it.data.size }
+    }
+}
+
 private val ProxyScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
     // Converting callbacks to coroutines is always a nightmare. If OkHttp hangs here, good luck debugging it.
@@ -86,11 +154,16 @@ object LocalStreamProxy {
         val interceptor: okhttp3.Interceptor? = null,
     )
 
-    // Fast in-memory raw and cleaned init segment cache (10 minutes TTL)
-    data class InitCacheEntry(val data: ByteArray, val timestamp: Long)
-    private val initSegmentCache = java.util.concurrent.ConcurrentHashMap<String, InitCacheEntry>()
-    private val rawInitSegmentCache = java.util.concurrent.ConcurrentHashMap<String, InitCacheEntry>()
     private const val INIT_CACHE_TTL_MS = 600_000L // 10 minutes
+    private const val MAX_INIT_CACHE_BYTES = 128L * 1024 * 1024
+
+    // Raw and cleaned init data share a bounded cache so their combined footprint is capped.
+    private enum class InitSegmentKind { RAW, CLEANED }
+    private data class InitSegmentCacheKey(val sessionId: String, val url: String, val kind: InitSegmentKind)
+    private val initSegmentCache = BoundedTtlByteArrayCache<InitSegmentCacheKey>(
+        maxBytes = MAX_INIT_CACHE_BYTES,
+        ttlMillis = INIT_CACHE_TTL_MS,
+    )
     private const val MAX_ENCODED_PROXY_URL_LENGTH = 65_536
 
     // Decrypted media segment cache (60 seconds TTL, 150 entries max)
@@ -312,7 +385,7 @@ object LocalStreamProxy {
 
     fun registerSession(headers: Map<String, String>, interceptor: okhttp3.Interceptor? = null): String {
         val sessionId = UUID.randomUUID().toString()
-        sessions[sessionId] = ProxySession(headers = headers, interceptor = interceptor)
+        sessions[sessionId] = ProxySession(headers = headers.toMap(), interceptor = interceptor)
 
         // Clear previous session tracks to prevent ghost subtitles from showing in the UI for the new stream
         LocalStreamProxyState.reset()
@@ -531,17 +604,17 @@ object LocalStreamProxy {
             }
 
             if (action == "init_decrypt" || action == "init") {
-                val cached = initSegmentCache[url]
-                if (cached != null && System.currentTimeMillis() - cached.timestamp < INIT_CACHE_TTL_MS) {
+                val cached = initSegmentCache.get(InitSegmentCacheKey(sessionId, url, InitSegmentKind.CLEANED))
+                if (cached != null) {
                     call.response.header("Content-Type", "video/mp4")
                     call.response.header("Accept-Ranges", "bytes")
-                    call.respondBytes(cached.data, status = HttpStatusCode.OK)
+                    call.respondBytes(cached, status = HttpStatusCode.OK)
                     return
                 }
             }
 
             if (action == "decrypt") {
-                val cacheKey = "${url}_${kid ?: ""}_${k ?: ""}"
+                val cacheKey = "${sessionId}_${url}_${kid ?: ""}_${k ?: ""}"
                 val cached = decryptedSegmentCache[cacheKey]
                 if (cached != null && System.currentTimeMillis() - cached.timestamp < SEGMENT_CACHE_TTL_MS) {
                     call.response.header("Content-Type", "video/mp4")
@@ -669,9 +742,9 @@ object LocalStreamProxy {
                     response.body.use { it.byteStream().readBoundedBytes(64 * 1024 * 1024) }
                 }
                 response.body.close()
-                rawInitSegmentCache[url] = InitCacheEntry(rawBytes, System.currentTimeMillis())
+                initSegmentCache.put(InitSegmentCacheKey(sessionId, url, InitSegmentKind.RAW), rawBytes)
                 val cleaned = StreamDecryptor.cleanInitSegment(rawBytes)
-                initSegmentCache[url] = InitCacheEntry(cleaned, System.currentTimeMillis())
+                initSegmentCache.put(InitSegmentCacheKey(sessionId, url, InitSegmentKind.CLEANED), cleaned)
                 call.response.header("Content-Type", "video/mp4")
                 call.response.header("Accept-Ranges", "bytes")
                 call.respondBytes(cleaned, status = HttpStatusCode.OK)
@@ -686,7 +759,7 @@ object LocalStreamProxy {
 
                 var rawInitBytes: ByteArray? = null
                 if (initUrl != null) {
-                    rawInitBytes = rawInitSegmentCache[initUrl]?.data
+                    rawInitBytes = initSegmentCache.get(InitSegmentCacheKey(sessionId, initUrl, InitSegmentKind.RAW))
                     if (rawInitBytes == null) {
                         try {
                             val initReqBuilder = okhttp3.Request.Builder().url(initUrl)
@@ -697,9 +770,9 @@ object LocalStreamProxy {
                                 initResp.body.close()
                                 if (fetchedRaw.isNotEmpty()) {
                                     rawInitBytes = fetchedRaw
-                                    rawInitSegmentCache[initUrl] = InitCacheEntry(fetchedRaw, System.currentTimeMillis())
+                                    initSegmentCache.put(InitSegmentCacheKey(sessionId, initUrl, InitSegmentKind.RAW), fetchedRaw)
                                     val cleaned = StreamDecryptor.cleanInitSegment(fetchedRaw)
-                                    initSegmentCache[initUrl] = InitCacheEntry(cleaned, System.currentTimeMillis())
+                                    initSegmentCache.put(InitSegmentCacheKey(sessionId, initUrl, InitSegmentKind.CLEANED), cleaned)
                                 }
                             } else {
                                 initResp.body.close()
@@ -722,7 +795,7 @@ object LocalStreamProxy {
                     mediaBytes
                 }
 
-                val cacheKey = "${url}_${kid ?: ""}_${k ?: ""}"
+                val cacheKey = "${sessionId}_${url}_${kid ?: ""}_${k ?: ""}"
                 decryptedSegmentCache[cacheKey] = SegmentCacheEntry(decrypted, System.currentTimeMillis())
                 cleanupSegmentCache()
 
@@ -733,6 +806,7 @@ object LocalStreamProxy {
                     kid = kid ?: "",
                     k = k ?: "",
                     session = session,
+                    sessionId = sessionId,
                     headers = mergedHeaders,
                 )
 
@@ -1131,6 +1205,7 @@ object LocalStreamProxy {
         kid: String,
         k: String,
         session: ProxySession?,
+        sessionId: String,
         headers: Map<String, String>,
         count: Int = 3,
     ) {
@@ -1149,7 +1224,7 @@ object LocalStreamProxy {
                 match.value,
                 "$prefix$paddedNextNum$suffix",
             )
-            val nextCacheKey = "${nextUrl}_${kid}_$k"
+            val nextCacheKey = "${sessionId}_${nextUrl}_${kid}_$k"
 
             if (decryptedSegmentCache.containsKey(nextCacheKey) || !prefetchingUrls.add(nextCacheKey)) {
                 continue

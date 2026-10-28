@@ -17,6 +17,7 @@ dependencies {
     // Only standard library, no desktop-app dependencies.
     implementation(kotlin("stdlib"))
     implementation(project(":common"))
+    testImplementation(libs.junit)
 }
 
 sourceSets {

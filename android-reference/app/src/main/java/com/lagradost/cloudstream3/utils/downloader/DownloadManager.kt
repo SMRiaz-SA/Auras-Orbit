@@ -1908,6 +1908,7 @@ object VideoDownloadManager {
                         poster = downloadItem.resultPoster,
                         id = downloadItem.resultId,
                         cacheTime = System.currentTimeMillis(),
+                        posterHeaders = downloadItem.episode.posterHeaders,
                     )
                 )
                 setKey(

@@ -22,7 +22,14 @@ import java.io.File
 fun updateDurationAndPosition(position: Long, duration: Long) {
     if (position <= 0 || duration <= 0) return
     val episode = getKey<ResultEpisode>("last_opened") ?: return
-    DataStoreHelper.setViewPosAndResume(episode.id, position, duration, episode, null)
+    DataStoreHelper.setViewPosAndResume(
+        episode.id,
+        position,
+        duration,
+        episode,
+        nextEpisode = null,
+        isNextEpisodeKnown = false,
+    )
     ResultFragment.updateUI()
 }
 

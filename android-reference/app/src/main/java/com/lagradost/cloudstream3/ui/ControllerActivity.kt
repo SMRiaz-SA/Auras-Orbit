@@ -11,6 +11,7 @@ import android.widget.ArrayAdapter
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.android.gms.cast.MediaLoadOptions
@@ -37,13 +38,22 @@ import com.lagradost.cloudstream3.ui.subtitles.ChromecastSubtitlesFragment
 import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.CastHelper
 import com.lagradost.cloudstream3.utils.CastHelper.awaitLinks
 import com.lagradost.cloudstream3.utils.CastHelper.getMediaInfo
+import com.lagradost.cloudstream3.utils.CastHelper.toCastMetadataWindow
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
+import com.lagradost.cloudstream3.utils.Coroutines.main
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.UIHelper.dismissSafe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.json.JSONObject
@@ -56,6 +66,16 @@ private fun RemoteMediaClient.getItemIndex(): Int? {
         null
     }
 }
+
+private fun RemoteMediaClient.currentQueueItemIdentity(): CastQueueItemIdentity? =
+    currentItem?.let { item ->
+        val media = item.media
+        CastQueueItemIdentity(
+            itemId = item.itemId,
+            contentId = media?.contentId,
+            customData = media?.customData?.toString(),
+        )
+    }
 
 class SkipNextEpisodeController(val view: ImageView) : UIController() {
     init {
@@ -89,6 +109,8 @@ data class MetadataHolder(
     @JsonProperty("episodes") @SerialName("episodes") val episodes: List<ResultEpisode>,
     @JsonProperty("currentLinks") @SerialName("currentLinks") val currentLinks: List<ExtractorLink>,
     @JsonProperty("currentSubtitles") @SerialName("currentSubtitles") val currentSubtitles: List<SubtitleData>,
+    @JsonProperty("episodeSequenceId") @SerialName("episodeSequenceId") val episodeSequenceId: String? = null,
+    @JsonProperty("episodeOffset") @SerialName("episodeOffset") val episodeOffset: Int = 0,
 )
 
 class SelectSourceController(val view: ImageView, val activity: ControllerActivity) : UIController() {
@@ -237,76 +259,213 @@ class SelectSourceController(val view: ImageView, val activity: ControllerActivi
         }
     }
 
+    private val pendingSequenceRestores = mutableSetOf<String>()
+    private val failedSequenceRestores = mutableSetOf<String>()
+
     private fun getCurrentMetaData(): MetadataHolder? {
         return try {
             val data = remoteMediaClient?.mediaInfo?.customData?.toString() ?: return null
-            parseJson<MetadataHolder>(data)
+            val parsed = parseJson<MetadataHolder>(data)
+            val accountId = DataStoreHelper.currentAccount
+            val profileToken = DataStoreHelper.getCurrentAccountProfileToken()
+            // Unbound legacy metadata has no trustworthy profile owner, so it must not
+            // hydrate provider headers or write resume progress under the selected profile.
+            val sequenceId = parsed.episodeSequenceId ?: return null
+            val knownOwner = CastHelper.getCastEpisodeSequenceProfileBinding(sequenceId)
+            if (knownOwner != null && !CastHelper.isCastEpisodeSequenceProfileAllowed(knownOwner, accountId, profileToken)) {
+                return null
+            }
+            // Ownership is checked directly each time, so switching back from profile B
+            // to owner A immediately makes this sequence eligible again.
+            val fullSequence = CastHelper.getCachedCastEpisodeSequence(sequenceId, accountId, profileToken)
+            if (fullSequence == null) {
+                val failureKey = "$sequenceId/$accountId/$profileToken"
+                if (failureKey in failedSequenceRestores) return null
+
+                if (sequenceId !in pendingSequenceRestores) {
+                    pendingSequenceRestores.add(sequenceId)
+                    activity.ioSafe {
+                        val restored = CastHelper.restoreCastEpisodeSequence(
+                            context = activity,
+                            accountId = accountId,
+                            profileToken = profileToken,
+                            apiName = parsed.apiName,
+                            sequenceId = sequenceId,
+                            protectedParentIds = parsed.episodes
+                                .asSequence()
+                                .drop(parsed.currentEpisodeIndex.coerceAtLeast(0))
+                                .map { it.parentId }
+                                .distinct()
+                                .take(16)
+                                .toList(),
+                        )
+                        activity.main {
+                            pendingSequenceRestores.remove(sequenceId)
+                            val owner = CastHelper.getCastEpisodeSequenceProfileBinding(sequenceId)
+                            val activeAccountId = DataStoreHelper.currentAccount
+                            val activeProfileToken = DataStoreHelper.getCurrentAccountProfileToken()
+                            val belongsToActiveProfile = owner?.let {
+                                CastHelper.isCastEpisodeSequenceProfileAllowed(
+                                    it,
+                                    activeAccountId,
+                                    activeProfileToken,
+                                )
+                            } == true
+                            if (owner != null && !belongsToActiveProfile) {
+                                Log.e("CHROMECAST", "Cast playback belongs to another profile; ignoring its progress.")
+                            } else if (restored == null && owner == null &&
+                                activeAccountId == accountId && activeProfileToken == profileToken
+                            ) {
+                                failedSequenceRestores.add(failureKey)
+                                Log.e("CHROMECAST", "Local Cast episode sequence could not be restored.")
+                                Toast.makeText(activity, R.string.error, Toast.LENGTH_SHORT).show()
+                            }
+                            val activeSequenceId = remoteMediaClient?.mediaInfo?.customData?.toString()
+                                ?.let { runCatching { parseJson<MetadataHolder>(it).episodeSequenceId }.getOrNull() }
+                            if (activeSequenceId == sequenceId && belongsToActiveProfile) {
+                                onMediaStatusUpdated()
+                            }
+                        }
+                    }
+                }
+                return null
+            }
+
+            val absoluteIndex = parsed.episodeOffset + parsed.currentEpisodeIndex
+            if (absoluteIndex !in fullSequence.indices) {
+                return null
+            }
+            parsed.copy(
+                episodes = fullSequence,
+                currentEpisodeIndex = absoluteIndex,
+                episodeOffset = 0,
+            )
         } catch (_: Exception) {
             null
         }
     }
 
     var isLoadingMore = false
+    private var loadingMoreClient: RemoteMediaClient? = null
+    private var loadingMoreIdentity: CastQueueItemIdentity? = null
+
     override fun onMediaStatusUpdated() {
         super.onMediaStatusUpdated()
         val meta = getCurrentMetaData()
         view.visibility = if ((meta?.currentLinks?.size ?: 0) > 1) VISIBLE else INVISIBLE
 
         try {
-            if (meta != null && meta.episodes.size > meta.currentEpisodeIndex + 1) {
-                val currentIdIndex = remoteMediaClient?.getItemIndex() ?: return
-                val itemCount = remoteMediaClient?.mediaQueue?.itemCount
-                val index = meta.currentEpisodeIndex + 1
-                val epData = meta.episodes[index]
+            if (meta != null) {
+                val currentIndex = meta.currentEpisodeIndex
+                val currentEpisode = meta.episodes.getOrNull(currentIndex)
 
                 try {
                     val currentDuration = remoteMediaClient?.streamDuration
                     val currentPosition = remoteMediaClient?.approximateStreamPosition
-                    if (currentDuration != null && currentPosition != null)
+                    val knownNextEpisode = getNextCastMetadataEpisode(meta.episodes, currentIndex)
+                    if (currentEpisode != null && currentDuration != null && currentDuration > 0L &&
+                        currentPosition != null && currentPosition >= 0L
+                    ) {
                         DataStoreHelper.setViewPosAndResume(
-                            epData.id,
+                            currentEpisode.id,
                             currentPosition,
                             currentDuration,
-                            epData,
-                            meta.episodes.getOrNull(index + 1),
+                            currentEpisode,
+                            knownNextEpisode,
+                            isNextEpisodeKnown = knownNextEpisode != null,
                         )
+                    }
                 } catch (t: Throwable) {
                     logError(t)
                 }
 
-                if (itemCount != null && itemCount - currentIdIndex == 1 && !isLoadingMore) {
-                    isLoadingMore = true
-                    ioSafe {
-                        val currentLinks = mutableSetOf<ExtractorLink>()
-                        val currentSubs = mutableSetOf<SubtitleData>()
-                        val generator = RepoLinkGenerator(listOf(epData))
-                        val isSuccessful = safeApiCall {
-                            generator.generateLinks(
-                                clearCache = false,
-                                sourceTypes = LOADTYPE_CHROMECAST,
-                                callback = {
-                                    it.first?.let { link ->
-                                        currentLinks.add(link)
-                                    }
-                                }, subtitleCallback = {
-                                    currentSubs.add(it)
-                                },
-                                offset = 0,
-                                isCasting = true,
-                            )
-                        }
+                if (currentEpisode != null && currentIndex < meta.episodes.lastIndex) {
+                    val initiatingSequenceId = meta.episodeSequenceId ?: return
+                    val initiatingOwner = CastHelper.getCastEpisodeSequenceProfileBinding(initiatingSequenceId)
+                        ?: return
+                    val initiatingAccountId = DataStoreHelper.currentAccount
+                    val initiatingProfileToken = DataStoreHelper.getCurrentAccountProfileToken()
+                    if (!isCastQueueSequenceOwnerCurrent(
+                            initiatingSequenceId,
+                            initiatingSequenceId,
+                            initiatingOwner,
+                            initiatingOwner,
+                            initiatingAccountId,
+                            initiatingProfileToken,
+                        )
+                    ) return
 
-                        val sortedLinks = sortUrls(currentLinks)
-                        val sortedSubs = sortSubs(currentSubs)
-                        if (isSuccessful == Resource.Success(true)) {
-                            if (currentLinks.isNotEmpty()) {
+                    val initiatingClient = remoteMediaClient ?: return
+                    val initiatingIdentity = initiatingClient.currentQueueItemIdentity() ?: return
+                    val currentIdIndex = initiatingClient.getItemIndex() ?: return
+                    val itemCount = initiatingClient.mediaQueue.itemCount
+
+                    // A prior lookup can still be running after Cast changes media. Let the new
+                    // item start its own lookup; the old lookup is guarded again before append.
+                    if (isLoadingMore &&
+                        (loadingMoreClient !== initiatingClient || loadingMoreIdentity != initiatingIdentity)
+                    ) {
+                        isLoadingMore = false
+                        loadingMoreClient = null
+                        loadingMoreIdentity = null
+                    }
+
+                    if (itemCount - currentIdIndex == 1 && !isLoadingMore) {
+                        isLoadingMore = true
+                        loadingMoreClient = initiatingClient
+                        loadingMoreIdentity = initiatingIdentity
+                        val index = currentIndex + 1
+                        val epData = meta.episodes[index]
+                        ioSafe {
+                            try {
+                                if (!isCastQueueSequenceOwnerCurrent(
+                                        initiatingSequenceId,
+                                        initiatingSequenceId,
+                                        initiatingOwner,
+                                        CastHelper.getCastEpisodeSequenceProfileBinding(initiatingSequenceId),
+                                        DataStoreHelper.currentAccount,
+                                        DataStoreHelper.getCurrentAccountProfileToken(),
+                                    )
+                                ) return@ioSafe
+
+                                val currentLinks = mutableSetOf<ExtractorLink>()
+                                val currentSubs = mutableSetOf<SubtitleData>()
+                                val generator = RepoLinkGenerator(listOf(epData))
+                                val isSuccessful = safeApiCall {
+                                    generator.generateLinks(
+                                        clearCache = false,
+                                        sourceTypes = LOADTYPE_CHROMECAST,
+                                        callback = {
+                                            it.first?.let { link ->
+                                                currentLinks.add(link)
+                                            }
+                                        }, subtitleCallback = {
+                                            currentSubs.add(it)
+                                        },
+                                        offset = 0,
+                                        isCasting = true,
+                                    )
+                                }
+
+                                if (isSuccessful != Resource.Success(true) || currentLinks.isEmpty()) {
+                                    return@ioSafe
+                                }
+
+                                val sortedLinks = sortUrls(currentLinks)
+                                val sortedSubs = sortSubs(currentSubs)
                                 val jsonCopy = meta.copy(
                                     currentLinks = sortedLinks,
                                     currentSubtitles = sortedSubs,
                                     currentEpisodeIndex = index,
+                                    episodes = meta.episodes.map { it.copy(posterHeaders = null) },
                                 )
 
-                                val done = JSONObject(jsonCopy.toJson())
+                                val queueMetadata = jsonCopy.toCastMetadataWindow()
+                                if (queueMetadata == null) {
+                                    Toast.makeText(activity, R.string.error, Toast.LENGTH_SHORT).show()
+                                    return@ioSafe
+                                }
+                                val done = JSONObject(queueMetadata.toJson())
                                 val mediaInfo = getMediaInfo(
                                     epData,
                                     jsonCopy,
@@ -314,20 +473,63 @@ class SelectSourceController(val view: ImageView, val activity: ControllerActivi
                                     done,
                                     sortedSubs,
                                 )
-
-                                activity.runOnUiThread {
-                                    awaitLinks(
-                                        remoteMediaClient?.queueAppendItem(
-                                            MediaQueueItem.Builder(mediaInfo).build(),
-                                            JSONObject()
-                                        )
+                                val initiatingJob = currentCoroutineContext()[Job] ?: return@ioSafe
+                                initiatingJob.ensureActive()
+                                val appendStatus = withCastQueueAppendSettled {
+                                    val appendResult = enqueueCastAppendOnDispatcherIfActive(
+                                        initiatingJob = initiatingJob,
+                                        dispatcher = Dispatchers.Main,
+                                        isTargetCurrent = {
+                                            val currentClient = remoteMediaClient
+                                            val currentIdentity = currentClient?.currentQueueItemIdentity()
+                                            val currentItemIndex = currentClient?.getItemIndex()
+                                            val currentItemCount = currentClient?.mediaQueue?.itemCount
+                                            val currentSequenceId = currentClient?.mediaInfo?.customData?.toString()
+                                                ?.let {
+                                                    runCatching { parseJson<MetadataHolder>(it).episodeSequenceId }
+                                                        .getOrNull()
+                                                }
+                                            val currentOwner = currentSequenceId?.let {
+                                                CastHelper.getCastEpisodeSequenceProfileBinding(it)
+                                            }
+                                            isSameCastQueueTarget(
+                                                initiatingClient = initiatingClient,
+                                                currentClient = currentClient,
+                                                initiatingItem = initiatingIdentity,
+                                                currentItem = currentIdentity,
+                                            ) && currentItemIndex != null && currentItemCount != null &&
+                                                currentItemCount - currentItemIndex == 1 &&
+                                                isCastQueueSequenceOwnerCurrent(
+                                                    initiatingSequenceId,
+                                                    currentSequenceId,
+                                                    initiatingOwner,
+                                                    currentOwner,
+                                                    DataStoreHelper.currentAccount,
+                                                    DataStoreHelper.getCurrentAccountProfileToken(),
+                                                )
+                                        },
                                     ) {
-                                        println("FAILED TO LOAD NEXT ITEM")
+                                        initiatingClient.queueAppendItem(
+                                            MediaQueueItem.Builder(mediaInfo).build(),
+                                            JSONObject(),
+                                        )
+                                    } ?: return@withCastQueueAppendSettled null
+                                    withContext(Dispatchers.IO) { appendResult.await() }
+                                }
+                                if (appendStatus != null && !appendStatus.status.isSuccess) {
+                                    println("FAILED TO LOAD NEXT ITEM")
+                                }
+                            } finally {
+                                withContext(NonCancellable + Dispatchers.Main) {
+                                    if (loadingMoreClient === initiatingClient &&
+                                        loadingMoreIdentity == initiatingIdentity
+                                    ) {
+                                        isLoadingMore = false
+                                        loadingMoreClient = null
+                                        loadingMoreIdentity = null
                                     }
-                                    isLoadingMore = false
                                 }
                             }
-
                         }
                     }
                 }

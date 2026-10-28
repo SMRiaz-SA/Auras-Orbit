@@ -2,20 +2,21 @@ import com.lagradost.cloudstream3.*
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.zip.ZipFile
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     println("--- CloudStream Plugin Sandbox ---")
     if (args.isEmpty()) {
         println("⚠️ Please provide a path to a .cs3 file.")
-        println("Example: ./gradlew :sandbox:run --args=\"plugin-sandbox/test_plugins/my_plugin.cs3\"")
+        println("Example: ./gradlew :sandbox:run --args=\"test_plugins/my_plugin.cs3\"")
         println("Place your plugins in the 'plugin-sandbox/test_plugins/' folder!")
-        return
+        exitProcess(2)
     }
 
     val pluginFile = File(args[0])
-    if (!pluginFile.exists()) {
+    if (!pluginFile.isFile) {
         println("Error: File not found: ${pluginFile.absolutePath}")
-        return
+        exitProcess(2)
     }
 
     val targetJar = File(pluginFile.parentFile, pluginFile.nameWithoutExtension + "-jvm.jar")
@@ -32,8 +33,10 @@ fun main(args: Array<String>) {
         pluginFile
     }
 
+    val finalReport = StringBuilder()
+    var analysisFailed = false
+
     if (jarFile.exists()) {
-        val finalReport = StringBuilder()
         finalReport.append(StubRadar.scanForMissingStubs(jarFile))
 
         finalReport.append("\n--- Deep Execution Testing ---\n")
@@ -140,20 +143,30 @@ fun main(args: Array<String>) {
 
             finalReport.append("\n--- Final Score ---\n")
             finalReport.append("Passed: $passed / ${providers.size}\n")
-            if (failed > 0) finalReport.append("Failed: $failed. Check the crash reasons for missing Android stubs!\n")
+            if (failed > 0) {
+                analysisFailed = true
+                finalReport.append("Failed: $failed. Check the crash reasons for missing Android stubs!\n")
+            }
         } catch (e: Exception) {
+            analysisFailed = true
             finalReport.append("Execution failed: ${e.javaClass.name}: ${e.message}\n")
             e.printStackTrace()
         }
-
-        println(finalReport.toString())
-
-        val reportDir = File(pluginFile.parentFile, "reports")
-        if (!reportDir.exists()) reportDir.mkdirs()
-        val reportFile = File(reportDir, "${pluginFile.nameWithoutExtension}_report.txt")
-        reportFile.writeText(finalReport.toString())
-        println("\nReport saved to: ${reportFile.absolutePath}")
     } else {
+        analysisFailed = true
+        finalReport.append("Failed to load extension into a JAR: ${jarFile.absolutePath}\n")
         println("Failed to load extension into a JAR.")
+    }
+
+    println(finalReport.toString())
+
+    val reportDir = File(pluginFile.parentFile, "reports")
+    if (!reportDir.exists()) reportDir.mkdirs()
+    val reportFile = File(reportDir, "${pluginFile.nameWithoutExtension}_report.txt")
+    reportFile.writeText(finalReport.toString())
+    println("\nReport saved to: ${reportFile.absolutePath}")
+
+    if (analysisFailed) {
+        exitProcess(1)
     }
 }

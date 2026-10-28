@@ -115,6 +115,8 @@ object DownloadObjects {
         @JsonProperty("poster") @SerialName("poster") val poster: String?,
         @JsonProperty("cacheTime") @SerialName("cacheTime") val cacheTime: Long,
         @JsonProperty("id") @SerialName("id") override val id: Int,
+        @JsonProperty("posterHeaders") @SerialName("posterHeaders")
+        val posterHeaders: Map<String, String>? = null,
     ) : DownloadCached
 
     @Serializable
@@ -179,6 +181,9 @@ object DownloadObjects {
         @JsonProperty("season") @SerialName("season") val season: Int?,
         @JsonProperty("updateTime") @SerialName("updateTime") val updateTime: Long,
         @JsonProperty("isFromDownload") @SerialName("isFromDownload") val isFromDownload: Boolean,
+        @JsonProperty("episodePoster") @SerialName("episodePoster") val episodePoster: String? = null,
+        @JsonProperty("episodePosterHeaders") @SerialName("episodePosterHeaders")
+        val episodePosterHeaders: Map<String, String>? = null,
     )
 
     data class DownloadStatus(

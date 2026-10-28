@@ -45,6 +45,7 @@ import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferredMedia
 import com.lagradost.cloudstream3.utils.DataStoreHelper
+import com.lagradost.cloudstream3.utils.TvChannelUtils
 import java.util.Locale
 
 /** Auras-owned discovery screen backed by the existing provider and watch-progress model. */
@@ -144,6 +145,45 @@ class AurasExploreFragment : Fragment() {
 
     private fun observeHomeData() {
         homeViewModel.page.observe(viewLifecycleOwner) { resource ->
+            val publisherContext = context
+            val publisherName = homeViewModel.apiName.value
+                ?: browseState.sourceName
+                ?: DataStoreHelper.currentHomePage
+                ?: APIRepository.noneApi.name
+            if (publisherContext != null && isLayout(TV)) {
+                when (resource) {
+                    is Resource.Success -> {
+                        val shelves = resource.value.entries.filter { (_, value) ->
+                            value.list.list.isNotEmpty()
+                        }
+                        val preferred = shelves.firstOrNull { (name, value) ->
+                            TvChannelUtils.isPopularShelf(name) ||
+                                TvChannelUtils.isPopularShelf(value.list.name)
+                        } ?: shelves.firstOrNull()
+                        val shelfName = preferred?.value?.list?.name.orEmpty()
+                        val cards = preferred?.value?.list?.list.orEmpty()
+                        TvChannelUtils.publishPopularContent(
+                            publisherContext,
+                            publisherName,
+                            shelfName,
+                            cards,
+                        )
+                    }
+
+                    is Resource.Loading -> Unit
+
+                    is Resource.Failure -> {
+                        // Failed sources must clear stale content instead of leaving old cards
+                        // from a prior successful provider response on the TV home.
+                        TvChannelUtils.publishPopularContent(
+                            publisherContext,
+                            publisherName,
+                            "",
+                            emptyList(),
+                        )
+                    }
+                }
+            }
             browseState = when (resource) {
                 is Resource.Success -> browseState.copy(
                     shelves = resource.value.values.map { expandable ->

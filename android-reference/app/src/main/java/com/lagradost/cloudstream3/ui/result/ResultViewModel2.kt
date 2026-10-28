@@ -1211,21 +1211,40 @@ class ResultViewModel2 : ViewModel() {
     ) {
         if (activity == null) return
         val response = currentResponse ?: return
-        val eps = currentEpisodes[currentIndex ?: return] ?: return
+        val selectedIndexer = currentIndex ?: return
+        if (currentEpisodes[selectedIndexer].isNullOrEmpty()) return
+        val episodes = currentEpisodes.entries.asSequence()
+            .filter { (indexer, _) -> indexer.dubStatus == selectedIndexer.dubStatus }
+            .flatMap { (_, bucket) -> bucket.asSequence() }
+            .distinctBy { it.id }
+            .sortedWith(
+                compareBy<ResultEpisode> { it.seasonIndex ?: it.season ?: Int.MIN_VALUE }
+                    .thenBy { it.episode }
+                    .thenBy { it.index },
+            )
+            .toList()
+        val episodeIndex = episodes.indexOfFirst { it.id == result.id }
+        if (episodeIndex < 0) {
+            Log.e("CHROMECAST", "Selected episode was missing from the full Cast sequence.")
+            return
+        }
 
         // Main needed because getCastSession needs to be on main thread
         main {
-            activity.getCastSession()?.startCast(
-                response.apiName,
-                response.isMovie(),
-                response.name,
-                response.posterUrl,
-                result.index,
-                eps,
-                links,
-                subs,
+            val castSession = activity.getCastSession() ?: return@main
+            castSession.startCast(
+                context = activity,
+                activeSessionProvider = { activity.getCastSession() },
+                apiName = response.apiName,
+                isMovie = response.isMovie(),
+                title = response.name,
+                poster = response.posterUrl,
+                currentEpisodeIndex = episodeIndex,
+                episodes = episodes,
+                currentLinks = links,
+                subtitles = subs,
                 startTime = result.getRealPosition(),
-                startIndex = startIndex
+                startIndex = startIndex,
             )
         }
     }
@@ -1385,7 +1404,7 @@ class ResultViewModel2 : ViewModel() {
                 recordPerformanceDiagnostic(
                     PerformanceDiagnosticStage.SOURCE_LOOKUP,
                     sourceLabel,
-                    profileId = currentAccount.toString(),
+                    profileId = currentAccount,
                     status = status,
                     durationMs = SystemClock.elapsedRealtime() - sourceStartedAt,
                 )
@@ -1404,7 +1423,7 @@ class ResultViewModel2 : ViewModel() {
                 recordPerformanceDiagnostic(
                     PerformanceDiagnosticStage.SOURCE_LOOKUP,
                     sourceLabel,
-                    profileId = currentAccount.toString(),
+                    profileId = currentAccount,
                     status = PerformanceDiagnosticStatus.CANCELLED,
                     durationMs = SystemClock.elapsedRealtime() - sourceStartedAt,
                 )
@@ -1422,7 +1441,7 @@ class ResultViewModel2 : ViewModel() {
     private fun recordPerformanceDiagnostic(
         stage: PerformanceDiagnosticStage,
         sourceLabel: String,
-        profileId: String = currentAccount.toString(),
+        profileId: String = currentAccount,
         status: PerformanceDiagnosticStatus,
         durationMs: Long,
     ) {
@@ -2475,6 +2494,7 @@ class ResultViewModel2 : ViewModel() {
                                     airDate = i.date,
                                     runTime = i.runTime,
                                     seasonData = seasonData,
+                                    posterHeaders = loadResponse.posterHeaders,
                                 )
 
                             val season = eps.seasonIndex ?: 0
@@ -2532,6 +2552,7 @@ class ResultViewModel2 : ViewModel() {
                                 airDate = episode.date,
                                 runTime = episode.runTime,
                                 seasonData = seasonData,
+                                posterHeaders = loadResponse.posterHeaders,
                             )
 
                         val season = ep.seasonIndex ?: 0
@@ -2564,6 +2585,7 @@ class ResultViewModel2 : ViewModel() {
                         loadResponse.type,
                         mainId,
                         null,
+                        posterHeaders = loadResponse.posterHeaders,
                     )
                 )
             }
@@ -2586,7 +2608,8 @@ class ResultViewModel2 : ViewModel() {
                         null,
                         loadResponse.type,
                         mainId,
-                        null
+                        null,
+                        posterHeaders = loadResponse.posterHeaders,
                     )
                 )
             }
@@ -2609,7 +2632,8 @@ class ResultViewModel2 : ViewModel() {
                         null,
                         loadResponse.type,
                         mainId,
-                        null
+                        null,
+                        posterHeaders = loadResponse.posterHeaders,
                     )
                 )
             }
@@ -3032,7 +3056,7 @@ class ResultViewModel2 : ViewModel() {
                     recordPerformanceDiagnostic(
                         PerformanceDiagnosticStage.PROVIDER_DETAIL,
                         providerLabel,
-                        profileId = currentAccount.toString(),
+                        profileId = currentAccount,
                         status = PerformanceDiagnosticStatus.FAILURE,
                         durationMs = SystemClock.elapsedRealtime() - providerStartedAt,
                     )
@@ -3042,7 +3066,7 @@ class ResultViewModel2 : ViewModel() {
                     recordPerformanceDiagnostic(
                         PerformanceDiagnosticStage.PROVIDER_DETAIL,
                         providerLabel,
-                        profileId = currentAccount.toString(),
+                        profileId = currentAccount,
                         status = PerformanceDiagnosticStatus.SUCCESS,
                         durationMs = SystemClock.elapsedRealtime() - providerStartedAt,
                     )
@@ -3101,7 +3125,7 @@ class ResultViewModel2 : ViewModel() {
                                     recordPerformanceDiagnostic(
                                         PerformanceDiagnosticStage.METADATA_ENRICHMENT,
                                         enrichmentLabel,
-                                        profileId = currentAccount.toString(),
+                                        profileId = currentAccount,
                                         status = enrichmentStatus,
                                         durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
                                     )
@@ -3120,7 +3144,7 @@ class ResultViewModel2 : ViewModel() {
                                     recordPerformanceDiagnostic(
                                         PerformanceDiagnosticStage.METADATA_ENRICHMENT,
                                         enrichmentLabel,
-                                        profileId = currentAccount.toString(),
+                                        profileId = currentAccount,
                                         status = enrichmentStatus,
                                         durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
                                     )
@@ -3144,7 +3168,7 @@ class ResultViewModel2 : ViewModel() {
                                 recordPerformanceDiagnostic(
                                     PerformanceDiagnosticStage.METADATA_ENRICHMENT,
                                     normalizePerformanceSourceLabel(response.apiName) ?: providerLabel,
-                                    profileId = currentAccount.toString(),
+                                    profileId = currentAccount,
                                     status = enrichmentStatus.takeIf { it != PerformanceDiagnosticStatus.UNKNOWN }
                                         ?: PerformanceDiagnosticStatus.FAILURE,
                                     durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
@@ -3175,6 +3199,7 @@ class ResultViewModel2 : ViewModel() {
                                     poster = loadResponse.posterUrl,
                                     id = mainId,
                                     cacheTime = System.currentTimeMillis(),
+                                    posterHeaders = loadResponse.posterHeaders,
                                 )
                             )
                             if (loadTrailers) loadTrailers(loadResponse)

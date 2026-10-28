@@ -28,7 +28,7 @@ Once you have a `.cs3` file downloaded, run the following command and point it t
 **Example Usage:**
 If you want to test `SoraStream.cs3` inside the `test_plugins` folder, run:
 ```powershell
-.\gradlew.bat :sandbox:run --args="plugin-sandbox/test_plugins/SoraStream.cs3"
+.\gradlew.bat :sandbox:run --args="test_plugins/SoraStream.cs3"
 ```
 
 ## 📊 What It Does

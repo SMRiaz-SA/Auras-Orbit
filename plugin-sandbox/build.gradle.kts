@@ -45,7 +45,10 @@ application {
 }
 
 tasks.named<JavaExec>("run") {
-    if (project.hasProperty("args")) {
+    val pluginPath = providers.gradleProperty("pluginPath")
+    if (pluginPath.isPresent) {
+        args = listOf(pluginPath.get())
+    } else if (project.hasProperty("args")) {
         args = listOf(project.property("args") as String)
     }
 }

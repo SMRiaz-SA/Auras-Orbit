@@ -1,14 +1,21 @@
 # Changelog
 
-## 1.0.0.04 — 2026-10-28
+## 1.0.0.05 — 2026-10-28
 
 ### Stable release
 
 - Put the latest resume item first in Android Explore on phone and TV, with other resume files above the current source. Keep poster titles off the artwork while retaining accessible names.
 - Add the same resume block and six status-based Watchlists to Android Catalog on phone and TV while retaining provider browsing.
 - Load provider details and episodes progressively on Android so the provider response appears before optional metadata enrichment; reject stale results when navigation or episode selection changes.
+- Publish resume items to Android TV's system Watch Next area and a **Popular Content** launcher row from the selected provider, using landscape provider art when available and a full-poster wide fallback otherwise.
+- Keep long, multi-season Cast queues moving beyond the first metadata window while retaining poster request headers only on the device.
+- Persist a stable identity for each local profile so renames and avatar edits do not detach resume or Cast state; reject delayed queue appends after a profile switch.
+- Keep Cast session checks on Android's main thread and bound the per-profile poster-header cache.
+- Preserve TV profile focus after saving newly created profile identity.
+- Prevent delayed Android TV resume updates from restoring cards after a newer source or profile state has replaced them.
 - Publish desktop Explore catalogs progressively, retry only failed add-ons, and keep late results from removed sources or earlier profiles from replacing current content.
 - Improve desktop metadata identity resolution and cache reuse, and prepare the next episode's stream lookup in the background with cancellation and timeout handling.
+- Keep desktop segmented downloads tied to a validated response and make local-stream proxy recovery and subtitle extraction cancellation safer.
 - Add local performance diagnostics for metadata, source lookup, first frame, buffering, and recovery using allowlisted timing fields without titles or stream URLs.
 
 ## 1.0.0.03 — 2026-10-27

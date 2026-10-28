@@ -9,7 +9,9 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 import kotlin.system.exitProcess
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -35,7 +37,8 @@ fun main(args: Array<String>) {
 
     val repoUrl = args[0]
     val baseOutputDir = File("test_plugins")
-    if (!baseOutputDir.exists()) baseOutputDir.mkdirs()
+    val baseOutputPath = baseOutputDir.toPath().toAbsolutePath().normalize()
+    Files.createDirectories(baseOutputPath)
 
     val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.ALWAYS).build()
     val mapper = ObjectMapper().registerKotlinModule()
@@ -55,8 +58,11 @@ fun main(args: Array<String>) {
         println("Found ${config.pluginLists.size} plugin lists.")
 
         val sanitizedRepoName = config.name.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
-        val repoOutputDir = File(baseOutputDir, sanitizedRepoName)
-        if (!repoOutputDir.exists()) repoOutputDir.mkdirs()
+        val repoOutputDir = baseOutputPath.resolve(sanitizedRepoName).normalize()
+        if (sanitizedRepoName.isBlank() || repoOutputDir == baseOutputPath || !repoOutputDir.startsWith(baseOutputPath)) {
+            throw IllegalArgumentException("Repository name does not resolve to a safe output directory: ${config.name}")
+        }
+        Files.createDirectories(repoOutputDir)
 
         config.pluginLists.forEach { pluginListUrl ->
             println("\nFetching plugin list: $pluginListUrl")
@@ -68,14 +74,14 @@ fun main(args: Array<String>) {
                 println("Found ${plugins.size} plugins in list. Downloading...")
 
                 plugins.forEach { plugin ->
-                    val file = File(repoOutputDir, "${plugin.internalName}.cs3")
-                    println("Downloading ${plugin.name} -> ${file.name}")
+                    val outputPath = resolvePluginOutputPath(repoOutputDir, plugin.internalName)
+                    println("Downloading ${plugin.name} -> ${outputPath.fileName}")
 
                     try {
                         val downloadRequest = HttpRequest.newBuilder().uri(URI.create(plugin.url)).GET().build()
                         val downloadResponse = client.send(downloadRequest, HttpResponse.BodyHandlers.ofInputStream())
                         if (downloadResponse.statusCode() == 200) {
-                            Files.copy(downloadResponse.body(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                            Files.copy(downloadResponse.body(), outputPath, StandardCopyOption.REPLACE_EXISTING)
                             println("   Saved.")
                         } else {
                             println("   Failed HTTP ${downloadResponse.statusCode()}")
@@ -95,4 +101,29 @@ fun main(args: Array<String>) {
         e.printStackTrace()
         exitProcess(1)
     }
+}
+
+private fun resolvePluginOutputPath(repoDirectory: Path, internalName: String): Path {
+    val invalidFilenameCharacters = "<>:\"|?*"
+    val deviceNames = setOf("CON", "PRN", "AUX", "NUL", "CONIN\$", "CONOUT\$")
+    val normalizedRepoDirectory = repoDirectory.toAbsolutePath().normalize()
+    val deviceName = internalName.substringBefore('.').uppercase(Locale.ROOT)
+
+    require(internalName.isNotBlank()) { "Plugin internalName must not be blank" }
+    require(internalName != "." && internalName != "..") { "Plugin internalName must be a filename component" }
+    require(internalName.none { it == '/' || it == '\\' || it.code < 0x20 || it in invalidFilenameCharacters }) {
+        "Plugin internalName must be a safe filename component: $internalName"
+    }
+    require(!internalName.endsWith('.') && !internalName.endsWith(' ')) {
+        "Plugin internalName cannot end in a dot or space: $internalName"
+    }
+    require(deviceName !in deviceNames && !deviceName.matches(Regex("(?:COM|LPT)[1-9]"))) {
+        "Plugin internalName is a reserved filename: $internalName"
+    }
+
+    val outputPath = normalizedRepoDirectory.resolve("$internalName.cs3").normalize()
+    require(outputPath.parent == normalizedRepoDirectory && outputPath.startsWith(normalizedRepoDirectory)) {
+        "Plugin output path escapes its repository directory: $internalName"
+    }
+    return outputPath
 }

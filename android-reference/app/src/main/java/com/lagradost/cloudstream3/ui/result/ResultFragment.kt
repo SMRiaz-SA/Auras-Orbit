@@ -63,6 +63,7 @@ data class ResultEpisode(
     @SerialName("airDate") val airDate: Long? = null,
     @SerialName("runTime") val runTime: Int? = null,
     @SerialName("seasonData") val seasonData: SeasonData? = null,
+    @SerialName("posterHeaders") val posterHeaders: Map<String, String>? = null,
 )
 
 fun ResultEpisode.getRealPosition(): Long {
@@ -101,6 +102,7 @@ fun buildResultEpisode(
     airDate: Long? = null,
     runTime: Int? = null,
     seasonData: SeasonData? = null,
+    posterHeaders: Map<String, String>? = null,
 ): ResultEpisode {
     val posDur = getViewPos(id)
     val videoWatchState = getVideoWatchState(id) ?: VideoWatchState.None
@@ -126,7 +128,8 @@ fun buildResultEpisode(
         totalEpisodeIndex = totalEpisodeIndex,
         airDate = airDate,
         runTime = runTime,
-        seasonData = seasonData
+        seasonData = seasonData,
+        posterHeaders = posterHeaders,
     )
 }
 

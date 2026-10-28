@@ -7,6 +7,7 @@ import android.app.Activity.RESULT_CANCELED
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.ContentValues
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -18,6 +19,7 @@ import android.media.tv.TvContract.Channels.COLUMN_INTERNAL_PROVIDER_ID
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -88,12 +90,97 @@ import com.lagradost.cloudstream3.utils.JsUnpacker.Companion.load
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import com.lagradost.cloudstream4.AppSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Cache
 import java.io.File
+import java.security.MessageDigest
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+
+internal data class ResumeWatchingSyncRequest(
+    val generation: Long,
+    val profileIdentity: String,
+)
+
+internal class ResumeWatchingSyncGate {
+    private var generation = 0L
+    private var latest: ResumeWatchingSyncRequest? = null
+
+    @Synchronized
+    fun begin(profileIdentity: String): ResumeWatchingSyncRequest {
+        val request = ResumeWatchingSyncRequest(++generation, profileIdentity)
+        latest = request
+        return request
+    }
+
+    @Synchronized
+    fun isCurrent(request: ResumeWatchingSyncRequest, profileIdentity: String): Boolean =
+        latest == request && request.profileIdentity == profileIdentity
+}
+
+internal data class WatchNextSnapshotRow(
+    val id: Long,
+    val internalProviderId: String?,
+    val intentUri: String?,
+    val packageName: String?,
+)
+
+internal data class WatchNextLegacyKey(val url: String, val hasEpisodeId: Boolean)
+
+internal data class WatchNextSnapshotIndex(
+    val stableRows: Map<String, WatchNextSnapshotRow>,
+    val legacyRows: Map<WatchNextLegacyKey, WatchNextSnapshotRow>,
+    val aurasRowIds: Set<Long>,
+)
+
+internal fun indexWatchNextSnapshot(
+    rows: List<WatchNextSnapshotRow>,
+    appPackageName: String,
+    resumeIntentPrefix: String,
+): WatchNextSnapshotIndex {
+    val stableRows = mutableMapOf<String, WatchNextSnapshotRow>()
+    val legacyRows = mutableMapOf<WatchNextLegacyKey, WatchNextSnapshotRow>()
+    val aurasIds = mutableSetOf<Long>()
+
+    rows.asSequence()
+        .filter { it.packageName == appPackageName }
+        .forEach { row ->
+            val internalId = row.internalProviderId.orEmpty()
+            val intent = row.intentUri.orEmpty()
+            val isStable = internalId.startsWith("auras:")
+            val isLegacyResume = intent.startsWith(resumeIntentPrefix)
+            val isLegacyRawUrl = internalId.isNotBlank() && intent == internalId
+            if (isStable || isLegacyResume || isLegacyRawUrl) aurasIds += row.id
+            if (isStable && internalId !in stableRows) stableRows[internalId] = row
+            when {
+                isLegacyResume -> {
+                    val key = WatchNextLegacyKey(internalId, hasEpisodeId = true)
+                    if (key !in legacyRows) legacyRows[key] = row
+                }
+                isLegacyRawUrl -> {
+                    val key = WatchNextLegacyKey(internalId, hasEpisodeId = false)
+                    if (key !in legacyRows) legacyRows[key] = row
+                }
+            }
+        }
+
+    return WatchNextSnapshotIndex(stableRows, legacyRows, aurasIds)
+}
 
 object AppContextUtils {
     fun RecyclerView.isRecyclerScrollable(): Boolean {
@@ -119,18 +206,6 @@ object AppContextUtils {
         }, 200)
     }
 
-    //fun Context.deleteFavorite(data: SearchResponse) {
-    //    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    //    safe {
-    //        val existingId =
-    //            getWatchNextProgramByVideoId(data.url, this).second ?: return@safe
-    //        contentResolver.delete(
-//
-    //            TvContractCompat.buildWatchNextProgramUri(existingId),
-    //            null, null
-    //        )
-    //    }
-    //}
     fun String?.html(): Spanned {
         return getHtmlText(this ?: return "".toSpanned())
     }
@@ -152,7 +227,9 @@ object AppContextUtils {
     private fun buildWatchNextProgramUri(
         context: Context,
         card: DataStoreHelper.ResumeWatchingResult,
-        resumeWatching: DownloadObjects.ResumeWatching?
+        resumeWatching: DownloadObjects.ResumeWatching?,
+        programId: String,
+        wideArtwork: Uri? = null,
     ): WatchNextProgram {
         val isSeries = card.type?.isMovieType() == false
         val title = if (isSeries) {
@@ -161,6 +238,8 @@ object AppContextUtils {
             card.name
         }
 
+        val episodePoster = card.episodePosterUrl?.takeIf(::isHttpArtworkUrl)
+        val poster = episodePoster ?: card.posterUrl?.takeIf(::isHttpArtworkUrl)
         val builder = WatchNextProgram.Builder()
             .setEpisodeTitle(title)
             .setType(
@@ -170,14 +249,26 @@ object AppContextUtils {
             )
             .setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE)
             .setTitle(title)
-            .setPosterArtUri(card.posterUrl?.toUri())
+            .setPosterArtAspectRatio(
+                if (wideArtwork == null) TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
+                else TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
+            )
             .setIntentUri((card.id?.let {
                 "$APP_STRING_RESUME_WATCHING://$it"
             } ?: card.url).toUri())
-            .setInternalProviderId(card.url)
+            .setInternalProviderId(programId)
             .setLastEngagementTimeUtcMillis(
                 resumeWatching?.updateTime ?: System.currentTimeMillis()
             )
+
+        (wideArtwork ?: poster?.toUri())?.let { imageUri ->
+            builder.setPosterArtUri(imageUri)
+        }
+        wideArtwork?.let { uri ->
+            builder
+                .setThumbnailUri(uri)
+                .setThumbnailAspectRatio(TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9)
+        }
 
         card.watchPos?.let {
             builder.setDurationMillis(it.duration.toInt())
@@ -273,7 +364,7 @@ object AppContextUtils {
 
         val cursor = context.contentResolver.query(
             TvContractCompat.WatchNextPrograms.CONTENT_URI,
-            WatchNextProgram.PROJECTION,
+            WatchNextProgram.PROJECTION + "package_name",
             /* selection = */ null,
             /* selectionArgs = */ null,
             /* sortOrder = */ null
@@ -290,80 +381,293 @@ object AppContextUtils {
         return null to null
     }
 
-    /**
-     * Query the Watch Next list and find the program with given videoId.
-     * Return null if not found.
-     */
+    /** Prevents concurrent Watch Next database replacements from racing. */
+    private val continueWatchingLock = Mutex()
+    private val watchNextArtworkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val resumeWatchingSyncGate = ResumeWatchingSyncGate()
+    private val watchNextArtworkBatchLock = Any()
+    private var watchNextArtworkBatchJob: Job? = null
+    private val watchNextArtworkLock = Any()
+    private val watchNextArtworkSequence = AtomicLong(0L)
+    private val watchNextArtworkVersions = ConcurrentHashMap<Long, Long>()
 
-    @RequiresApi(Build.VERSION_CODES.O)
-    @SuppressLint("Range")
-    @Synchronized
-    private fun getWatchNextProgramByVideoId(
-        id: String,
-        context: Context
-    ): Pair<WatchNextProgram?, Long?> {
-        return findFirstWatchNextProgram(context) { cursor ->
-            (cursor.getString(cursor.getColumnIndex(COLUMN_INTERNAL_PROVIDER_ID)) == id)
+    private data class WatchNextArtworkTarget(
+        val id: Long,
+        val card: DataStoreHelper.ResumeWatchingResult,
+        val version: Long,
+        val request: ResumeWatchingSyncRequest,
+    )
+
+    internal fun beginResumeWatchingSync(profileIdentity: String): ResumeWatchingSyncRequest {
+        val request = resumeWatchingSyncGate.begin(profileIdentity)
+        synchronized(watchNextArtworkBatchLock) {
+            watchNextArtworkBatchJob?.cancel()
+            watchNextArtworkBatchJob = null
         }
+        return request
     }
 
-    /** Prevents losing data when removing and adding simultaneously */
-    private val continueWatchingLock = Mutex()
+    internal fun isResumeWatchingSyncCurrent(
+        request: ResumeWatchingSyncRequest,
+        currentProfileIdentity: String,
+    ): Boolean = resumeWatchingSyncGate.isCurrent(request, currentProfileIdentity)
 
-    // https://github.com/googlearchive/leanback-homescreen-channels/blob/master/app/src/main/java/com/google/android/tvhomescreenchannels/SampleTvProvider.java
+    private fun nextWatchNextArtworkTarget(
+        id: Long,
+        card: DataStoreHelper.ResumeWatchingResult,
+        request: ResumeWatchingSyncRequest,
+    ): WatchNextArtworkTarget = synchronized(watchNextArtworkLock) {
+        val version = watchNextArtworkSequence.incrementAndGet()
+        watchNextArtworkVersions[id] = version
+        WatchNextArtworkTarget(id, card, version, request)
+    }
+
     @SuppressLint("RestrictedApi")
-    @Throws
     @WorkerThread
-    suspend fun Context.addProgramsToContinueWatching(data: List<DataStoreHelper.ResumeWatchingResult>) {
+    internal suspend fun Context.addProgramsToContinueWatching(
+        data: List<DataStoreHelper.ResumeWatchingResult>,
+        request: ResumeWatchingSyncRequest,
+    ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val context = this
-        continueWatchingLock.withLock {
-            // A way to get all last watched timestamps
+        val context = applicationContext
+        val artworkTargets = mutableListOf<WatchNextArtworkTarget>()
+        continueWatchingLock.lock()
+        try {
+            if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return
+            val snapshotRows = readWatchNextSnapshot(context)
+            if (snapshotRows == null) {
+                Log.w("WatchNext", "Could not read Watch Next rows; preserving current resume entries")
+                return
+            }
+            if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return
+            val snapshot = indexWatchNextSnapshot(
+                snapshotRows,
+                context.packageName,
+                "$APP_STRING_RESUME_WATCHING://",
+            )
+
             val timeStampHashMap = HashMap<Int, DownloadObjects.ResumeWatching>()
             getAllResumeStateIds()?.forEach { id ->
                 val lastWatched = getLastWatched(id) ?: return@forEach
                 timeStampHashMap[lastWatched.parentId] = lastWatched
             }
 
-            val currentProgramIds = data.mapNotNull { episodeInfo ->
+            val currentProgramIds = mutableSetOf<Long>()
+            var syncComplete = true
+            for (episodeInfo in data) {
+                currentCoroutineContext().ensureActive()
+                if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return
                 try {
-                    val customId = "${episodeInfo.id}|${episodeInfo.apiName}|${episodeInfo.url}"
-                    val (program, id) = getWatchNextProgramByVideoId(customId, context)
+                    val stableId = watchNextProviderId(episodeInfo)
+                    val existingRow = snapshot.stableRows[stableId]
+                        ?: snapshot.legacyRows[
+                            WatchNextLegacyKey(episodeInfo.url, hasEpisodeId = episodeInfo.id != null)
+                        ]
+                    val existingId = existingRow?.id
+                    // From this point onward the old row is protected, even if building or
+                    // updating its replacement fails.
+                    existingId?.let(currentProgramIds::add)
                     val nextProgram = buildWatchNextProgramUri(
                         context,
                         episodeInfo,
-                        timeStampHashMap[episodeInfo.id]
+                        episodeInfo.parentId?.let(timeStampHashMap::get),
+                        stableId,
                     )
 
-                    // If the program is already in the Watch Next row, update it
-                    if (program != null && id != null) {
+                    if (existingRow != null && existingId != null) {
+                        // Keep failed-to-update rows in the current set so cleanup never drops
+                        // a resume card simply because the system provider rejected an update.
                         PreviewChannelHelper(context).updateWatchNextProgram(
                             nextProgram,
-                            id,
+                            existingId,
                         )
-                        id
+                        artworkTargets += nextWatchNextArtworkTarget(existingId, episodeInfo, request)
                     } else {
-                        PreviewChannelHelper(context)
-                            .publishWatchNextProgram(nextProgram)
+                        val insertedId = PreviewChannelHelper(context).publishWatchNextProgram(nextProgram)
+                        if (insertedId >= 0L) {
+                            currentProgramIds += insertedId
+                            artworkTargets += nextWatchNextArtworkTarget(insertedId, episodeInfo, request)
+                        } else {
+                            syncComplete = false
+                        }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
+                    syncComplete = false
                     logError(e)
-                    null
                 }
-            }.toSet()
+            }
 
-            val allOldPrograms = getAllWatchNextPrograms(context) - currentProgramIds
+            if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return
+            if (syncComplete) {
+                // The snapshot already identifies every Auras row. Avoid rescanning the whole
+                // provider once per card and only delete after all lookups/writes succeeded.
+                for (id in snapshot.aurasRowIds - currentProgramIds) {
+                    currentCoroutineContext().ensureActive()
+                    if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return
+                    synchronized(watchNextArtworkLock) { watchNextArtworkVersions.remove(id) }
+                    try {
+                        context.contentResolver.delete(
+                            TvContractCompat.buildWatchNextProgramUri(id), null, null
+                        )
+                    } catch (e: Exception) {
+                        syncComplete = false
+                        logError(e)
+                    }
+                }
+            } else {
+                Log.w("WatchNext", "Resume reconciliation was incomplete; preserving untouched Watch Next rows")
+            }
 
-            // Ensures synced watch next progress by deleting all old programs.
-            allOldPrograms.forEach {
-                context.contentResolver.delete(
-                    TvContractCompat.buildWatchNextProgramUri(it),
-                    null, null
-                )
+            if (isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) {
+                queueWatchNextArtwork(context, artworkTargets)
+            }
+        } finally {
+            continueWatchingLock.unlock()
+        }
+    }
+
+    @SuppressLint("RestrictedApi")
+    private fun readWatchNextSnapshot(context: Context): List<WatchNextSnapshotRow>? {
+        return try {
+            val projection = arrayOf("_id", COLUMN_INTERNAL_PROVIDER_ID, "intent_uri", "package_name")
+            val cursor = context.contentResolver.query(
+                TvContractCompat.WatchNextPrograms.CONTENT_URI,
+                projection,
+                null,
+                null,
+                null,
+            ) ?: return null
+            cursor.use {
+                val idIndex = cursor.getColumnIndex("_id")
+                val internalIndex = cursor.getColumnIndex(COLUMN_INTERNAL_PROVIDER_ID)
+                val intentIndex = cursor.getColumnIndex("intent_uri")
+                val packageIndex = cursor.getColumnIndex("package_name")
+                if (idIndex < 0 || internalIndex < 0 || intentIndex < 0 || packageIndex < 0) return null
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            WatchNextSnapshotRow(
+                                id = cursor.getLong(idIndex),
+                                internalProviderId = if (cursor.isNull(internalIndex)) null else cursor.getString(internalIndex),
+                                intentUri = if (cursor.isNull(intentIndex)) null else cursor.getString(intentIndex),
+                                packageName = if (cursor.isNull(packageIndex)) null else cursor.getString(packageIndex),
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            Log.w("WatchNext", "Could not read Watch Next snapshot", error)
+            null
+        }
+    }
+
+    private fun queueWatchNextArtwork(
+        context: Context,
+        targets: List<WatchNextArtworkTarget>,
+    ) {
+        // HomeViewModel supplies the latest engagement first. Drain every published row in
+        // bounded batches so older Watch Next cards eventually receive the same wide treatment.
+        if (targets.isEmpty()) return
+        synchronized(watchNextArtworkBatchLock) {
+            watchNextArtworkBatchJob?.cancel()
+            val appContext = context.applicationContext
+            watchNextArtworkBatchJob = watchNextArtworkScope.launch {
+                for (batch in targets.chunked(WATCH_NEXT_ARTWORK_PARALLELISM)) {
+                    val request = batch.firstOrNull()?.request ?: continue
+                    if (!isResumeWatchingSyncCurrent(request, DataStoreHelper.currentAccount)) return@launch
+                    coroutineScope {
+                        batch.map { target ->
+                            async { updateWatchNextArtwork(appContext, target) }
+                        }.awaitAll()
+                    }
+                }
             }
         }
     }
 
+    private suspend fun updateWatchNextArtwork(
+        context: Context,
+        target: WatchNextArtworkTarget,
+    ) {
+        try {
+            if (!isResumeWatchingSyncCurrent(target.request, DataStoreHelper.currentAccount) ||
+                !isCurrentWatchNextArtworkTarget(target)
+            ) return
+
+            val card = target.card
+            val episodePoster = card.episodePosterUrl?.takeIf(::isHttpArtworkUrl)
+            val showPoster = card.posterUrl?.takeIf(::isHttpArtworkUrl)
+            if (episodePoster == null && showPoster == null) {
+                Log.w("WatchNext", "No provider poster for resume entry '${card.name}'; keeping its action and progress")
+                return
+            }
+
+            val episodeArt = episodePoster?.let { url ->
+                withTimeoutOrNull(WATCH_NEXT_ARTWORK_TIMEOUT_MS) {
+                    TvPreviewArtwork.thumbnailUri(context, url, card.episodePosterHeaders)
+                }
+            }
+            val artwork = episodeArt ?: showPoster?.let { url ->
+                withTimeoutOrNull(WATCH_NEXT_ARTWORK_TIMEOUT_MS) {
+                    TvPreviewArtwork.thumbnailUri(context, url, card.posterHeaders)
+                }
+            } ?: run {
+                Log.w("WatchNext", "Could not load provider poster for resume entry '${card.name}'")
+                return
+            }
+
+            if (!isResumeWatchingSyncCurrent(target.request, DataStoreHelper.currentAccount) ||
+                !isCurrentWatchNextArtworkTarget(target)
+            ) return
+
+            val values = ContentValues().apply {
+                put(TvContractCompat.WatchNextPrograms.COLUMN_POSTER_ART_URI, artwork.toString())
+                put(
+                    TvContractCompat.WatchNextPrograms.COLUMN_POSTER_ART_ASPECT_RATIO,
+                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                )
+                put(TvContractCompat.WatchNextPrograms.COLUMN_THUMBNAIL_URI, artwork.toString())
+                put(
+                    TvContractCompat.WatchNextPrograms.COLUMN_THUMBNAIL_ASPECT_RATIO,
+                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                )
+            }
+            synchronized(watchNextArtworkLock) {
+                if (isResumeWatchingSyncCurrent(target.request, DataStoreHelper.currentAccount) &&
+                    watchNextArtworkVersions[target.id] == target.version
+                ) {
+                    context.contentResolver.update(
+                        TvContractCompat.buildWatchNextProgramUri(target.id), values, null, null
+                    )
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            logError(error)
+        }
+    }
+
+    private fun isCurrentWatchNextArtworkTarget(target: WatchNextArtworkTarget): Boolean =
+        synchronized(watchNextArtworkLock) {
+            watchNextArtworkVersions[target.id] == target.version
+        }
+
+    private const val WATCH_NEXT_ARTWORK_PARALLELISM = 2
+    private const val WATCH_NEXT_ARTWORK_TIMEOUT_MS = 10_000L
+
+    private fun watchNextProviderId(card: DataStoreHelper.ResumeWatchingResult): String =
+        "auras:" + MessageDigest.getInstance("SHA-256")
+            .digest("${card.id}|${card.parentId}|${card.apiName}|${card.url}".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
+
+    private fun isHttpArtworkUrl(value: String): Boolean = runCatching {
+        val scheme = Uri.parse(value).scheme
+        scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
+    }.getOrDefault(false)
     /** Sort subtitles by names */
     fun sortSubs(subs: Set<SubtitleData>): List<SubtitleData> {
         // Be aware, sorting by "$originalName $nameSuffix" causes "a (b) 1" < "a 1",

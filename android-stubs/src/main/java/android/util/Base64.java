@@ -10,19 +10,43 @@ public class Base64 {
     public static final int NO_CLOSE = 16;
 
     public static byte[] decode(String str, int flags) {
-        if ((flags & URL_SAFE) != 0) {
-            return java.util.Base64.getUrlDecoder().decode(str);
-        } else {
-            return java.util.Base64.getDecoder().decode(str);
-        }
-    }
-
-    public static byte[] decode(byte[] input, int flags) {
+        byte[] input = withoutAsciiWhitespace(str.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         if ((flags & URL_SAFE) != 0) {
             return java.util.Base64.getUrlDecoder().decode(input);
         } else {
             return java.util.Base64.getDecoder().decode(input);
         }
+    }
+
+    public static byte[] decode(byte[] input, int flags) {
+        byte[] compactInput = withoutAsciiWhitespace(input);
+        if ((flags & URL_SAFE) != 0) {
+            return java.util.Base64.getUrlDecoder().decode(compactInput);
+        } else {
+            return java.util.Base64.getDecoder().decode(compactInput);
+        }
+    }
+
+    private static byte[] withoutAsciiWhitespace(byte[] input) {
+        int length = 0;
+        for (byte value : input) {
+            if (!isAsciiWhitespace(value)) {
+                length++;
+            }
+        }
+
+        byte[] compactInput = new byte[length];
+        int index = 0;
+        for (byte value : input) {
+            if (!isAsciiWhitespace(value)) {
+                compactInput[index++] = value;
+            }
+        }
+        return compactInput;
+    }
+
+    private static boolean isAsciiWhitespace(byte value) {
+        return value == ' ' || (value >= '\t' && value <= '\r');
     }
 
     public static String encodeToString(byte[] input, int flags) {

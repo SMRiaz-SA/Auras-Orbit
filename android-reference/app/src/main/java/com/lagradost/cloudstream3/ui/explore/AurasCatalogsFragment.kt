@@ -28,8 +28,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -62,7 +62,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Calendar
 
 /** Provider-backed catalog browsing with responsive phone and TV layouts. */
 class AurasCatalogsFragment : Fragment() {
@@ -308,20 +307,8 @@ private fun AurasCatalogsScreen(
     onRetryWatchlist: () -> Unit,
     onViewContinueWatching: () -> Unit,
 ) {
-    var selectedCatalogFilter by remember { mutableStateOf(AurasCatalogFilter.ALL) }
-    var selectedWatchStatus by remember { mutableStateOf(WatchType.WATCHING) }
-    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-    val filteredShelves = state.shelves.map { shelf ->
-        shelf.copy(
-            items = filterAurasCatalogItems(
-                items = shelf.items,
-                filter = selectedCatalogFilter,
-                currentYear = currentYear,
-                metadataOf = { it.toAurasCatalogMetadata() },
-            ),
-        )
-    }
-    val visibleProviderItems = filteredShelves.sumOf { it.items.size }
+    var selectedWatchStatus by rememberSaveable { mutableStateOf(WatchType.WATCHING) }
+    var watchlistsExpanded by rememberSaveable { mutableStateOf(false) }
     val watchStatusOptions = WatchType.entries.filter { it != WatchType.NONE }
 
     BoxWithConstraints(
@@ -396,75 +383,81 @@ private fun AurasCatalogsScreen(
                     onClick = onSourceClick,
                 )
             }
-            item(key = "catalog-filters") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AurasSectionHeading(stringResource(R.string.auras_catalog_filters_title))
+            item(key = "watchlists-heading") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AurasSectionHeading(
+                        title = stringResource(R.string.auras_watchlists_title),
+                        actionLabel = stringResource(
+                            if (watchlistsExpanded) R.string.auras_watchlists_collapse
+                            else R.string.auras_watchlists_expand,
+                        ),
+                        onAction = { watchlistsExpanded = !watchlistsExpanded },
+                    )
+                    if (!watchlistsExpanded) {
+                        val selectedCount = if (watchlistState.loading) "…"
+                        else watchlistState.items.count { it.status == selectedWatchStatus }.toString()
+                        Text(
+                            text = "${stringResource(selectedWatchStatus.stringRes)} · $selectedCount",
+                            color = AurasPalette.Muted,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+            if (watchlistsExpanded) {
+                item(key = "watchlists-status-filters") {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        items(AurasCatalogFilter.entries, key = { it.name }) { filter ->
+                        items(watchStatusOptions, key = { it.name }) { status ->
+                            val count = if (watchlistState.loading) "…"
+                            else watchlistState.items.count { it.status == status }.toString()
                             AurasSelectionChip(
-                                label = stringResource(filter.labelResource()),
-                                selected = selectedCatalogFilter == filter,
-                                onClick = { selectedCatalogFilter = filter },
+                                label = "${stringResource(status.stringRes)} · $count",
+                                selected = selectedWatchStatus == status,
+                                onClick = { selectedWatchStatus = status },
                             )
                         }
                     }
                 }
-            }
-            item(key = "watchlists-heading") {
-                AurasSectionHeading(stringResource(R.string.auras_watchlists_title))
-            }
-            item(key = "watchlists-status-filters") {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    items(watchStatusOptions, key = { it.name }) { status ->
-                            val count = if (watchlistState.loading) "…"
-                            else watchlistState.items.count { it.status == status }.toString()
-                        AurasSelectionChip(
-                                label = "${stringResource(status.stringRes)} · $count",
-                            selected = selectedWatchStatus == status,
-                            onClick = { selectedWatchStatus = status },
-                        )
-                    }
-                }
-            }
-            item(key = "watchlists-selected-status") {
-                when {
-                    watchlistState.loading -> Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        CircularProgressIndicator(color = AurasPalette.Accent)
-                    }
+                item(key = "watchlists-selected-status") {
+                    when {
+                        watchlistState.loading -> Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator(color = AurasPalette.Accent)
+                        }
 
-                    watchlistState.error != null -> Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Text(
-                            text = stringResource(R.string.auras_watchlists_load_error),
-                            color = AurasPalette.Ember,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                        )
-                        AurasQuietButton(stringResource(R.string.auras_watchlists_retry), onRetryWatchlist)
-                    }
-
-                    else -> {
-                        val selectedItems = filterAurasWatchlistItems(
-                            items = watchlistState.items,
-                            status = selectedWatchStatus,
-                            statusOf = { it.status },
-                        )
-                        if (selectedItems.isEmpty()) {
+                        watchlistState.error != null -> Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                             Text(
-                                text = stringResource(
-                                    R.string.auras_watchlists_empty,
-                                    stringResource(selectedWatchStatus.stringRes),
-                                ),
-                                color = AurasPalette.Muted,
+                                text = stringResource(R.string.auras_watchlists_load_error),
+                                color = AurasPalette.Ember,
                                 style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                             )
-                        } else {
-                            AurasWatchlistGrid(
-                                items = selectedItems.map { it.item },
-                                isTv = isTv,
-                                onOpen = onOpenTitle,
+                            AurasQuietButton(stringResource(R.string.auras_watchlists_retry), onRetryWatchlist)
+                        }
+
+                        else -> {
+                            val selectedItems = filterAurasWatchlistItems(
+                                items = watchlistState.items,
+                                status = selectedWatchStatus,
+                                statusOf = { it.status },
                             )
+                            if (selectedItems.isEmpty()) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.auras_watchlists_empty,
+                                        stringResource(selectedWatchStatus.stringRes),
+                                    ),
+                                    color = AurasPalette.Muted,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                )
+                            } else {
+                                AurasWatchlistGrid(
+                                    items = selectedItems.map { it.item },
+                                    isTv = isTv,
+                                    onOpen = onOpenTitle,
+                                )
+                            }
                         }
                     }
                 }
@@ -513,48 +506,18 @@ private fun AurasCatalogsScreen(
                     }
                 }
             }
-            if (visibleProviderItems == 0 && state.shelves.isNotEmpty() && !state.loading && state.error == null) {
-                item(key = "provider-catalogs-no-filter-matches") {
-                    Text(
-                        text = stringResource(R.string.auras_catalog_filter_empty),
-                        color = AurasPalette.Muted,
-                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
             items(
-                items = filteredShelves.filter {
+                items = state.shelves.filter {
                     it.items.isNotEmpty() || it.hasNext || it.pageError != null
                 },
                 key = { "catalog-${it.name}" },
             ) { shelf ->
-                if (shelf.items.isEmpty() && selectedCatalogFilter != AurasCatalogFilter.ALL && shelf.hasNext) {
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        AurasSectionHeading(
-                            title = shelf.name,
-                            actionLabel = stringResource(
-                                when {
-                                    shelf.isLoadingMore -> R.string.auras_catalog_loading_more
-                                    shelf.pageError != null -> R.string.auras_catalog_retry
-                                    else -> R.string.auras_catalog_more
-                                },
-                            ),
-                            onAction = if (shelf.isLoadingMore) null else ({ onExpand(shelf.name) }),
-                        )
-                        Text(
-                            text = stringResource(R.string.auras_catalog_filter_no_matches_loaded),
-                            color = AurasPalette.Muted,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                } else {
-                    AurasCatalogShelf(
-                        shelf = shelf,
-                        onOpen = onOpenTitle,
-                        onExpand = if (shelf.hasNext || shelf.items.size > AURAS_POSTER_RAIL_LIMIT) ({ onExpand(shelf.name) }) else null,
-                        posterWidth = if (isTv) 132.dp else 98.dp,
-                    )
-                }
+                AurasCatalogShelf(
+                    shelf = shelf,
+                    onOpen = onOpenTitle,
+                    onExpand = if (shelf.hasNext || shelf.items.size > AURAS_POSTER_RAIL_LIMIT) ({ onExpand(shelf.name) }) else null,
+                    posterWidth = if (isTv) 132.dp else 98.dp,
+                )
             }
         }
         AurasSourcePicker(
@@ -597,14 +560,6 @@ private fun AurasWatchlistGrid(
             }
         }
     }
-}
-
-private fun AurasCatalogFilter.labelResource(): Int = when (this) {
-    AurasCatalogFilter.ALL -> R.string.auras_catalog_filter_all
-    AurasCatalogFilter.MOVIES -> R.string.auras_catalog_filter_movies
-    AurasCatalogFilter.SERIES -> R.string.auras_catalog_filter_series
-    AurasCatalogFilter.ANIME -> R.string.auras_catalog_filter_anime
-    AurasCatalogFilter.NEW -> R.string.auras_catalog_filter_new
 }
 
 @Composable

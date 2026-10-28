@@ -2042,7 +2042,10 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
 
         main {
             val channelId =
-                TvChannelUtils.getChannelId(this@MainActivity, getString(R.string.app_name))
+                TvChannelUtils.getChannelId(
+                    this@MainActivity,
+                    getString(R.string.auras_tv_popular_channel_name),
+                )
             if (channelId == null) {
                 Log.d("TvChannel", "Channel not found, creating")
                 TvChannelUtils.createTvChannel(this@MainActivity)

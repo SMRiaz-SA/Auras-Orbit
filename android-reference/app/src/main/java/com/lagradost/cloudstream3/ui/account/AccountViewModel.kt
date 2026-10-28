@@ -13,6 +13,24 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper.getAccounts
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getDefaultAccount
 import com.lagradost.cloudstream3.utils.DataStoreHelper.setAccount
 
+internal fun rebindAccountHomepageBeforeReload(
+    selectAccountWithoutHomeReload: () -> Unit,
+    homepage: String?,
+    persistHomepage: (String?) -> Unit,
+    persistAccounts: () -> Unit,
+    reloadHome: () -> Unit,
+) {
+    selectAccountWithoutHomeReload()
+    persistHomepage(homepage)
+    persistAccounts()
+    reloadHome()
+}
+
+internal fun findAccountPositionByKey(
+    accounts: List<DataStoreHelper.Account>,
+    keyIndex: Int,
+): Int = accounts.indexOfFirst { it.keyIndex == keyIndex }
+
 class AccountViewModel : ViewModel() {
     private fun getAllAccounts(): List<DataStoreHelper.Account> {
         return context?.let { getAccounts(it) } ?: DataStoreHelper.accounts.toList()
@@ -56,13 +74,16 @@ class AccountViewModel : ViewModel() {
 
         val currentHomePage = DataStoreHelper.currentHomePage
 
-        setAccount(account)
-
-        DataStoreHelper.currentHomePage = currentHomePage
-        DataStoreHelper.accounts = currentAccounts.toTypedArray()
+        rebindAccountHomepageBeforeReload(
+            selectAccountWithoutHomeReload = { setAccount(account, reloadHome = false) },
+            homepage = currentHomePage,
+            persistHomepage = { DataStoreHelper.currentHomePage = it },
+            persistAccounts = { DataStoreHelper.accounts = currentAccounts.toTypedArray() },
+            reloadHome = { MainActivity.reloadHomeEvent(true) },
+        )
 
         _accounts.postValue(getAccounts(context))
-        _selectedKeyIndex.postValue(getAccounts(context).indexOf(account))
+        _selectedKeyIndex.postValue(findAccountPositionByKey(getAccounts(context), account.keyIndex))
         MainActivity.reloadAccountEvent(true)
     }
 
@@ -97,7 +118,7 @@ class AccountViewModel : ViewModel() {
     ) {
         if (reloadForActivity) {
             _accounts.postValue(getAccounts(context))
-            _selectedKeyIndex.postValue(getAccounts(context).indexOf(account))
+            _selectedKeyIndex.postValue(findAccountPositionByKey(getAccounts(context), account.keyIndex))
             MainActivity.reloadAccountEvent(true)
             return
         }
@@ -114,14 +135,14 @@ class AccountViewModel : ViewModel() {
                 if (pin == null) return@showPinInputDialog
                 // Pin is correct, proceed
                 _isAllowedLogin.postValue(true)
-                _selectedKeyIndex.postValue(getAccounts(context).indexOf(account))
+                _selectedKeyIndex.postValue(findAccountPositionByKey(getAccounts(context), account.keyIndex))
                 setAccount(account)
                 MainActivity.reloadAccountEvent(true)
             }
         } else {
             // No PIN set for the selected account, proceed
             _isAllowedLogin.postValue(true)
-            _selectedKeyIndex.postValue(getAccounts(context).indexOf(account))
+            _selectedKeyIndex.postValue(findAccountPositionByKey(getAccounts(context), account.keyIndex))
             setAccount(account)
             MainActivity.reloadAccountEvent(true)
         }

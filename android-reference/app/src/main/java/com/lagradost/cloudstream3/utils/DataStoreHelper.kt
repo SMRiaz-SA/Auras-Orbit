@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.utils
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
@@ -21,6 +22,7 @@ import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.ui.WatchType
@@ -31,6 +33,8 @@ import com.lagradost.cloudstream3.ui.result.EpisodeSortType
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import com.lagradost.cloudstream3.ui.result.VideoWatchState
 import com.lagradost.cloudstream3.utils.AppContextUtils.filterProviderByPreferredMedia
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 import com.lagradost.cloudstream3.utils.serializers.WriteOnlySerializer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,9 +44,13 @@ import kotlinx.serialization.KeepGeneratedSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import java.security.MessageDigest
 import java.util.Calendar
 import java.util.Date
 import java.util.GregorianCalendar
+import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -60,6 +68,47 @@ const val RESULT_SEASON = "result_season"
 const val RESULT_DUB = "result_dub"
 const val KEY_RESULT_SORT = "result_sort"
 const val USER_PINNED_PROVIDERS = "user_pinned_providers" // Key for pinned user set
+
+internal fun resolveResumeMetadata(
+    currentEpisode: Any?,
+    nextEpisode: Any?,
+    shouldAdvance: Boolean,
+    isNextEpisodeKnown: Boolean,
+): Any? = when {
+    !shouldAdvance -> currentEpisode
+    nextEpisode != null -> nextEpisode
+    !isNextEpisodeKnown -> currentEpisode
+    else -> null
+}
+
+internal fun normalizeAccountProfileIds(
+    accounts: List<DataStoreHelper.Account>,
+    createProfileId: () -> String = { UUID.randomUUID().toString() },
+): List<DataStoreHelper.Account> = accounts.map { account ->
+    val profileId = normalizeProfileId(account.profileId) ?: createProfileId()
+    account.copy(profileId = profileId)
+}
+
+internal fun reconcileAccountProfileIds(
+    existingAccounts: List<DataStoreHelper.Account>,
+    requestedAccounts: List<DataStoreHelper.Account>,
+    createProfileId: () -> String = { UUID.randomUUID().toString() },
+): List<DataStoreHelper.Account> = requestedAccounts.map { account ->
+    val previousProfileId = existingAccounts
+        .firstOrNull { it.keyIndex == account.keyIndex }
+        ?.profileId
+        ?.let(::normalizeProfileId)
+    val profileId = previousProfileId
+        ?: normalizeProfileId(account.profileId)
+        ?: createProfileId()
+    account.copy(profileId = profileId)
+}
+
+internal fun normalizeProfileId(profileId: String): String? =
+    runCatching { UUID.fromString(profileId).toString() }.getOrNull()
+
+internal fun getOrCreateProfileId(existingProfileId: String?, createProfileId: () -> String): String =
+    existingProfileId?.let(::normalizeProfileId) ?: createProfileId()
 
 class UserPreferenceDelegate<T : Any>(
     private val key: String,
@@ -84,6 +133,26 @@ class UserPreferenceDelegate<T : Any>(
 }
 
 object DataStoreHelper {
+    private const val CAST_EPISODE_POSTER_HEADERS = "cast_episode_poster_headers_v3"
+    private const val MAX_CAST_EPISODE_HEADER_RECORDS = 5_000
+    private const val MAX_CAST_EPISODE_HEADER_BYTES = 512 * 1024
+    private const val MAX_CAST_EPISODE_HEADER_PAIRS = 20_000
+    private const val MAX_CAST_EPISODE_HEADER_TEXT_CHARS = 64 * 1024
+    private const val MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES = 16
+    private const val MAX_CAST_EPISODE_HEADER_CACHE_BYTES = 4 * 1024 * 1024
+    private const val CAST_EPISODE_HEADERS_MAX_AGE_MS = 30L * 24L * 60L * 60L * 1000L
+
+    @Serializable
+    private data class CastEpisodePosterHeaders(
+        @JsonProperty("headersByEpisodeId") @SerialName("headersByEpisodeId")
+        val headersByEpisodeId: Map<String, Map<String, String>>,
+        @JsonProperty("updatedAt") @SerialName("updatedAt") val updatedAt: Long,
+        @JsonProperty("profileToken") @SerialName("profileToken") val profileToken: String,
+    )
+
+    private val castEpisodePosterHeadersCache = ConcurrentHashMap<String, CastEpisodePosterHeaders>()
+    private val castEpisodePosterHeadersWriteLock = Any()
+
     // be aware, don't change the index of these as Account uses the index for the art
     val profileImages = arrayOf(
         R.drawable.profile_bg_dark_blue,
@@ -174,6 +243,7 @@ object DataStoreHelper {
         @JsonProperty("customImage") @SerialName("customImage") val customImage: String? = null,
         @JsonProperty("defaultImageIndex") @SerialName("defaultImageIndex") val defaultImageIndex: Int,
         @JsonProperty("lockPin") @SerialName("lockPin") val lockPin: String? = null,
+        @JsonProperty("profileId") @SerialName("profileId") val profileId: String = "",
     ) {
         @get:JsonIgnore
         val image get() = customImage?.let { UiImage.Image(it) } ?:
@@ -183,9 +253,55 @@ object DataStoreHelper {
     }
 
     const val TAG = "data_store_helper"
-    var accounts by PreferenceDelegate("$TAG/account", arrayOf<Account>())
+    private const val ACCOUNTS_PREFERENCE = "$TAG/account"
+    private const val DEFAULT_PROFILE_ID_PREFERENCE = "$TAG/default_profile_id"
+    private val accountProfilePersistenceLock = Any()
+    @Volatile private var cachedDefaultProfileId: String? = null
+
+    var accounts: Array<Account>
+        get() = synchronized(accountProfilePersistenceLock) {
+            val stored = readStoredAccounts()
+            val normalized = normalizeAccountProfileIds(stored.toList())
+            if (!stored.contentEquals(normalized.toTypedArray())) {
+                setKeyClass(ACCOUNTS_PREFERENCE, normalized.toTypedArray())
+            }
+            normalized.toTypedArray()
+        }
+        set(value) = synchronized(accountProfilePersistenceLock) {
+            val existing = readStoredAccounts()
+            val normalized = reconcileAccountProfileIds(existing.toList(), value.toList())
+            setKeyClass(ACCOUNTS_PREFERENCE, normalized.toTypedArray())
+        }
+
+    private fun readStoredAccounts(): Array<Account> =
+        getKeyClass(ACCOUNTS_PREFERENCE, arrayOf<Account>().javaClass) ?: emptyArray()
+
     var selectedKeyIndex by PreferenceDelegate("$TAG/account_key_index", 0)
     val currentAccount: String get() = selectedKeyIndex.toString()
+
+    fun getCurrentAccountProfileToken(): String =
+        getAccountProfileToken(selectedKeyIndex) ?: hashProfileToken("missing:$selectedKeyIndex")
+
+    private fun getAccountProfileToken(keyIndex: Int): String? {
+        val account = accounts.firstOrNull { it.keyIndex == keyIndex }
+        return account?.profileId?.let(::normalizeProfileId)
+            ?: if (keyIndex == 0) getOrCreateDefaultProfileId() else null
+    }
+
+    private fun getOrCreateDefaultProfileId(): String = synchronized(accountProfilePersistenceLock) {
+        val persisted = getKey<String>(DEFAULT_PROFILE_ID_PREFERENCE)
+        val profileId = getOrCreateProfileId(persisted ?: cachedDefaultProfileId) {
+            UUID.randomUUID().toString()
+        }
+        cachedDefaultProfileId = profileId
+        if (persisted != profileId) setKey(DEFAULT_PROFILE_ID_PREFERENCE, profileId)
+        profileId
+    }
+
+    private fun hashProfileToken(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
 
     private val _selectedAccountNumberFlow = MutableStateFlow(0)
     /** What account instance we are on, this number changes whenever anything about local accounts changes */
@@ -206,19 +322,16 @@ object DataStoreHelper {
             }
         }
 
-    fun setAccount(account: Account) {
-        val homepage = currentHomePage
+    fun setAccount(account: Account, reloadHome: Boolean = true) {
         selectedKeyIndex = account.keyIndex
         AccountManager.updateAccountIds()
         showToast(context?.getString(R.string.logged_account, account.name) ?: account.name)
         MainActivity.bookmarksUpdatedEvent(true)
         MainActivity.reloadLibraryEvent(true)
-        val oldAccount = accounts.find { it.keyIndex == account.keyIndex }
-        if (oldAccount != null && currentHomePage != homepage) {
-            // This is not a new account, and the homepage has changed, reload it
-            MainActivity.reloadHomeEvent(true)
-        }
         _selectedAccountNumberFlow.value += 1
+        // Reissue the page request for every selected profile. Even when the source name
+        // matches, HomeViewModel binds requests to a profile identity and invalidates old work.
+        if (reloadHome) MainActivity.reloadHomeEvent(true)
     }
 
     fun getDefaultAccount(context: Context): Account {
@@ -227,6 +340,7 @@ object DataStoreHelper {
                 keyIndex = 0,
                 name = context.getString(R.string.default_account),
                 defaultImageIndex = 0,
+                profileId = getOrCreateDefaultProfileId(),
             )
         }
     }
@@ -518,6 +632,9 @@ object DataStoreHelper {
         @JsonProperty("quality") @SerialName("quality") override var quality: SearchQuality? = null,
         @JsonProperty("posterHeaders") @SerialName("posterHeaders") override var posterHeaders: Map<String, String>? = null,
         @JsonProperty("score") @SerialName("score") override var score: Score? = null,
+        @JsonProperty("episodePosterUrl") @SerialName("episodePosterUrl") val episodePosterUrl: String? = null,
+        @JsonProperty("episodePosterHeaders") @SerialName("episodePosterHeaders")
+        val episodePosterHeaders: Map<String, String>? = null,
     ) : SearchResponse
 
     /**
@@ -583,6 +700,8 @@ object DataStoreHelper {
         season: Int?,
         isFromDownload: Boolean = false,
         updateTime: Long? = null,
+        episodePoster: String? = null,
+        episodePosterHeaders: Map<String, String>? = null,
     ) {
         if (parentId == null) return
         setKey(
@@ -595,6 +714,8 @@ object DataStoreHelper {
                 season,
                 updateTime ?: System.currentTimeMillis(),
                 isFromDownload,
+                episodePoster,
+                episodePosterHeaders,
             )
         )
     }
@@ -616,6 +737,345 @@ object DataStoreHelper {
             id.toString(),
         )
     }
+
+    /** Store one bounded header map per series so Cast metadata never carries provider headers. */
+    fun cacheCastEpisodePosterHeaders(
+        accountId: String,
+        profileToken: String,
+        apiName: String,
+        episodes: List<ResultEpisode>,
+        isRequestCurrent: () -> Boolean,
+    ): Boolean {
+        if (!isRequestCurrent()) return false
+        if (episodes.size > MAX_CAST_EPISODE_HEADER_RECORDS) return false
+
+        val now = System.currentTimeMillis()
+        val episodesByParent = episodes.groupBy { it.parentId }
+        if (episodesByParent.size > MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES) return false
+        val pendingRecords = LinkedHashMap<String, CastEpisodePosterHeaders>(episodesByParent.size)
+        var totalSerializedBytes = 0L
+
+        for ((parentId, seriesEpisodes) in episodesByParent) {
+            val headersByEpisodeId = HashMap<String, Map<String, String>>()
+            var headerPairCount = 0
+            var headerTextChars = 0L
+            for (episode in seriesEpisodes) {
+                val headers = episode.posterHeaders?.takeIf { it.isNotEmpty() } ?: continue
+                headerPairCount += headers.size
+                if (headerPairCount > MAX_CAST_EPISODE_HEADER_PAIRS) return false
+                for ((key, value) in headers) {
+                    headerTextChars += key.length.toLong() + value.length.toLong()
+                    if (headerTextChars > MAX_CAST_EPISODE_HEADER_TEXT_CHARS) return false
+                }
+                headersByEpisodeId[episode.id.toString()] = headers.toMap()
+            }
+            if (headersByEpisodeId.size > MAX_CAST_EPISODE_HEADER_RECORDS) return false
+
+            val seriesKey = castEpisodePosterHeadersKey(apiName, parentId)
+            val record = CastEpisodePosterHeaders(headersByEpisodeId, now, profileToken)
+            val serializedBytes = record.toJson().toByteArray(Charsets.UTF_8).size
+            if (serializedBytes > MAX_CAST_EPISODE_HEADER_BYTES) return false
+            totalSerializedBytes += serializedBytes
+            if (totalSerializedBytes > MAX_CAST_EPISODE_HEADER_BYTES) return false
+            pendingRecords[seriesKey] = record
+        }
+
+        val preferences = context?.getSharedPrefs() ?: return false
+        return synchronized(castEpisodePosterHeadersWriteLock) {
+            if (!isRequestCurrent()) return@synchronized false
+            val existingPaths = preferences.all.keys.filter(::isCastEpisodePosterHeaderPath)
+            val protectedPaths = pendingRecords.keys
+                .map { "$accountId/$CAST_EPISODE_POSTER_HEADERS/$it" }
+                .toHashSet()
+            val recordsByPath = LinkedHashMap<String, Pair<String, CastEpisodePosterHeaders>>()
+            val serializedBytesByPath = HashMap<String, Long>()
+            val pathsToRemove = LinkedHashSet<String>()
+
+            // Cache pruning runs on the IO caller. If old versions left an oversized cache,
+            // retain only this sequence's protected records rather than parsing an unbounded set.
+            if (existingPaths.size <= MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES) {
+                for (path in existingPaths) {
+                    val seriesKey = path.substringAfterLast('/')
+                    if (path in protectedPaths) continue
+                    val record = readCastEpisodePosterHeaders(preferences, path)
+                    val pathAccountId = path.substringBefore('/')
+                    val pathProfileToken = pathAccountId.toIntOrNull()?.let(::getAccountProfileToken)
+                    if (record == null || !record.isFresh() || pathProfileToken == null ||
+                        record.profileToken != pathProfileToken
+                    ) {
+                        pathsToRemove.add(path)
+                    } else {
+                        recordsByPath[path] = seriesKey to record
+                        serializedBytesByPath[path] = record.toJson().toByteArray(Charsets.UTF_8).size.toLong()
+                    }
+                }
+            } else {
+                pathsToRemove.addAll(existingPaths.filterNot(protectedPaths::contains))
+            }
+
+            val folder = "$accountId/$CAST_EPISODE_POSTER_HEADERS"
+            for ((seriesKey, record) in pendingRecords) {
+                val path = "$folder/$seriesKey"
+                recordsByPath[path] = seriesKey to record
+                serializedBytesByPath[path] = record.toJson().toByteArray(Charsets.UTF_8).size.toLong()
+            }
+
+            fun retainedCacheBytes(): Long = recordsByPath.keys.sumOf { path ->
+                serializedBytesByPath.getValue(path) + path.toByteArray(Charsets.UTF_8).size
+            }
+
+            while (recordsByPath.size > MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES ||
+                retainedCacheBytes() > MAX_CAST_EPISODE_HEADER_CACHE_BYTES
+            ) {
+                val oldestUnprotected = recordsByPath.entries
+                    .asSequence()
+                    .filterNot { it.key in protectedPaths }
+                    .minByOrNull { it.value.second.updatedAt }
+                    ?: return@synchronized false
+                recordsByPath.remove(oldestUnprotected.key)
+                serializedBytesByPath.remove(oldestUnprotected.key)
+                pathsToRemove.add(oldestUnprotected.key)
+            }
+
+            // A newer start/profile must not be overwritten by work that completed late.
+            if (!isRequestCurrent()) return@synchronized false
+            val editor = preferences.edit()
+            pathsToRemove.forEach { path -> editor.remove(path) }
+            for ((seriesKey, record) in pendingRecords) {
+                editor.putString("$folder/$seriesKey", record.toJson())
+            }
+            if (!editor.commit()) return@synchronized false
+
+            pathsToRemove.forEach { path ->
+                removeCastEpisodePosterHeaderMemoryPath(path)
+            }
+            pendingRecords.forEach { (seriesKey, record) ->
+                castEpisodePosterHeadersCache[castEpisodePosterHeadersCacheKey(accountId, profileToken, seriesKey)] = record
+            }
+            pruneCastEpisodePosterHeaderMemoryCache()
+            true
+        }
+    }
+
+    /** Remove stale cached headers when the current sequence's optional header cache cannot fit. */
+    fun clearCastEpisodePosterHeaders(
+        accountId: String,
+        profileToken: String,
+        apiName: String,
+        episodes: List<ResultEpisode>,
+        isRequestCurrent: () -> Boolean,
+    ) {
+        val seriesKeys = episodes.map { castEpisodePosterHeadersKey(apiName, it.parentId) }.toSet()
+        if (seriesKeys.isEmpty()) return
+
+        val folder = "$accountId/$CAST_EPISODE_POSTER_HEADERS"
+        val preferences = context?.getSharedPrefs() ?: return
+        synchronized(castEpisodePosterHeadersWriteLock) {
+            if (!isRequestCurrent()) return
+            val paths = seriesKeys.map { "$folder/$it" }
+                .filter { path -> readCastEpisodePosterHeaders(preferences, path)?.profileToken == profileToken }
+            val editor = preferences.edit()
+            paths.forEach { editor.remove(it) }
+            if (!isRequestCurrent()) return
+            if (!editor.commit()) {
+                logError(IllegalStateException("Could not clear stale Cast poster header cache records."))
+            }
+            seriesKeys.forEach { seriesKey ->
+                castEpisodePosterHeadersCache.remove(
+                    castEpisodePosterHeadersCacheKey(accountId, profileToken, seriesKey),
+                )
+            }
+        }
+    }
+
+    /** Prune expired and over-budget records across all profiles before restoring a sequence. */
+    fun pruneCastEpisodePosterHeaderCache(
+        protectedAccountId: String,
+        protectedProfileToken: String,
+        apiName: String,
+        protectedParentIds: List<Int>,
+    ) {
+        val preferences = context?.getSharedPrefs() ?: return
+        val protectedFolder = "$protectedAccountId/$CAST_EPISODE_POSTER_HEADERS"
+        val protectedPaths = protectedParentIds.map { parentId ->
+            "$protectedFolder/${castEpisodePosterHeadersKey(apiName, parentId)}"
+        }.toSet()
+        synchronized(castEpisodePosterHeadersWriteLock) {
+            val paths = preferences.all.keys.filter(::isCastEpisodePosterHeaderPath)
+            val records = LinkedHashMap<String, CastEpisodePosterHeaders>()
+            val serializedBytes = HashMap<String, Long>()
+            val pathsToRemove = LinkedHashSet<String>()
+
+            if (paths.size <= MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES) {
+                for (path in paths) {
+                    val record = readCastEpisodePosterHeaders(preferences, path)
+                    val profileToken = path.substringBefore('/').toIntOrNull()?.let(::getAccountProfileToken)
+                    if (record == null || !record.isFresh() || profileToken == null ||
+                        record.profileToken != profileToken
+                    ) {
+                        pathsToRemove.add(path)
+                    } else {
+                        records[path] = record
+                        serializedBytes[path] = record.toJson().toByteArray(Charsets.UTF_8).size.toLong()
+                    }
+                }
+            } else {
+                pathsToRemove.addAll(paths.filterNot(protectedPaths::contains))
+                for (path in paths.filter(protectedPaths::contains)) {
+                    readCastEpisodePosterHeaders(preferences, path)?.let { record ->
+                        if (record.isFresh() && record.profileToken == protectedProfileToken) {
+                            records[path] = record
+                            serializedBytes[path] = record.toJson().toByteArray(Charsets.UTF_8).size.toLong()
+                        } else {
+                            pathsToRemove.add(path)
+                        }
+                    } ?: pathsToRemove.add(path)
+                }
+            }
+
+            while (records.size > MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES ||
+                records.keys.sumOf { path ->
+                    serializedBytes.getValue(path) + path.toByteArray(Charsets.UTF_8).size
+                } > MAX_CAST_EPISODE_HEADER_CACHE_BYTES
+            ) {
+                val oldest = records.entries
+                    .asSequence()
+                    .filterNot { it.key in protectedPaths }
+                    .minByOrNull { it.value.updatedAt }
+                    ?: return
+                records.remove(oldest.key)
+                serializedBytes.remove(oldest.key)
+                pathsToRemove.add(oldest.key)
+            }
+
+            if (pathsToRemove.isNotEmpty()) {
+                val editor = preferences.edit()
+                pathsToRemove.forEach { editor.remove(it) }
+                if (!editor.commit()) {
+                    logError(IllegalStateException("Could not prune Cast poster header cache records."))
+                    return
+                }
+                pathsToRemove.forEach(::removeCastEpisodePosterHeaderMemoryPath)
+            }
+        }
+    }
+
+    /** Load a series header map on a worker before using it to restore Cast episode metadata. */
+    fun preloadCachedCastEpisodePosterHeaders(
+        accountId: String,
+        profileToken: String,
+        apiName: String,
+        parentId: Int,
+    ): Boolean {
+        val seriesKey = castEpisodePosterHeadersKey(apiName, parentId)
+        val cacheKey = castEpisodePosterHeadersCacheKey(accountId, profileToken, seriesKey)
+        if (castEpisodePosterHeadersCache[cacheKey]?.let { it.isFresh() && it.profileToken == profileToken } == true) {
+            return true
+        }
+
+        val preferences = context?.getSharedPrefs() ?: return false
+        return synchronized(castEpisodePosterHeadersWriteLock) {
+            if (castEpisodePosterHeadersCache[cacheKey]?.let { it.isFresh() && it.profileToken == profileToken } == true) {
+                return@synchronized true
+            }
+            val path = "$accountId/$CAST_EPISODE_POSTER_HEADERS/$seriesKey"
+            val record = readCastEpisodePosterHeaders(preferences, path)
+            if (record == null || !record.isFresh() || record.profileToken != profileToken) {
+                if (record != null) {
+                    preferences.edit().remove(path).commit()
+                }
+                castEpisodePosterHeadersCache.remove(cacheKey)
+                return@synchronized false
+            }
+
+            castEpisodePosterHeadersCache[cacheKey] = record
+            pruneCastEpisodePosterHeaderMemoryCache()
+            true
+        }
+    }
+
+    fun getCachedCastEpisodePosterHeaders(
+        accountId: String,
+        profileToken: String,
+        apiName: String,
+        parentId: Int,
+        episodeId: Int,
+    ): Map<String, String>? {
+        val seriesKey = castEpisodePosterHeadersKey(apiName, parentId)
+        val record = castEpisodePosterHeadersCache[
+            castEpisodePosterHeadersCacheKey(accountId, profileToken, seriesKey),
+        ]
+            ?: return null
+        return record.headersByEpisodeId[episodeId.toString()].takeIf {
+            record.isFresh() && record.profileToken == profileToken
+        }
+    }
+
+    private fun pruneCastEpisodePosterHeaderMemoryCache() {
+        val entries = castEpisodePosterHeadersCache.entries
+            .map { it.key to it.value }
+            .sortedBy { it.second.updatedAt }
+        var totalBytes = entries.sumOf { (key, record) ->
+            record.toJson().toByteArray(Charsets.UTF_8).size.toLong() +
+                key.toByteArray(Charsets.UTF_8).size
+        }
+        var remainingEntries = entries.size
+        for ((key, record) in entries) {
+            if (remainingEntries <= MAX_CAST_EPISODE_HEADER_CACHE_ENTRIES &&
+                totalBytes <= MAX_CAST_EPISODE_HEADER_CACHE_BYTES
+            ) break
+            if (castEpisodePosterHeadersCache.remove(key, record)) {
+                remainingEntries--
+                totalBytes -= record.toJson().toByteArray(Charsets.UTF_8).size.toLong() +
+                    key.toByteArray(Charsets.UTF_8).size
+            }
+        }
+    }
+
+    private fun CastEpisodePosterHeaders.isFresh(): Boolean =
+        System.currentTimeMillis() - updatedAt <= CAST_EPISODE_HEADERS_MAX_AGE_MS
+
+    private fun readCastEpisodePosterHeaders(
+        preferences: SharedPreferences,
+        path: String,
+    ): CastEpisodePosterHeaders? {
+        val raw = preferences.getString(path, null) ?: return null
+        if (raw.length > MAX_CAST_EPISODE_HEADER_BYTES ||
+            raw.toByteArray(Charsets.UTF_8).size > MAX_CAST_EPISODE_HEADER_BYTES
+        ) {
+            return null
+        }
+        return runCatching { getKey<CastEpisodePosterHeaders>(path) }.getOrNull()
+    }
+
+    private fun castEpisodePosterHeadersCacheKey(
+        accountId: String,
+        profileToken: String,
+        seriesKey: String,
+    ): String = "$accountId/$CAST_EPISODE_POSTER_HEADERS/$profileToken/$seriesKey"
+
+    private fun isCastEpisodePosterHeaderPath(path: String): Boolean {
+        val parts = path.split('/')
+        return parts.size == 3 &&
+            parts[0].toIntOrNull() != null &&
+            parts[1] == CAST_EPISODE_POSTER_HEADERS &&
+            parts[2].length == 64 &&
+            parts[2].all { it in '0'..'9' || it in 'a'..'f' }
+    }
+
+    private fun removeCastEpisodePosterHeaderMemoryPath(path: String) {
+        val parts = path.split('/')
+        if (parts.size != 3) return
+        val prefix = "${parts[0]}/$CAST_EPISODE_POSTER_HEADERS/"
+        castEpisodePosterHeadersCache.keys
+            .filter { it.startsWith(prefix) && it.endsWith("/${parts[2]}") }
+            .forEach { key -> castEpisodePosterHeadersCache.remove(key) }
+    }
+
+    private fun castEpisodePosterHeadersKey(apiName: String, parentId: Int): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest("$apiName|$parentId".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(Locale.ROOT, it.toInt() and 0xff) }
 
     private fun getLastWatchedOld(id: Int?): DownloadObjects.ResumeWatching? {
         if (id == null) return null
@@ -707,10 +1167,19 @@ object DataStoreHelper {
     }
 
     /**
-     * Sets the position, duration, and resume data of an episode/movie,
-     * If nextEpisode is not specified it will not be able to set the next episode as resumable if progress > NEXT_WATCH_EPISODE_PERCENTAGE
+     * Sets the position, duration, and resume data of an episode/movie.
+     * When the next episode is unknown, progress past the resume threshold stays on the current episode.
+     * A known null next episode means the current episode is final and may remove its resume entry.
      */
-    fun setViewPosAndResume(id: Int?, position: Long, duration: Long, currentEpisode: Any?, nextEpisode: Any?) {
+    fun setViewPosAndResume(
+        id: Int?,
+        position: Long,
+        duration: Long,
+        currentEpisode: Any?,
+        nextEpisode: Any?,
+        isNextEpisodeKnown: Boolean = true,
+    ) {
+        if (duration <= 0L || position < 0L) return
         setViewPos(id, position, duration)
         if (id != null) {
             when (val meta = currentEpisode) {
@@ -724,8 +1193,8 @@ object DataStoreHelper {
 
         val percentage = position * 100L / duration
         val nextEp = percentage >= NEXT_WATCH_EPISODE_PERCENTAGE
-        val resumeMeta = if (nextEp) nextEpisode else currentEpisode
-        if (resumeMeta == null && nextEp) {
+        val resumeMeta = resolveResumeMetadata(currentEpisode, nextEpisode, nextEp, isNextEpisodeKnown)
+        if (resumeMeta == null && nextEp && isNextEpisodeKnown) {
             // remove last watched as it is the last episode and you have watched too much
             when (val newMeta = currentEpisode) {
                 is ResultEpisode -> {
@@ -746,6 +1215,8 @@ object DataStoreHelper {
                         resumeMeta.episode,
                         resumeMeta.season,
                         isFromDownload = false,
+                        episodePoster = resumeMeta.poster,
+                        episodePosterHeaders = resumeMeta.posterHeaders,
                     )
                 }
 

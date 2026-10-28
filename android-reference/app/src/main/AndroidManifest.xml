@@ -292,6 +292,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
+
+        <!-- The TV launcher reads only generated provider-art thumbnails from this provider. -->
+        <provider
+            android:name=".utils.TvPreviewArtworkProvider"
+            android:authorities="${applicationId}.tvpreviewart"
+            android:enabled="true"
+            android:exported="true"
+            android:grantUriPermissions="false" />
     </application>
     
 </manifest>

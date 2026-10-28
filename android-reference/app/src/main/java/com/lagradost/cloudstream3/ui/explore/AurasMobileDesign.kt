@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import com.lagradost.cloudstream3.AnimeSearchResponse
@@ -269,7 +271,9 @@ internal fun AurasPosterRail(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (!title.isNullOrBlank()) AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-            itemsIndexed(visibleItems, key = { _, item -> item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}" }) { index, item ->
+            itemsIndexed(visibleItems, key = { index, item ->
+                aurasUniqueLazyKey(item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}", index)
+            }) { index, item ->
                 AurasPosterCard(
                     item = item,
                     width = posterWidth,
@@ -282,6 +286,9 @@ internal fun AurasPosterRail(
     }
 }
 
+/** Provider identities can repeat across the initial catalog and later pages. */
+internal fun aurasUniqueLazyKey(identity: String, index: Int): String = "auras-item:$index:$identity"
+
 internal const val AURAS_POSTER_RAIL_LIMIT = 30
 
 @Composable
@@ -293,11 +300,12 @@ internal fun AurasResumeHero(
     focusRequester: FocusRequester? = null,
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val episode = (item as? DataStoreHelper.ResumeWatchingResult)?.let { resume ->
+    val resume = item as? DataStoreHelper.ResumeWatchingResult
+    val episode = resume?.let {
         when {
-            resume.season != null && resume.episode != null ->
-                stringResource(R.string.auras_resume_season_episode, resume.season, resume.episode)
-            resume.episode != null -> stringResource(R.string.auras_resume_episode, resume.episode)
+            it.season != null && it.episode != null ->
+                stringResource(R.string.auras_resume_season_episode, it.season, it.episode)
+            it.episode != null -> stringResource(R.string.auras_resume_episode, it.episode)
             else -> null
         }
     }
@@ -307,7 +315,6 @@ internal fun AurasResumeHero(
         episode?.let(::add)
         percentage?.let { add("$it% watched") }
     }.joinToString(", ")
-    val posterWidth = if (isTv) 150.dp else 106.dp
     val shape = RoundedCornerShape(if (isTv) 26.dp else 22.dp)
 
     Card(
@@ -324,30 +331,63 @@ internal fun AurasResumeHero(
             .onFocusChanged { isFocused = it.isFocused }
             .semantics(mergeDescendants = true) { contentDescription = description },
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .background(AurasPalette.SurfaceRaised)
-                .padding(if (isTv) 20.dp else 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 20.dp else 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxWidth()
+                .height(if (isTv) 252.dp else 176.dp)
+                .clip(shape),
         ) {
-            Box(
-                Modifier
-                    .width(posterWidth)
-                    .aspectRatio(PORTRAIT_POSTER_ASPECT_RATIO)
-                    .clip(shape),
+            val hasArtwork = aurasResumeArtwork(
+                episodePosterUrl = resume?.episodePosterUrl,
+                showPosterUrl = item.posterUrl,
+                episodeHeaders = resume?.episodePosterHeaders,
+                showHeaders = item.posterHeaders,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (hasArtwork) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.08f),
+                                    Color.Black.copy(alpha = 0.2f),
+                                    Color.Black.copy(alpha = 0.86f),
+                                ),
+                            ),
+                        ),
+                )
+            } else {
+                Box(Modifier.fillMaxSize().background(AurasPalette.SurfaceRaised))
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isTv) 24.dp else 17.dp, vertical = if (isTv) 20.dp else 14.dp),
+                verticalArrangement = Arrangement.spacedBy(if (isTv) 9.dp else 6.dp),
             ) {
-                AurasArtwork(
-                    url = item.posterUrl,
-                    headers = item.posterHeaders,
-                    modifier = Modifier.fillMaxSize(),
+                Text(
+                    text = stringResource(R.string.auras_explore_resume_title),
+                    color = AurasPalette.Accent,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                episode?.let {
+                    Text(it, color = AurasPalette.Text, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    text = stringResource(R.string.auras_resume_action),
+                    color = AurasPalette.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
                 progress?.let { value ->
                     Box(
                         Modifier
-                            .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 9.dp)
+                            .padding(top = 3.dp)
                             .height(5.dp)
                             .clip(CircleShape)
                             .background(AurasPalette.Text.copy(alpha = 0.38f)),
@@ -362,29 +402,68 @@ internal fun AurasResumeHero(
                     }
                 }
             }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(if (isTv) 10.dp else 7.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.auras_explore_resume_title),
-                    color = AurasPalette.Accent,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                episode?.let {
-                    Text(it, color = AurasPalette.Muted, style = MaterialTheme.typography.bodyMedium)
-                }
-                Text(
-                    text = stringResource(R.string.auras_resume_action),
-                    color = AurasPalette.Text,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
         }
     }
 }
+
+@Composable
+private fun aurasResumeArtwork(
+    episodePosterUrl: String?,
+    showPosterUrl: String?,
+    episodeHeaders: Map<String, String>?,
+    showHeaders: Map<String, String>?,
+    modifier: Modifier = Modifier,
+): Boolean {
+    val context = LocalContext.current
+    var episodeFailed by remember(episodePosterUrl, showPosterUrl, episodeHeaders, showHeaders) { mutableStateOf(false) }
+    var showPosterFailed by remember(episodePosterUrl, showPosterUrl, episodeHeaders, showHeaders) { mutableStateOf(false) }
+    val showEpisodeArtwork = !episodePosterUrl.isNullOrBlank() && !episodeFailed
+    val fallbackPosterUrl = showPosterUrl?.takeIf { it.isNotBlank() }
+    val showFallbackArtwork = !showEpisodeArtwork && !fallbackPosterUrl.isNullOrBlank() && !showPosterFailed
+
+    Box(modifier.background(AurasPalette.SurfaceRaised)) {
+        when {
+            showEpisodeArtwork -> AsyncImage(
+                model = remember(context, episodePosterUrl, episodeHeaders) {
+                    buildAurasImageRequest(context, episodePosterUrl, episodeHeaders)
+                },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onState = { state ->
+                    if (state is AsyncImagePainter.State.Error) episodeFailed = true
+                },
+            )
+
+            showFallbackArtwork -> AsyncImage(
+                model = remember(context, fallbackPosterUrl, showHeaders) {
+                    buildAurasImageRequest(context, fallbackPosterUrl, showHeaders)
+                },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onState = { state ->
+                    if (state is AsyncImagePainter.State.Error) showPosterFailed = true
+                },
+            )
+        }
+    }
+    return showEpisodeArtwork || showFallbackArtwork
+}
+
+private fun buildAurasImageRequest(
+    context: android.content.Context,
+    url: String,
+    headers: Map<String, String>?,
+): ImageRequest = ImageRequest.Builder(context)
+    .data(url)
+    .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+        headerBuilder["User-Agent"] = USER_AGENT
+        headers?.forEach { (key, value) ->
+            headerBuilder[key] = value
+        }
+    }.build())
+    .build()
 
 @Composable
 internal fun AurasSelectionChip(

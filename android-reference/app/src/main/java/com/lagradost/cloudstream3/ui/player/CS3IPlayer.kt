@@ -1828,7 +1828,7 @@ class CS3IPlayer : IPlayer {
         PerformanceDiagnostics.forContext(context).recordAsync(
             stage = stage,
             sourceLabel = playbackMetricsSource,
-            profileId = currentAccount.toString(),
+            profileId = currentAccount,
             status = PerformanceDiagnosticStatus.SUCCESS,
             durationMs = durationMs.coerceAtLeast(0L),
         )

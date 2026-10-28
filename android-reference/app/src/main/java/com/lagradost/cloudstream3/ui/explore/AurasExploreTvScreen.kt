@@ -503,7 +503,12 @@ private fun TvPosterRail(
         ) {
             itemsIndexed(
                 items = visibleItems,
-                key = { _, item -> item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}" },
+                key = { index, item ->
+                    aurasUniqueLazyKey(
+                        item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}",
+                        index,
+                    )
+                },
             ) { index, item ->
                 TvPosterCard(
                     item = item,

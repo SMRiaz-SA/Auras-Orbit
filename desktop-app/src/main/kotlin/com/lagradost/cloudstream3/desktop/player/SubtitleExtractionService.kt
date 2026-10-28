@@ -21,11 +21,17 @@ object SubtitleExtractionService {
     private const val MAX_SUBTITLE_BYTES = 32 * 1024 * 1024
     private const val MAX_ARCHIVE_ENTRIES = 256
     private const val MAX_PLAYLIST_SEGMENTS = 512
+    private val M3U8_URI_ATTRIBUTE = Regex("URI=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
 
-    private suspend fun fetchSubtitleBytes(url: String): ByteArray =
+    private data class FetchedSubtitle(val bytes: ByteArray, val finalUrl: String)
+
+    private suspend fun fetchSubtitleBytes(url: String): FetchedSubtitle =
         com.lagradost.cloudstream3.app.get(url, timeout = 15000L).okhttpResponse.use { response ->
             check(response.isSuccessful) { "Subtitle service returned HTTP ${response.code}" }
-            response.body.byteStream().readBoundedBytes(MAX_SUBTITLE_BYTES)
+            FetchedSubtitle(
+                bytes = response.body.byteStream().readBoundedBytes(MAX_SUBTITLE_BYTES),
+                finalUrl = response.request.url.toString(),
+            )
         }
 
     suspend fun searchSubtitles(
@@ -80,7 +86,8 @@ object SubtitleExtractionService {
             var finalFile: File? = null
 
             if (fileUrl.startsWith("http", ignoreCase = true)) {
-                val rawBytes = fetchSubtitleBytes(fileUrl)
+                val fetched = fetchSubtitleBytes(fileUrl)
+                val rawBytes = fetched.bytes
                 AppLogger.i(TAG, "Downloaded ${rawBytes.size} subtitle bytes")
 
                 if (rawBytes.isEmpty()) {
@@ -88,7 +95,7 @@ object SubtitleExtractionService {
                     return@withContext null
                 }
 
-                finalFile = processAndNormalizeSubtitleBytes(rawBytes, name, fileUrl)
+                finalFile = processAndNormalizeSubtitleBytes(rawBytes, name, fetched.finalUrl)
             } else if (fileUrl.startsWith("file://", ignoreCase = true)) {
                 val f = File(URI(fileUrl))
                 if (f.exists()) {
@@ -134,9 +141,11 @@ object SubtitleExtractionService {
                 tmpFile.writeText(flattenedVtt, Charsets.UTF_8)
                 return tmpFile
             } else {
-                AppLogger.w(TAG, "Could not flatten M3U8 subtitle stream, falling back to raw M3U8 playlist file")
+                AppLogger.w(TAG, "Could not flatten M3U8 subtitle stream safely; preserving the playlist for the player")
+                val playablePlaylist = rewriteM3u8UrisForLocalPlayback(decodedText, sourceUrl)
+                    ?: return null
                 val tmpFile = File.createTempFile("sub_norm_", ".m3u8")
-                tmpFile.writeText(decodedText, Charsets.UTF_8)
+                tmpFile.writeText(playablePlaylist, Charsets.UTF_8)
                 return tmpFile
             }
         }
@@ -158,10 +167,11 @@ object SubtitleExtractionService {
                     ?: lines.firstOrNull { !it.trim().startsWith("#") && it.trim().isNotEmpty() }
                 if (uriMatch != null && currentBase != null) {
                     val resolvedChild = resolveUrl(currentBase, uriMatch)
-                    val childResp = fetchSubtitleBytes(resolvedChild).toString(Charsets.UTF_8)
+                    val childFetch = fetchSubtitleBytes(resolvedChild)
+                    val childResp = childFetch.bytes.toString(Charsets.UTF_8)
                     if (childResp.isNotBlank()) {
                         currentLines = childResp.lines()
-                        currentBase = resolvedChild
+                        currentBase = childFetch.finalUrl
                     }
                 }
             }
@@ -174,36 +184,102 @@ object SubtitleExtractionService {
             if (segmentUrls.isEmpty()) return null
             require(segmentUrls.size <= MAX_PLAYLIST_SEGMENTS) { "Subtitle playlist contains too many segments" }
 
-            val vttBuilder = StringBuilder("WEBVTT\n\n")
-            var hasCues = false
             var totalBytes = 0L
+            val segmentTexts = mutableListOf<String>()
 
             for (segUrl in segmentUrls) {
-                val bytes = fetchSubtitleBytes(segUrl)
+                val bytes = fetchSubtitleBytes(segUrl).bytes
                 totalBytes += bytes.size
                 require(totalBytes <= MAX_SUBTITLE_BYTES) { "Subtitle playlist exceeds its byte budget" }
-                try {
-                    val segText = bytes.toString(Charsets.UTF_8)
-                    if (segText.isNotBlank()) {
-                        val cleanLines = segText.trimStart('\uFEFF').lines()
-                        for (line in cleanLines) {
-                            val trimmed = line.trim()
-                            if (trimmed == "WEBVTT" || trimmed.startsWith("X-TIMESTAMP-MAP") || trimmed.startsWith("NOTE")) continue
-                            vttBuilder.append(line).append("\n")
-                            hasCues = true
-                        }
-                        vttBuilder.append("\n")
-                    }
-                } catch (e: Exception) {
-                    AppLogger.w(TAG, "Failed to download VTT segment $segUrl: ${e.message}")
-                }
+                val segmentText = bytes.toString(Charsets.UTF_8)
+                if (containsTimestampMap(segmentText)) return null
+                segmentTexts += segmentText
             }
 
-            if (hasCues) vttBuilder.toString() else null
+            flattenWebVttSegments(segmentTexts)
         } catch (e: Exception) {
             AppLogger.e(TAG, "flattenM3u8SubtitleToWebVtt error: ${e.message}", e)
             null
         }
+    }
+
+    /** Joins plain WebVTT segments. Timestamp-mapped playlists need the video PTS origin. */
+    internal fun flattenWebVttSegments(segmentTexts: List<String>): String? {
+        if (segmentTexts.any(::containsTimestampMap)) return null
+
+        val output = StringBuilder("WEBVTT\n\n")
+        var hasCues = false
+
+        for (segmentText in segmentTexts) {
+            if (segmentText.isBlank()) continue
+            val cleanLines = segmentText.trimStart('\uFEFF').lines()
+            val contentLines = cleanLines.mapNotNull { line ->
+                val trimmed = line.trim()
+                if (
+                    trimmed == "WEBVTT" ||
+                    trimmed.startsWith("X-TIMESTAMP-MAP", ignoreCase = true) ||
+                    trimmed.startsWith("NOTE")
+                ) {
+                    return@mapNotNull null
+                }
+
+                line
+            }.dropWhile { it.isBlank() }
+            if (contentLines.isEmpty()) continue
+
+            for (line in contentLines) {
+                output.append(line).append('\n')
+            }
+            output.append('\n')
+            hasCues = true
+        }
+
+        return output.toString().takeIf { hasCues }
+    }
+
+    private fun containsTimestampMap(segmentText: String): Boolean =
+        segmentText.lineSequence().any {
+            it.trim().trimStart('\uFEFF').startsWith("X-TIMESTAMP-MAP", ignoreCase = true)
+        }
+
+    /** Resolves relative references before a remote playlist is saved to a local file. */
+    internal fun rewriteM3u8UrisForLocalPlayback(content: String, baseUrl: String?): String? {
+        val rewrittenLines = mutableListOf<String>()
+        for (line in content.lines()) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) {
+                rewrittenLines += line
+                continue
+            }
+
+            if (trimmed.startsWith("#")) {
+                var unresolvedReference = false
+                val rewritten = M3U8_URI_ATTRIBUTE.replace(line) { match ->
+                    val reference = match.groupValues[1]
+                    val resolved = resolvePlaylistReference(baseUrl, reference)
+                    if (resolved == null) {
+                        unresolvedReference = true
+                        match.value
+                    } else {
+                        "URI=\"$resolved\""
+                    }
+                }
+                if (unresolvedReference) return null
+                rewrittenLines += rewritten
+            } else {
+                val resolved = resolvePlaylistReference(baseUrl, trimmed) ?: return null
+                rewrittenLines += line.takeWhile { it.isWhitespace() } + resolved
+            }
+        }
+        return rewrittenLines.joinToString("\n")
+    }
+
+    private fun resolvePlaylistReference(baseUrl: String?, reference: String): String? {
+        val uri = runCatching { URI(reference) }.getOrNull() ?: return null
+        if (uri.isAbsolute) return reference
+        val base = baseUrl ?: return null
+        val resolved = resolveUrl(base, reference)
+        return resolved.takeIf { runCatching { URI(it).isAbsolute }.getOrDefault(false) }
     }
 
     private fun resolveUrl(base: String, uri: String): String {
