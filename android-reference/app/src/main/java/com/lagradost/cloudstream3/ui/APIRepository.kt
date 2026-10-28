@@ -19,10 +19,13 @@ import com.lagradost.cloudstream3.mvvm.safeApiCall
 import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.utils.Coroutines.atomicListOf
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.coroutineContext
 
 class APIRepository(val api: MainAPI) {
     companion object {
@@ -59,19 +62,19 @@ class APIRepository(val api: MainAPI) {
         private var cacheIndex: Int = 0
         const val CACHE_SIZE = 20
 
+        private fun afterPluginsLoaded(forceReload: Boolean) {
+            if (forceReload) {
+                cache.clear()
+            }
+        }
+
+        init {
+            afterPluginsLoadedEvent += ::afterPluginsLoaded
+        }
+
         fun getTimeout(desired: Long?): Long {
             return (desired ?: DEFAULT_TIMEOUT).coerceIn(MIN_TIMEOUT, MAX_TIMEOUT)
         }
-    }
-
-    private fun afterPluginsLoaded(forceReload: Boolean) {
-        if (forceReload) {
-            cache.clear()
-        }
-    }
-
-    init {
-        afterPluginsLoadedEvent += ::afterPluginsLoaded
     }
 
     val hasMainPage = api.hasMainPage
@@ -209,12 +212,15 @@ class APIRepository(val api: MainAPI) {
     ): Boolean {
         if (isInvalidData(data)) return false // this makes providers cleaner
         return try {
-            withTimeout(getTimeout(api.loadLinksTimeoutMs)) {
+            // Only this provider deadline becomes false; cancellation from the caller propagates.
+            withTimeoutOrNull(getTimeout(api.loadLinksTimeoutMs)) {
                 api.loadLinks(data, isCasting, subtitleCallback, callback)
-            }
+            } ?: false
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (throwable: Throwable) {
             logError(throwable)
-            return false
+            false
         }
     }
 }

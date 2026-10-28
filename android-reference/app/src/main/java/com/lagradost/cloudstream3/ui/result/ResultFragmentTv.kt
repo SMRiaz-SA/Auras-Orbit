@@ -6,6 +6,8 @@ import android.app.Dialog
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -88,9 +90,15 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
     private var inlineSourceResults: Pair<ResultEpisode, LinkLoadingResult>? = null
     private var inlineSourceShowAll = false
     private var inlineSourceSearchInProgress = false
+    private var pluginLoadRetryPending = false
+    private var pluginForceReloadPending = false
+    private val pluginEventsHandler = Handler(Looper.getMainLooper())
 
     override fun onDestroyView() {
-        if (::viewModel.isInitialized) viewModel.cancelPendingDetailLoad()
+        if (::viewModel.isInitialized) {
+            if (viewModel.isDetailLoadInProgress()) pluginForceReloadPending = false
+            viewModel.cancelPendingDetailLoad()
+        }
         inlineSourceEpisode = null
         inlineSourceEpisodeIsResume = false
         inlineSourceResults = null
@@ -99,6 +107,13 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         updateUIEvent -= ::updateUI
         activity?.detachBackPressedCallback(this@ResultFragmentTv.toString())
         super.onDestroyView()
+    }
+
+    override fun onDestroy() {
+        afterPluginsLoadedEvent -= ::handleAfterPluginsLoaded
+        pluginLoadRetryPending = false
+        pluginForceReloadPending = false
+        super.onDestroy()
     }
 
     override fun onCreateView(
@@ -213,15 +228,45 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         }
     }
 
-    override fun onResume() {
-        activity?.setNavigationBarColorCompat(R.attr.primaryBlackBackground)
-        afterPluginsLoadedEvent += ::reloadViewModel
-        super.onResume()
+    private fun handleAfterPluginsLoaded(forceReload: Boolean) {
+        pluginEventsHandler.post {
+            pluginLoadRetryPending = true
+            if (forceReload) pluginForceReloadPending = true
+
+            if (isAdded) reloadAfterPluginEventIfNeeded()
+        }
     }
 
-    override fun onStop() {
-        afterPluginsLoadedEvent -= ::reloadViewModel
-        super.onStop()
+    private fun reloadAfterPluginEventIfNeeded() {
+        if (!isResumed || (!pluginLoadRetryPending && !pluginForceReloadPending) ||
+            !::viewModel.isInitialized
+        ) return
+
+        if (pluginForceReloadPending) {
+            pluginForceReloadPending = false
+            pluginLoadRetryPending = false
+            reloadViewModel(forceReload = true)
+        } else if (!viewModel.isDetailLoadInProgress()) {
+            pluginLoadRetryPending = false
+            reloadViewModel(forceReload = false)
+        }
+    }
+
+    override fun onResume() {
+        activity?.setNavigationBarColorCompat(R.attr.primaryBlackBackground)
+        super.onResume()
+        // Plugin events are not replayed. Consume any event deferred while stopped, or
+        // recheck a detail request that failed before the view became active.
+        if (pluginLoadRetryPending || pluginForceReloadPending) {
+            reloadAfterPluginEventIfNeeded()
+        } else {
+            reloadViewModel(forceReload = false)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        afterPluginsLoadedEvent += ::handleAfterPluginsLoaded
     }
 
     private fun View.fade(turnVisible: Boolean) {
@@ -283,7 +328,11 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         activity?.window?.decorView?.clearFocus()
         activity?.loadCache()
         hideKeyboard()
-        if (storedData.restart || !viewModel.hasLoaded())
+        val hasPendingPluginRefresh = pluginForceReloadPending
+        if (storedData.restart || !viewModel.hasLoaded() || hasPendingPluginRefresh) {
+            // This request satisfies any event deferred while the view was absent.
+            pluginLoadRetryPending = false
+            pluginForceReloadPending = false
             viewModel.load(
                 activity,
                 storedData.url,
@@ -292,6 +341,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                 storedData.dubStatus,
                 storedData.start
             )
+        }
         // ===== ===== =====
         var comingSoon = false
 
@@ -900,6 +950,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             binding.apply {
                 when (data) {
                     is Resource.Success -> {
+                        pluginLoadRetryPending = false
                         val d = data.value
                         resultVpn.setText(d.vpnText)
                         resultInfo.setText(d.metaText)
@@ -999,10 +1050,18 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                 resultLoadingError.isVisible = data is Resource.Failure
                 //resultReloadConnectionOpenInBrowser.isVisible = data is Resource.Failure
             }
+
+            if (data is Resource.Failure &&
+                (pluginLoadRetryPending || pluginForceReloadPending) &&
+                !viewModel.hasLoaded()
+            ) {
+                binding.root.post { reloadAfterPluginEventIfNeeded() }
+            }
         }
 
         observe(viewModel.detailStageThreeReady) { ready ->
             if (ready) {
+                pluginLoadRetryPending = false
                 syncAutoInlineSourceEpisode(comingSoon)
             } else {
                 inlineSourceEpisodeIsResume = false

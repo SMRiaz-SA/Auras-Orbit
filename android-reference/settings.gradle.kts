@@ -12,7 +12,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        mavenLocal()
+        if (providers.gradleProperty("useMavenLocal").orNull == "true") mavenLocal()
         maven("https://jitpack.io")
     }
 }

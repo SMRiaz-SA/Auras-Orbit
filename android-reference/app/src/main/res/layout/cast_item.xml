@@ -31,8 +31,9 @@
                 android:layout_gravity="end|bottom"
                 android:layout_marginStart="10dp"
                 android:layout_marginTop="5dp"
-                android:alpha="0.2"
+                android:clickable="true"
                 android:foreground="@drawable/outline_drawable"
+                android:focusable="true"
                 app:cardCornerRadius="35dp">
 
                 <ImageView
@@ -40,7 +41,7 @@
                     android:layout_width="match_parent"
 
                     android:layout_height="match_parent"
-                    android:contentDescription="@string/episode_poster_img_des"
+                    android:alpha="0.2"
                     android:foreground="@drawable/outline_big_35_gray"
                     android:scaleType="centerCrop"
                     tools:src="@drawable/profile_bg_blue" />
@@ -57,7 +58,6 @@
                     android:id="@+id/actor_image"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:contentDescription="@string/episode_poster_img_des"
                     android:foreground="@drawable/outline_big_35_gray"
                     android:scaleType="centerCrop"
                     tools:src="@drawable/example_poster" />

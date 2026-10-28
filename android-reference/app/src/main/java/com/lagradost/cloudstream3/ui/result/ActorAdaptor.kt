@@ -9,6 +9,7 @@ import android.view.animation.Animation
 import android.view.animation.OvershootInterpolator
 import android.view.animation.ScaleAnimation
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.cloudstream3.ActorData
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorRole
@@ -69,16 +70,33 @@ class ActorAdaptor(
         super.onUpdateContent(holder, item, position)
     }
 
+    private fun toggleInversion(holder: ViewHolderState<Any>) {
+        val currentPosition = holder.bindingAdapterPosition
+        if (currentPosition == RecyclerView.NO_POSITION) return
+
+        val currentItem = getItemOrNull(currentPosition) ?: return
+        if (currentItem.voiceActor?.image.isNullOrBlank()) return
+
+        val isInverted = inverted.getOrDefault(currentItem, false)
+        inverted[currentItem] = !isInverted
+        onUpdateContent(holder, currentItem, currentPosition)
+    }
+
     override fun onBindContent(holder: ViewHolderState<Any>, item: ActorData, position: Int) {
         when (val binding = holder.view) {
             is CastItemBinding -> {
                 val itemView = binding.root
-                val isInverted = inverted.getOrDefault(item, false)
+                val voiceActor = item.voiceActor
+                val hasVoiceActorImage = !voiceActor?.image.isNullOrBlank()
+                if (!hasVoiceActorImage) {
+                    inverted.remove(item)
+                }
+                val isInverted = hasVoiceActorImage && inverted.getOrDefault(item, false)
 
-                val (mainImg, vaImage) = if (!isInverted || item.voiceActor?.image.isNullOrBlank()) {
-                    Pair(item.actor.image, item.voiceActor?.image)
+                val (mainImg, vaImage) = if (!isInverted) {
+                    Pair(item.actor.image, voiceActor?.image)
                 } else {
-                    Pair(item.voiceActor?.image, item.actor.image)
+                    Pair(voiceActor?.image, item.actor.image)
                 }
 
                 // Fix tv focus escaping the recyclerview
@@ -97,12 +115,14 @@ class ActorAdaptor(
                     }
                 }
 
-                val voiceActor = item.voiceActor
                 val frontPerson = if (isInverted && voiceActor != null) voiceActor else item.actor
                 val rearPerson = if (isInverted) item.actor else voiceActor
                 val openFrontPerson = { onPersonSelected(frontPerson) }
                 val openRearPerson = { rearPerson?.let(onPersonSelected) }
-                binding.actorImage.setOnClickListener { openFrontPerson() }
+                binding.actorImage.apply {
+                    contentDescription = "Open ${frontPerson.name} filmography"
+                    setOnClickListener { openFrontPerson() }
+                }
                 binding.actorName.apply {
                     contentDescription = "Open ${frontPerson.name} filmography"
                     isClickable = true
@@ -110,11 +130,20 @@ class ActorAdaptor(
                     setOnClickListener { openFrontPerson() }
                     setOnFocusChangeListener { view, hasFocus -> if (hasFocus) focusCallback(view) }
                 }
-                binding.voiceActorImageHolder.setOnClickListener {
-                    if (item.voiceActor != null) {
-                        inverted[item] = !isInverted
-                        this.onUpdateContent(holder, getItem(position), position)
+                binding.voiceActorImageHolder.apply {
+                    isFocusable = hasVoiceActorImage
+                    isClickable = hasVoiceActorImage
+                    contentDescription = if (hasVoiceActorImage) {
+                        rearPerson?.let { "Show ${it.name}" }
+                    } else null
+                    setOnFocusChangeListener { view, hasFocus ->
+                        if (hasFocus) focusCallback(view)
                     }
+                    setOnClickListener(if (hasVoiceActorImage) {
+                        View.OnClickListener {
+                            this@ActorAdaptor.toggleInversion(holder)
+                        }
+                    } else null)
                 }
                 binding.voiceActorName.apply {
                     if (rearPerson != null) {
@@ -132,8 +161,15 @@ class ActorAdaptor(
                 }
 
                 itemView.setOnClickListener {
-                    inverted[item] = !isInverted
-                    this.onUpdateContent(holder, getItem(position), position)
+                    if (isLayout(PHONE)) {
+                        if (hasVoiceActorImage) {
+                            toggleInversion(holder)
+                        } else {
+                            openFrontPerson()
+                        }
+                    } else {
+                        openFrontPerson()
+                    }
                 }
 
                 itemView.setOnLongClickListener {
@@ -186,8 +222,8 @@ class ActorAdaptor(
                         voiceActorName.isVisible = false
                     } else {
                         voiceActorName.text = rearPerson?.name
-                        if (!vaImage.isNullOrEmpty())
-                            voiceActorImageHolder.isVisible = true
+                        voiceActorName.isVisible = true
+                        voiceActorImageHolder.isVisible = hasVoiceActorImage
                         voiceActorImage.loadImage(vaImage)
                     }
                 }

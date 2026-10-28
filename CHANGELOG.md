@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0.06 — 2026-10-28
+
+### Stable release
+
+- Improve Android TV focus and scrolling across Explore and Catalog, make watchlists easier to navigate, correct actor and voice-actor focus and actions, and keep portrait posters portrait-shaped alongside 16:9 landscape artwork.
+- Retry Android TV detail loads after provider plugins finish loading; bound provider link loads with per-provider timeouts while allowing caller cancellation to propagate.
+- Secure desktop MPD XML parsing against external entities and route YouTube links by matching supported host names.
+- Track desktop downloads by attempt generation, cancel active requests, and prevent superseded attempts from completing or updating the current task.
+- Resolve Android version metadata from packed Git refs, make Maven Local opt-in, and default Windows setup to a per-user install with an elevation option.
+
 ## 1.0.0.05 — 2026-10-28
 
 ### Stable release

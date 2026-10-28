@@ -6,11 +6,10 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Rect
-import android.graphics.RectF
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.os.Build
@@ -39,17 +38,21 @@ import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.min
 
 internal fun artworkCacheNeedsReferenceScan(totalBytes: Long, maximumBytes: Long): Boolean =
     totalBytes > maximumBytes
 
 /**
- * Creates persistent, launcher-readable 16:9 thumbnails from provider poster URLs already
- * carried by SearchResponse. Landscape posters get a center crop; portrait posters are
- * composed with the full poster visible over a subdued fill.
+ * Creates persistent launcher-readable art from provider poster URLs already carried by
+ * SearchResponse. Portrait posters retain their full image; landscape images are center-cropped
+ * to 16:9.
  */
 object TvPreviewArtwork {
+    internal const val ARTWORK_FORMAT_REVISION = 2
+
+    internal data class PreviewArtwork(val uri: Uri, val aspectRatio: Int)
+    private data class CreatedArtwork(val bitmap: Bitmap, val aspectRatio: Int)
+
     private const val DIRECTORY_NAME = "tv_preview_art"
     private const val MAX_CACHE_BYTES = 48L * 1024L * 1024L
     private const val OUTPUT_WIDTH = 960
@@ -62,7 +65,13 @@ object TvPreviewArtwork {
         context: android.content.Context,
         imageUrl: String?,
         headers: Map<String, String>? = null,
-    ): Uri? = withContext(Dispatchers.IO) {
+    ): Uri? = previewArtwork(context, imageUrl, headers)?.uri
+
+    internal suspend fun previewArtwork(
+        context: android.content.Context,
+        imageUrl: String?,
+        headers: Map<String, String>? = null,
+    ): PreviewArtwork? = withContext(Dispatchers.IO) {
         val source = imageUrl?.takeIf(::isHttpUrl) ?: return@withContext null
         val appContext = context.applicationContext
         val key = artworkKey(source, headers)
@@ -71,44 +80,54 @@ object TvPreviewArtwork {
 
         val keyLock = generationLocks.computeIfAbsent(key) { Mutex() }
         keyLock.withLock {
-            if (cachedArtwork(output)) return@withLock uriFor(appContext, key)
+            if (cachedArtwork(output)) {
+                artworkForFile(appContext, key, output)?.let { return@withLock it }
+                output.delete()
+            }
 
             generationSlots.withPermit {
                 withTimeoutOrNull(8_000L) {
                     try {
                         // loadProviderImage returns an app-owned copy; it is safe to recycle here.
-                        val bitmap = loadProviderImage(appContext, source, headers)
+                        val sourceBitmap = loadProviderImage(appContext, source, headers)
                             ?: return@withTimeoutOrNull null
-                        val thumbnail = try {
-                            createWideThumbnail(bitmap)
-                        } finally {
-                            bitmap.recycle()
+                        val artwork = try {
+                            createArtwork(sourceBitmap)
+                        } catch (error: Throwable) {
+                            sourceBitmap.recycle()
+                            throw error
                         }
+                        val artworkBitmap = artwork.bitmap
 
-                        if (!directory.isDirectory && !directory.mkdirs() && !directory.isDirectory) {
-                            thumbnail.recycle()
-                            return@withTimeoutOrNull null
-                        }
-
-                        val temporary = File(directory, "$key.tmp")
-                        val saved = try {
-                            cacheMutationLock.withLock {
-                                FileOutputStream(temporary).use { stream ->
-                                    thumbnail.compress(Bitmap.CompressFormat.JPEG, 84, stream)
-                                } && temporary.length() > 0L &&
-                                    (!output.exists() || output.delete()) && temporary.renameTo(output)
+                        try {
+                            if (!directory.isDirectory && !directory.mkdirs() && !directory.isDirectory) {
+                                return@withTimeoutOrNull null
                             }
-                        } finally {
-                            thumbnail.recycle()
-                            if (temporary.exists()) temporary.delete()
-                        }
 
-                        if (!saved) return@withTimeoutOrNull null
-                        output.setLastModified(System.currentTimeMillis())
-                        val retained = cacheMutationLock.withLock {
-                            trimCache(appContext, directory, output)
+                            val temporary = File(directory, "$key.tmp")
+                            val saved = try {
+                                cacheMutationLock.withLock {
+                                    FileOutputStream(temporary).use { stream ->
+                                        artworkBitmap.compress(Bitmap.CompressFormat.JPEG, 84, stream)
+                                    } && temporary.length() > 0L &&
+                                        (!output.exists() || output.delete()) && temporary.renameTo(output)
+                                }
+                            } finally {
+                                if (temporary.exists()) temporary.delete()
+                            }
+
+                            if (!saved) return@withTimeoutOrNull null
+                            output.setLastModified(System.currentTimeMillis())
+                            val retained = cacheMutationLock.withLock {
+                                trimCache(appContext, directory, output)
+                            }
+                            if (retained && output.isFile) {
+                                PreviewArtwork(uriFor(appContext, key), artwork.aspectRatio)
+                            } else null
+                        } finally {
+                            if (artworkBitmap !== sourceBitmap) artworkBitmap.recycle()
+                            sourceBitmap.recycle()
                         }
-                        if (retained && output.isFile) uriFor(appContext, key) else null
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -148,53 +167,21 @@ object TvPreviewArtwork {
         val output = Bitmap.createBitmap(OUTPUT_WIDTH, OUTPUT_HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
-        val imageRatio = source.width.toFloat() / source.height.coerceAtLeast(1)
-
-        if (imageRatio >= 1.35f) {
-            canvas.drawBitmap(
-                source,
-                sourceCrop(source.width, source.height),
-                Rect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT),
-                paint,
-            )
-            return output
-        }
-
-        // A small upscaled copy of this same provider poster makes a soft background
-        // while preserving the entire original poster in the foreground.
-        val softWidth = 40
-        val softHeight = (softWidth * OUTPUT_HEIGHT / OUTPUT_WIDTH).coerceAtLeast(1)
-        val softBackground = Bitmap.createBitmap(softWidth, softHeight, Bitmap.Config.ARGB_8888)
-        Canvas(softBackground).drawBitmap(
+        canvas.drawBitmap(
             source,
-            sourceCrop(source.width, source.height, softWidth, softHeight),
-            Rect(0, 0, softWidth, softHeight),
+            sourceCrop(source.width, source.height),
+            Rect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT),
             paint,
         )
-        canvas.drawBitmap(softBackground, null, Rect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT), paint)
-        softBackground.recycle()
-        canvas.drawColor(0x99000000.toInt())
-
-        val maxPosterWidth = OUTPUT_WIDTH * 0.43f
-        val maxPosterHeight = OUTPUT_HEIGHT * 0.90f
-        val posterScale = min(maxPosterWidth / source.width, maxPosterHeight / source.height)
-        val posterWidth = source.width * posterScale
-        val posterHeight = source.height * posterScale
-        val posterRect = RectF(
-            (OUTPUT_WIDTH - posterWidth) / 2f,
-            (OUTPUT_HEIGHT - posterHeight) / 2f,
-            (OUTPUT_WIDTH + posterWidth) / 2f,
-            (OUTPUT_HEIGHT + posterHeight) / 2f,
-        )
-        val posterClip = Path().apply {
-            addRoundRect(posterRect, 8f, 8f, Path.Direction.CW)
-        }
-        canvas.save()
-        canvas.clipPath(posterClip)
-        canvas.drawBitmap(source, null, posterRect, paint)
-        canvas.restore()
         return output
     }
+
+    private fun createArtwork(source: Bitmap): CreatedArtwork =
+        if (source.height > source.width) {
+            CreatedArtwork(source, TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3)
+        } else {
+            CreatedArtwork(createWideThumbnail(source), TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9)
+        }
 
     private fun sourceCrop(
         sourceWidth: Int,
@@ -219,6 +206,22 @@ object TvPreviewArtwork {
         val isFresh = file.isFile && file.length() > 0L
         if (isFresh) file.setLastModified(System.currentTimeMillis())
         return isFresh
+    }
+
+    private fun artworkForFile(
+        context: android.content.Context,
+        key: String,
+        file: File,
+    ): PreviewArtwork? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val aspectRatio = if (bounds.outHeight > bounds.outWidth) {
+            TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
+        } else {
+            TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
+        }
+        return PreviewArtwork(uriFor(context, key), aspectRatio)
     }
 
     private fun trimCache(context: android.content.Context, directory: File, newest: File): Boolean {
@@ -296,6 +299,7 @@ object TvPreviewArtwork {
 
     private fun artworkKey(url: String, headers: Map<String, String>?): String {
         val stableInput = buildString {
+            append("artwork-format:").append(ARTWORK_FORMAT_REVISION).append('\n')
             append(url)
             headers.orEmpty().entries
                 .sortedBy { it.key.lowercase(Locale.ROOT) }

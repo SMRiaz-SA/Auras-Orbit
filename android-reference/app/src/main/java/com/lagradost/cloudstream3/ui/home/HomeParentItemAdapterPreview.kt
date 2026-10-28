@@ -601,7 +601,7 @@ class HomeParentItemAdapterPreview(
                     lastFocusTimeoutMs = System.currentTimeMillis()
                     if (!hasFocus) return@setOnFocusChangeListener
                     if (lastFocusMs + 500L < System.currentTimeMillis()) {
-                        MainActivity.centerView(view)
+                        MainActivity.keepFocusedViewVisible(view)
                     }
                 }
 

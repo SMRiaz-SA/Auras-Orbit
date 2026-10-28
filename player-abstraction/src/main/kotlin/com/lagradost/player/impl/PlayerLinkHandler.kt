@@ -113,8 +113,7 @@ object PlayerLinkHandler {
                 }
             }
 
-            val isYouTube = url.contains("youtube.com/", ignoreCase = true) ||
-                url.contains("youtu.be/", ignoreCase = true) ||
+            val isYouTube = isYouTubeUrl(url) ||
                 link.extractorData == "yt-dlp"
 
             // Route all remote streams through LocalStreamProxy so OkHttp handles headers, cookies,
@@ -244,6 +243,13 @@ object PlayerLinkHandler {
             merged["User-Agent"] = com.lagradost.cloudstream3.USER_AGENT
         }
         return merged
+    }
+
+    fun isYouTubeUrl(url: String?): Boolean {
+        val host = url?.trim()?.substringBefore("|")?.toHttpUrlOrNull()?.host ?: return false
+        return host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtu.be" || host.endsWith(".youtu.be") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")
     }
 
     fun sanitizeDisplayTitle(raw: String): String {

@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - 'v*' # Trigger on version tags like v0.1.2, v1.0.0
+      # Rewritten historical tags must not start a release build for an old commit.
+      - '!v0.2.0.23'
+      - '!v0.2.0.24'
+      - '!v0.2.0.25'
+      - '!v0.2.0.26'
+      - '!v1.0.0.00'
+      - '!v1.0.0.01'
+      - '!v1.0.0.02'
+      - '!v1.0.0.03'
+      - '!v1.0.0.04'
+      - '!v1.0.0.05'
 
 permissions:
   contents: write

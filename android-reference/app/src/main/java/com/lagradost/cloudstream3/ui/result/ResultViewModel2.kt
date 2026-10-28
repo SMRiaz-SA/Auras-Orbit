@@ -2822,6 +2822,8 @@ class ResultViewModel2 : ViewModel() {
 
     fun hasLoaded() = detailLoadComplete || detailLoadInProgress
 
+    fun isDetailLoadInProgress() = detailLoadInProgress
+
     private suspend fun awaitFirstDetailPresentation() {
         withContext(Dispatchers.Main.immediate) {
             suspendCancellableCoroutine { continuation ->

@@ -13,16 +13,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -452,10 +448,12 @@ private fun AurasCatalogsScreen(
                                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                                 )
                             } else {
-                                AurasWatchlistGrid(
+                                AurasPosterRail(
+                                    title = null,
                                     items = selectedItems.map { it.item },
-                                    isTv = isTv,
                                     onOpen = onOpenTitle,
+                                    maxItems = selectedItems.size,
+                                    posterWidth = if (isTv) 132.dp else 98.dp,
                                 )
                             }
                         }
@@ -528,37 +526,6 @@ private fun AurasCatalogsScreen(
             onSelect = onSourceSelect,
             onConnectSource = onConnectSource,
         )
-    }
-}
-
-@Composable
-private fun AurasWatchlistGrid(
-    items: List<SearchResponse>,
-    isTv: Boolean,
-    onOpen: (SearchResponse, Int) -> Unit,
-) {
-    val minimumPosterWidth = if (isTv) 132.dp else 98.dp
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minimumPosterWidth),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = if (isTv) 540.dp else 380.dp),
-        contentPadding = PaddingValues(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        gridItemsIndexed(
-            items = items,
-            key = { _, item -> item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}" },
-        ) { index, item ->
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                AurasPosterCard(
-                    item = item,
-                    width = maxWidth,
-                    onClick = { onOpen(item, index) },
-                )
-            }
-        }
     }
 }
 

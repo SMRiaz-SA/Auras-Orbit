@@ -2,9 +2,11 @@ package com.lagradost.player.impl.proxy
 
 import org.w3c.dom.Document
 import org.w3c.dom.Element
+import org.xml.sax.SAXException
 import java.io.ByteArrayInputStream
 import java.net.URI
 import java.util.Base64
+import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.math.ceil
 
@@ -672,7 +674,17 @@ class NativeMpdConverter {
     private fun parseXml(xml: String): Document {
         val factory = DocumentBuilderFactory.newInstance()
         factory.isNamespaceAware = true
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        factory.isXIncludeAware = false
+        factory.isExpandEntityReferences = false
         val builder = factory.newDocumentBuilder()
+        builder.setEntityResolver { _, _ -> throw SAXException("External XML entities are disabled") }
         return builder.parse(ByteArrayInputStream(xml.trim().toByteArray(Charsets.UTF_8)))
     }
 }

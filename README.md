@@ -6,8 +6,8 @@ Auras Orbit brings the providers you choose into a personal discovery and watch 
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** **1.0.0.05**<br>
-**Highlights:** Progressive catalog and metadata loading, resume-first Android screens, provider-sourced Android TV home rows, and longer Cast queues.<br>
+**Current version (desktop and Android):** **1.0.0.06**<br>
+**Highlights:** Better Android TV focus, watchlist and actor controls, correctly shaped poster art, reliable provider retries, and safer desktop playback and downloads.<br>
 **Platform:** Windows 10 or 11, 64-bit; Android phones and TVs<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
 **Changelog:** [Release history](CHANGELOG.md)
@@ -22,7 +22,7 @@ Auras Orbit gives your chosen extensions a desktop home, with the discovery, pla
 
 - **Bring your own providers.** Add repositories, review the extensions they offer, and install the ones you want. Browse and search through the providers enabled in your profile.
 - **Keep search results clear.** Search in separate **Titles** and **People** scopes; title results and people matches stay in their own views on Android and Windows.
-- **Use Orbit on your TV.** Android TV brings Orbit's Explore shelves, source picker, watch progress, and catalog browsing to the big screen with remote navigation. Where the TV launcher supports app rows, Orbit supplies resume items to the system Watch Next area and a **Popular Content** row from the selected provider. It uses provider-supplied landscape poster art when available; otherwise, it keeps the full provider poster visible inside a wide image. The TV launcher controls row placement and labels.
+- **Use Orbit on your TV.** Android TV brings Orbit's Explore shelves, source picker, watch progress, and catalog browsing to the big screen with remote navigation. Where the TV launcher supports app rows, Orbit supplies resume items to the system Watch Next area and a **Popular Content** row from the selected provider. Landscape artwork is presented in a wide frame, while portrait posters retain their portrait shape. The TV launcher controls row placement and labels.
 - **Pick up where you left off.** Keep playback progress and watch history in your local profile. Save titles to your library so they are easy to find again.
 - **Make Home useful to you.** Return to in-progress titles, browse discovery shelves, and use a spotlight carousel when your enabled sources provide featured or trending items.
 - **Explore from one dashboard.** Open add-on catalogs, genres, providers, or Torrent Search from the Explore screen.

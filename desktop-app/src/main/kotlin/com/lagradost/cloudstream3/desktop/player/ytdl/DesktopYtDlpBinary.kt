@@ -4,9 +4,9 @@ import com.lagradost.cloudstream3.desktop.download.AppDownloadManager
 import com.lagradost.cloudstream3.desktop.updates.UnifiedUpdateManager
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
+import com.lagradost.player.impl.PlayerLinkHandler
 import kotlinx.coroutines.Job
 import java.io.File
-import java.util.Locale
 
 class DesktopYtDlpBinary {
 
@@ -64,14 +64,7 @@ class DesktopYtDlpBinary {
 
     companion object {
         fun isYouTubeUrl(url: String?): Boolean {
-            if (url.isNullOrBlank()) return false
-            val lower = url.lowercase(Locale.ROOT)
-            return lower.contains("youtube.com/watch") ||
-                lower.contains("youtu.be/") ||
-                lower.contains("youtube.com/embed") ||
-                lower.contains("youtube.com/v/") ||
-                lower.contains("youtube.com/live/") ||
-                lower.contains("youtube.com/shorts/")
+            return PlayerLinkHandler.isYouTubeUrl(url)
         }
     }
 }

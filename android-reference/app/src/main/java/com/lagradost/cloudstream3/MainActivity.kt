@@ -71,7 +71,6 @@ import com.lagradost.cloudstream3.CommonActivity.loadThemes
 import com.lagradost.cloudstream3.CommonActivity.onColorSelectedEvent
 import com.lagradost.cloudstream3.CommonActivity.onDialogDismissedEvent
 import com.lagradost.cloudstream3.CommonActivity.onUserLeaveHint
-import com.lagradost.cloudstream3.CommonActivity.screenHeight
 import com.lagradost.cloudstream3.CommonActivity.setActivityInstance
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.CommonActivity.updateLocale
@@ -424,19 +423,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
             }
 
 
-        fun centerView(view: View?) {
+        fun keepFocusedViewVisible(view: View?) {
             if (view == null) return
             try {
-                Log.v(TAG, "centerView: $view")
                 val r = Rect(0, 0, 0, 0)
                 view.getDrawingRect(r)
-                val x = r.centerX()
-                val y = r.centerY()
-                val dx = r.width() / 2 //screenWidth / 2
-                val dy = screenHeight / 2
-                val r2 = Rect(x - dx, y - dy, x + dx, y + dy)
-                view.requestRectangleOnScreen(r2, false)
-                // TvFocus.current =TvFocus.current.copy(y=y.toFloat())
+                view.requestRectangleOnScreen(r, false)
             } catch (_: Throwable) {
             }
         }
@@ -1285,26 +1277,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                 }
 
                 if (isLayout(TV)) {
-                    // Put here any button you don't want focusing it to center the view
-                    val exceptionButtons = listOf(
-                        //R.id.home_preview_play_btt,
-                        R.id.home_preview_info_btt,
-                        R.id.home_preview_hidden_next_focus,
-                        R.id.home_preview_hidden_prev_focus,
-                        R.id.result_play_movie_button,
-                        R.id.result_play_series_button,
-                        R.id.result_resume_series_button,
-                        R.id.result_play_trailer_button,
-                        R.id.result_bookmark_Button,
-                        R.id.result_favorite_Button,
-                        R.id.result_subscribe_Button,
-                        R.id.result_search_Button,
-                        R.id.result_episodes_show_button,
-                    )
-
                     newLocalBinding.root.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
-                        if (exceptionButtons.contains(newFocus?.id)) return@addOnGlobalFocusChangeListener
-                        centerView(newFocus)
+                        keepFocusedViewVisible(newFocus)
                     }
                 }
 

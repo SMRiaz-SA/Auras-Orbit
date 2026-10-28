@@ -607,32 +607,33 @@ object AppContextUtils {
 
             val episodeArt = episodePoster?.let { url ->
                 withTimeoutOrNull(WATCH_NEXT_ARTWORK_TIMEOUT_MS) {
-                    TvPreviewArtwork.thumbnailUri(context, url, card.episodePosterHeaders)
+                    TvPreviewArtwork.previewArtwork(context, url, card.episodePosterHeaders)
                 }
             }
             val artwork = episodeArt ?: showPoster?.let { url ->
                 withTimeoutOrNull(WATCH_NEXT_ARTWORK_TIMEOUT_MS) {
-                    TvPreviewArtwork.thumbnailUri(context, url, card.posterHeaders)
+                    TvPreviewArtwork.previewArtwork(context, url, card.posterHeaders)
                 }
             } ?: run {
                 Log.w("WatchNext", "Could not load provider poster for resume entry '${card.name}'")
                 return
             }
+            val artworkUri = artwork.uri
 
             if (!isResumeWatchingSyncCurrent(target.request, DataStoreHelper.currentAccount) ||
                 !isCurrentWatchNextArtworkTarget(target)
             ) return
 
             val values = ContentValues().apply {
-                put(TvContractCompat.WatchNextPrograms.COLUMN_POSTER_ART_URI, artwork.toString())
+                put(TvContractCompat.WatchNextPrograms.COLUMN_POSTER_ART_URI, artworkUri.toString())
                 put(
                     TvContractCompat.WatchNextPrograms.COLUMN_POSTER_ART_ASPECT_RATIO,
-                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                    artwork.aspectRatio,
                 )
-                put(TvContractCompat.WatchNextPrograms.COLUMN_THUMBNAIL_URI, artwork.toString())
+                put(TvContractCompat.WatchNextPrograms.COLUMN_THUMBNAIL_URI, artworkUri.toString())
                 put(
                     TvContractCompat.WatchNextPrograms.COLUMN_THUMBNAIL_ASPECT_RATIO,
-                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                    artwork.aspectRatio,
                 )
             }
             synchronized(watchNextArtworkLock) {

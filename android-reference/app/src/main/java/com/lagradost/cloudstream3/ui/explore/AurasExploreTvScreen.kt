@@ -95,7 +95,6 @@ internal fun AurasExploreTvScreen(
     onResumeTitle: (SearchResponse, Int) -> Unit,
     onSeeAllTrending: (String) -> Unit,
 ) {
-    val firstActionFocus = remember { FocusRequester() }
     val providerCount = state.sources.count { it.key != APIRepository.randomApi.name }
     val selectedSourceLabel = state.sources.firstOrNull { it.key == state.sourceName }?.label
         ?: state.sourceName?.takeIf { it.isNotBlank() }
@@ -106,10 +105,6 @@ internal fun AurasExploreTvScreen(
         if (watchPos.duration <= 0L) return@mapNotNull null
         item.url to (watchPos.position.toFloat() / watchPos.duration.toFloat()).coerceIn(0f, 1f)
     }.distinctBy { it.first }.toMap()
-
-    LaunchedEffect(isTv, state.resumeItems.isNotEmpty()) {
-        if (isTv) firstActionFocus.requestFocus()
-    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -169,16 +164,14 @@ internal fun AurasExploreTvScreen(
                     AurasResumeHero(
                         item = latestResume,
                         progress = resumeProgressByUrl[latestResume.url],
-                        isTv = true,
+                        isTv = isTv,
                         onResume = { onResumeTitle(latestResume, 0) },
-                        focusRequester = firstActionFocus,
                     )
                 }
             } ?: item(key = "welcome-hero") {
                 ExploreHero(
                     wide = wide,
                     providerCount = providerCount,
-                    firstActionFocus = firstActionFocus,
                     onCatalogs = onCatalogs,
                     onSearch = onSearch,
                     showActions = false,
@@ -212,7 +205,6 @@ internal fun AurasExploreTvScreen(
                     PrimaryAction(
                         label = stringResource(R.string.auras_explore_browse_catalog),
                         onClick = onCatalogs,
-                        focusRequester = if (state.resumeItems.isEmpty()) firstActionFocus else null,
                     )
                     QuietAction(label = stringResource(R.string.auras_tv_explore_search_title), onClick = onSearch)
                 }
@@ -777,7 +769,6 @@ private fun BrandHeading(onHelp: () -> Unit) {
 private fun ExploreHero(
     wide: Boolean,
     providerCount: Int,
-    firstActionFocus: FocusRequester,
     onCatalogs: () -> Unit,
     onSearch: () -> Unit,
     showActions: Boolean = true,
@@ -802,7 +793,6 @@ private fun ExploreHero(
                     HeroCopy(
                         modifier = Modifier.weight(1f),
                         providerCount = providerCount,
-                        firstActionFocus = firstActionFocus,
                         onCatalogs = onCatalogs,
                         onSearch = onSearch,
                         showActions = showActions,
@@ -818,7 +808,6 @@ private fun ExploreHero(
                     )
                     HeroCopy(
                         providerCount = providerCount,
-                        firstActionFocus = firstActionFocus,
                         onCatalogs = onCatalogs,
                         onSearch = onSearch,
                         showActions = showActions,
@@ -832,7 +821,6 @@ private fun ExploreHero(
 @Composable
 private fun HeroCopy(
     providerCount: Int,
-    firstActionFocus: FocusRequester,
     onCatalogs: () -> Unit,
     onSearch: () -> Unit,
     showActions: Boolean,
@@ -863,7 +851,6 @@ private fun HeroCopy(
                 PrimaryAction(
                     label = stringResource(R.string.auras_explore_browse_catalog),
                     onClick = onCatalogs,
-                    focusRequester = firstActionFocus,
                 )
                 QuietAction(label = stringResource(R.string.auras_tv_explore_search_title), onClick = onSearch)
             }
@@ -982,7 +969,6 @@ private fun ExploreTile(
 private fun PrimaryAction(
     label: String,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null,
 ) {
     var isFocused by remember { mutableStateOf(false) }
     Surface(
@@ -996,7 +982,6 @@ private fun PrimaryAction(
         ),
         modifier = Modifier
             .height(46.dp)
-            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .onFocusChanged { isFocused = it.isFocused },
     ) {
         Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {

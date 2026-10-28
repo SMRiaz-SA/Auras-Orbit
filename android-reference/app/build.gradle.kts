@@ -87,6 +87,10 @@ abstract class GenerateGitHashTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val headsDir: DirectoryProperty
 
+    @get:org.gradle.api.tasks.InputFiles
+    @get:org.gradle.api.tasks.PathSensitive(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    abstract val packedRefs: org.gradle.api.file.ConfigurableFileCollection
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -101,7 +105,25 @@ abstract class GenerateGitHashTask : DefaultTask() {
                 if (headContent.startsWith("ref:")) {
                     val refPath = headContent.substring(5) // e.g., refs/heads/main
                     val commitFile = File(head.parentFile, refPath)
-                    if (commitFile.exists()) commitFile.readText().trim() else ""
+                    if (commitFile.exists()) {
+                        commitFile.readText().trim()
+                    } else {
+                        val packedRefsFile = packedRefs.files.firstOrNull { it.name == "packed-refs" && it.isFile }
+                        packedRefsFile?.useLines { lines ->
+                            lines.firstNotNullOfOrNull { line ->
+                                if (line.isBlank() || line.startsWith("#") || line.startsWith("^")) {
+                                    null
+                                } else {
+                                    val separator = line.indexOf(' ')
+                                    if (separator > 0 && line.substring(separator + 1).trim() == refPath) {
+                                        line.substring(0, separator)
+                                    } else {
+                                        null
+                                    }
+                                }
+                            }
+                        }.orEmpty()
+                    }
                 } else headContent // If it's a detached HEAD (commit hash directly)
             } else "" // If .git/HEAD doesn't exist
         } catch (_: Throwable) {
@@ -121,6 +143,7 @@ val generateGitHash = tasks.register<GenerateGitHashTask>("generateGitHash") {
 
     headFile.set(gitDir.file("HEAD"))
     headsDir.set(gitDir.dir("refs/heads"))
+    packedRefs.from(gitDir.file("packed-refs"))
 
     outputDir.set(layout.buildDirectory.dir("generated/git"))
 }

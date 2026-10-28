@@ -444,6 +444,7 @@ object TvChannelUtils {
 
     private fun fingerprint(providerName: String, shelfName: String, cards: List<SearchResponse>): String {
         val data = buildString {
+            append("artwork-format:").append(TvPreviewArtwork.ARTWORK_FORMAT_REVISION).append('\n')
             append(providerName).append('\n').append(shelfName)
             cards.forEach { card ->
                 append('\n').append(card.apiName).append('|').append(card.url).append('|')
@@ -471,24 +472,24 @@ object TvChannelUtils {
             targets.map { target ->
                 async {
                     val updated = try {
-                        val art = TvPreviewArtwork.thumbnailUri(
+                        val artwork = TvPreviewArtwork.previewArtwork(
                             context,
                             target.item.posterUrl,
                             target.item.posterHeaders,
                         )
-                        if (art == null || !isCurrentArtworkTarget(target)) {
+                        if (artwork == null || !isCurrentArtworkTarget(target)) {
                             false
                         } else {
                             val values = ContentValues().apply {
-                                put(TvContractCompat.PreviewPrograms.COLUMN_POSTER_ART_URI, art.toString())
+                                put(TvContractCompat.PreviewPrograms.COLUMN_POSTER_ART_URI, artwork.uri.toString())
                                 put(
                                     TvContractCompat.PreviewPrograms.COLUMN_POSTER_ART_ASPECT_RATIO,
-                                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                                    artwork.aspectRatio,
                                 )
-                                put(TvContractCompat.PreviewPrograms.COLUMN_THUMBNAIL_URI, art.toString())
+                                put(TvContractCompat.PreviewPrograms.COLUMN_THUMBNAIL_URI, artwork.uri.toString())
                                 put(
                                     TvContractCompat.PreviewPrograms.COLUMN_THUMBNAIL_ASPECT_RATIO,
-                                    TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9,
+                                    artwork.aspectRatio,
                                 )
                             }
                             context.contentResolver.update(
