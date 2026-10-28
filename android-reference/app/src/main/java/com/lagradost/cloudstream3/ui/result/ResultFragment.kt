@@ -14,6 +14,7 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SeasonData
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.ui.result.EpisodeAdapter.Companion.getPlayerAction
+import com.lagradost.cloudstream3.ui.player.NEXT_WATCH_EPISODE_PERCENTAGE
 import com.lagradost.cloudstream3.utils.AppContextUtils.getApiDubstatusSettings
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getVideoWatchState
@@ -133,6 +134,28 @@ fun buildResultEpisode(
 fun ResultEpisode.getWatchProgress(): Float {
     return (getDisplayPosition() / 1000).toFloat() / (duration / 1000).toFloat()
 }
+
+/** Selects the same default inline-source episode on phones and TVs. */
+internal fun firstUnwatchedEpisode(episodes: List<ResultEpisode>): ResultEpisode? {
+    val lastWatchedIndex = episodes.indexOfLast { episode ->
+        episode.getWatchProgress() >= NEXT_WATCH_EPISODE_PERCENTAGE.toFloat() / 100.0f ||
+            episode.videoWatchState == VideoWatchState.Watched
+    }
+    return episodes.getOrElse(lastWatchedIndex + 1) { episodes.firstOrNull() }
+}
+
+internal fun isSameInlineSourceEpisode(
+    first: ResultEpisode?,
+    second: ResultEpisode?,
+): Boolean = when {
+    first == null || second == null -> first == second
+    else -> first.id == second.id && first.parentId == second.parentId && first.apiName == second.apiName
+}
+
+internal fun canStartInlineSourceDiscovery(
+    detailStageThreeReady: Boolean,
+    episode: ResultEpisode?,
+): Boolean = detailStageThreeReady && episode != null
 
 object ResultFragment {
     private const val URL_BUNDLE = "url"

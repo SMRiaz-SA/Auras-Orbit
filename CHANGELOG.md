@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0.04 — 2026-10-28
+
+### Stable release
+
+- Put the latest resume item first in Android Explore on phone and TV, with other resume files above the current source. Keep poster titles off the artwork while retaining accessible names.
+- Add the same resume block and six status-based Watchlists to Android Catalog on phone and TV while retaining provider browsing.
+- Load provider details and episodes progressively on Android so the provider response appears before optional metadata enrichment; reject stale results when navigation or episode selection changes.
+- Publish desktop Explore catalogs progressively, retry only failed add-ons, and keep late results from removed sources or earlier profiles from replacing current content.
+- Improve desktop metadata identity resolution and cache reuse, and prepare the next episode's stream lookup in the background with cancellation and timeout handling.
+- Add local performance diagnostics for metadata, source lookup, first frame, buffering, and recovery using allowlisted timing fields without titles or stream URLs.
+
 ## 1.0.0.03 — 2026-10-27
 
 ### Stable release

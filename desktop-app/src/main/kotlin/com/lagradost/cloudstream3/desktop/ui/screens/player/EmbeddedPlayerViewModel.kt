@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.domain.player.interactor.SavePlaybackProgress
 import com.lagradost.cloudstream3.desktop.player.PlayerConfig
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.base.BaseMviViewModel
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerPhase
@@ -17,6 +18,10 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.performance.PerformanceDiagnosticStage
+import com.lagradost.common.performance.PerformanceDiagnosticStatus
+import com.lagradost.common.performance.PerformanceDiagnostics
+import com.lagradost.common.performance.normalizePerformanceSourceLabel
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.common.storage.WatchHistory
 import com.lagradost.runtime.executor.SafePluginInvoker
@@ -41,7 +46,10 @@ class EmbeddedPlayerViewModel(
     private var playbackFinished = false
     private var timeoutJob: Job? = null
     private var countdownJob: Job? = null
-    private val scraper = PlayerStreamScraper(viewModelScope)
+    private val scraper = PlayerStreamScraper(viewModelScope, isEpisodeStillNext = { episodeId ->
+        val state = uiState.value
+        state.nextEpisodeData?.data == episodeId && state.launchData?.history?.episodeId != episodeId
+    })
     private val scrapeAttemptGeneration = AtomicLong(0L)
 
     private val linkRetries = mutableMapOf<String, Int>()
@@ -1187,6 +1195,8 @@ class EmbeddedPlayerViewModel(
             return
         }
 
+        val scrapeStartedAtNanos = System.nanoTime()
+        val scrapeDiagnosticSource = normalizePerformanceSourceLabel(provider.name) ?: "unknown"
         val result = scraper.executeScrape(
             provider = provider,
             targetEpisodeId = targetEpisodeId,
@@ -1272,6 +1282,14 @@ class EmbeddedPlayerViewModel(
                     copy(nextEpisodeLinks = reSorted, launchData = updated)
                 }
             },
+        )
+
+        PerformanceDiagnostics.recordAsync(
+            PerformanceDiagnosticStage.SOURCE_LOOKUP,
+            scrapeDiagnosticSource,
+            profileId = ProfileManager.activeProfileId.toString(),
+            status = if (result.isSuccess) PerformanceDiagnosticStatus.SUCCESS else PerformanceDiagnosticStatus.FAILURE,
+            durationMs = ((System.nanoTime() - scrapeStartedAtNanos) / 1_000_000L).coerceAtLeast(0L),
         )
 
         if (scrapeAttempt != scrapeAttemptGeneration.get()) return

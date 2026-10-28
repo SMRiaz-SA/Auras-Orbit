@@ -22,10 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +50,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,7 +107,7 @@ internal fun AurasExploreTvScreen(
         item.url to (watchPos.position.toFloat() / watchPos.duration.toFloat()).coerceIn(0f, 1f)
     }.distinctBy { it.first }.toMap()
 
-    LaunchedEffect(isTv) {
+    LaunchedEffect(isTv, state.resumeItems.isNotEmpty()) {
         if (isTv) firstActionFocus.requestFocus()
     }
 
@@ -129,86 +128,128 @@ internal fun AurasExploreTvScreen(
         val contentPadding = if (wide) 42.dp else 22.dp
         val columns = if (maxWidth >= 960.dp) 4 else 2
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 1120.dp)
-                .align(Alignment.TopCenter)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = contentPadding, vertical = if (wide) 34.dp else 24.dp),
+                .align(Alignment.TopCenter),
+            state = rememberLazyListState(),
+            contentPadding = PaddingValues(
+                horizontal = contentPadding,
+                vertical = if (wide) 34.dp else 24.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(if (wide) 28.dp else 22.dp),
         ) {
-            BrandHeading(onHelp)
+            item(key = "brand-heading") {
+                BrandHeading(onHelp)
+            }
 
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text(
-                    text = "Explore",
-                    color = AurasExplorePalette.Text,
-                    fontSize = if (wide) 40.sp else 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.7).sp,
-                )
-                Text(
-                    text = "Find something to watch across your connected catalogs.",
-                    color = AurasExplorePalette.Muted,
-                    fontSize = if (wide) 17.sp else 15.sp,
-                    lineHeight = if (wide) 25.sp else 22.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+            item(key = "page-heading") {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(
+                        text = stringResource(R.string.auras_tv_explore_title),
+                        color = AurasExplorePalette.Text,
+                        fontSize = if (wide) 40.sp else 34.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.7).sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.auras_tv_explore_subtitle),
+                        color = AurasExplorePalette.Muted,
+                        fontSize = if (wide) 17.sp else 15.sp,
+                        lineHeight = if (wide) 25.sp else 22.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            state.resumeItems.firstOrNull()?.let { latestResume ->
+                item(key = "resume-hero") {
+                    AurasResumeHero(
+                        item = latestResume,
+                        progress = resumeProgressByUrl[latestResume.url],
+                        isTv = true,
+                        onResume = { onResumeTitle(latestResume, 0) },
+                        focusRequester = firstActionFocus,
+                    )
+                }
+            } ?: item(key = "welcome-hero") {
+                ExploreHero(
+                    wide = wide,
+                    providerCount = providerCount,
+                    firstActionFocus = firstActionFocus,
+                    onCatalogs = onCatalogs,
+                    onSearch = onSearch,
+                    showActions = false,
                 )
             }
 
-            ExploreHero(
-                wide = wide,
-                providerCount = providerCount,
-                firstActionFocus = firstActionFocus,
-                onCatalogs = onCatalogs,
-                onSearch = onSearch,
-            )
+            if (state.resumeItems.size > 1) {
+                item(key = "resume-more") {
+                    TvPosterRail(
+                        title = stringResource(R.string.auras_explore_resume_more_title),
+                        items = state.resumeItems.drop(1),
+                        posterWidth = if (wide) 150.dp else 124.dp,
+                        progressByUrl = resumeProgressByUrl,
+                        onOpen = { item, index -> onResumeTitle(item, index + 1) },
+                        actionLabel = stringResource(R.string.auras_explore_resume_see_all),
+                        onAction = onLibrary,
+                    )
+                }
+            }
 
-            ExploreSourceSelector(
-                sourceName = selectedSourceLabel,
-                hasSources = state.sources.isNotEmpty(),
-                onClick = onSourceClick,
-            )
-
-            if (state.resumeItems.isNotEmpty()) {
-                TvPosterRail(
-                    title = stringResource(R.string.auras_explore_resume_title),
-                    items = state.resumeItems,
-                    posterWidth = if (wide) 150.dp else 124.dp,
-                    progressByUrl = resumeProgressByUrl,
-                    onOpen = onResumeTitle,
-                    actionLabel = stringResource(R.string.auras_explore_resume_see_all),
-                    onAction = onLibrary,
+            item(key = "source-selector") {
+                ExploreSourceSelector(
+                    sourceName = selectedSourceLabel,
+                    hasSources = state.sources.isNotEmpty(),
+                    onClick = onSourceClick,
                 )
+            }
+
+            item(key = "browse-actions") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PrimaryAction(
+                        label = stringResource(R.string.auras_explore_browse_catalog),
+                        onClick = onCatalogs,
+                        focusRequester = if (state.resumeItems.isEmpty()) firstActionFocus else null,
+                    )
+                    QuietAction(label = stringResource(R.string.auras_tv_explore_search_title), onClick = onSearch)
+                }
             }
 
             when {
-                state.loading -> ExploreLoadingPanel()
-                state.error != null -> ExploreMessagePanel(
-                    title = stringResource(
-                        if (state.shelves.isEmpty()) R.string.auras_explore_load_error_title
-                        else R.string.auras_explore_refresh_error_title
-                    ),
-                    body = state.error,
-                    actionLabel = stringResource(R.string.auras_catalog_retry),
-                    onAction = onRetrySource,
-                )
-                state.shelves.isEmpty() && state.resumeItems.isEmpty() -> ExploreMessagePanel(
-                    title = stringResource(R.string.auras_explore_empty_title),
-                    body = stringResource(R.string.auras_explore_empty_body),
-                    actionLabel = stringResource(
-                        if (state.sources.isEmpty()) R.string.auras_explore_connect_source
-                        else R.string.auras_explore_choose_source
-                    ),
-                    onAction = if (state.sources.isEmpty()) onSources else onSourceClick,
-                )
+                state.loading -> item(key = "loading") { ExploreLoadingPanel() }
+                state.error != null -> item(key = "error") {
+                    ExploreMessagePanel(
+                        title = stringResource(
+                            if (state.shelves.isEmpty()) R.string.auras_explore_load_error_title
+                            else R.string.auras_explore_refresh_error_title
+                        ),
+                        body = state.error,
+                        actionLabel = stringResource(R.string.auras_catalog_retry),
+                        onAction = onRetrySource,
+                    )
+                }
+                state.shelves.isEmpty() && state.resumeItems.isEmpty() -> item(key = "empty") {
+                    ExploreMessagePanel(
+                        title = stringResource(R.string.auras_explore_empty_title),
+                        body = stringResource(R.string.auras_explore_empty_body),
+                        actionLabel = stringResource(
+                            if (state.sources.isEmpty()) R.string.auras_explore_connect_source
+                            else R.string.auras_explore_choose_source
+                        ),
+                        onAction = if (state.sources.isEmpty()) onSources else onSourceClick,
+                    )
+                }
             }
 
-            state.shelves
-                .filter { it.items.isNotEmpty() || it.hasNext || it.pageError != null }
-                .forEach { shelf ->
+            itemsIndexed(
+                items = state.shelves.filter {
+                    it.items.isNotEmpty() || it.hasNext || it.pageError != null
+                },
+                        key = { _, shelf -> "shelf-${shelf.name}" },
+            ) { _, shelf ->
                     val isTrending = shelf.isTrendingShelf()
                     val hasFullList = isTrending || shelf.items.size > 10 || shelf.hasNext
                     val pageActionLabel = when {
@@ -257,95 +298,105 @@ internal fun AurasExploreTvScreen(
                             )
                         }
                     }
-                }
+            }
 
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = "Discover",
-                    color = AurasExplorePalette.Text,
-                    fontSize = if (wide) 22.sp else 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+            item(key = "discover") {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = stringResource(R.string.auras_tv_explore_discover),
+                        color = AurasExplorePalette.Text,
+                        fontSize = if (wide) 22.sp else 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
 
-                val tiles = listOf(
-                    ExploreTileData(
-                        title = "Catalogs",
-                        description = "Browse collections from your sources.",
-                        icon = R.drawable.baseline_grid_view_24,
-                        onClick = onCatalogs,
-                    ),
-                    ExploreTileData(
-                        title = "Search",
-                        description = "Look across connected catalogs.",
-                        icon = R.drawable.search_icon,
-                        onClick = onSearch,
-                    ),
-                    ExploreTileData(
-                        title = "Sources",
-                        description = if (providerCount > 0) {
-                            "$providerCount source${if (providerCount == 1) "" else "s"} available on this device."
-                        } else {
-                            "Choose the catalogs you want to connect."
-                        },
-                        icon = R.drawable.ic_baseline_extension_24,
-                        onClick = onSources,
-                    ),
-                    ExploreTileData(
-                        title = "Library",
-                        description = "Return to saved titles and activity.",
-                        icon = R.drawable.library_icon,
-                        onClick = onLibrary,
-                    ),
-                )
+                    val tiles = listOf(
+                        ExploreTileData(
+                            title = stringResource(R.string.auras_tv_explore_catalogs_title),
+                            description = stringResource(R.string.auras_tv_explore_catalogs_description),
+                            icon = R.drawable.baseline_grid_view_24,
+                            onClick = onCatalogs,
+                        ),
+                        ExploreTileData(
+                            title = stringResource(R.string.auras_tv_explore_search_title),
+                            description = stringResource(R.string.auras_tv_explore_search_description),
+                            icon = R.drawable.search_icon,
+                            onClick = onSearch,
+                        ),
+                        ExploreTileData(
+                            title = stringResource(R.string.auras_tv_explore_sources_title),
+                            description = if (providerCount > 0) {
+                                pluralStringResource(
+                                    R.plurals.auras_tv_explore_sources_count,
+                                    providerCount,
+                                    providerCount,
+                                )
+                            } else {
+                                stringResource(R.string.auras_tv_explore_sources_empty)
+                            },
+                            icon = R.drawable.ic_baseline_extension_24,
+                            onClick = onSources,
+                        ),
+                        ExploreTileData(
+                            title = stringResource(R.string.auras_tv_explore_library_title),
+                            description = stringResource(R.string.auras_tv_explore_library_description),
+                            icon = R.drawable.library_icon,
+                            onClick = onLibrary,
+                        ),
+                    )
 
-                tiles.chunked(columns).forEach { rowTiles ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        rowTiles.forEach { tile ->
-                            ExploreTile(
-                                data = tile,
-                                compact = wide,
-                                modifier = Modifier.weight(1f),
-                            )
+                    tiles.chunked(columns).forEach { rowTiles ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            rowTiles.forEach { tile ->
+                                ExploreTile(
+                                    data = tile,
+                                    compact = wide,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(columns - rowTiles.size) { Spacer(Modifier.weight(1f)) }
                         }
-                        repeat(columns - rowTiles.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
 
-            Surface(
-                color = AurasExplorePalette.BackgroundRaised,
-                shape = RoundedCornerShape(22.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, AurasExplorePalette.Stroke),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 17.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(13.dp),
+            item(key = "footer") {
+                Surface(
+                    color = AurasExplorePalette.BackgroundRaised,
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AurasExplorePalette.Stroke),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("✦", color = AurasExplorePalette.LavenderBright, fontSize = 21.sp)
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(
-                            text = if (providerCount > 0) "Your Orbit is ready" else "Make Orbit yours",
-                            color = AurasExplorePalette.Text,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                        )
-                        Text(
-                            text = if (providerCount > 0) {
-                                "Your sources stay on this device. Add or manage them any time."
-                            } else {
-                                "Connect a source to bring its catalogs into one place."
-                            },
-                            color = AurasExplorePalette.Muted,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                        )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 17.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(13.dp),
+                    ) {
+                        Text("✦", color = AurasExplorePalette.LavenderBright, fontSize = 21.sp)
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(
+                                text = stringResource(
+                                    if (providerCount > 0) R.string.auras_tv_explore_orbit_ready_title
+                                    else R.string.auras_tv_explore_orbit_empty_title
+                                ),
+                                color = AurasExplorePalette.Text,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                            )
+                            Text(
+                                text = stringResource(
+                                    if (providerCount > 0) R.string.auras_tv_explore_orbit_ready_body
+                                    else R.string.auras_tv_explore_orbit_empty_body
+                                ),
+                                color = AurasExplorePalette.Muted,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                            )
+                        }
+                        QuietAction(label = stringResource(R.string.auras_tv_explore_sources_title), onClick = onSources)
                     }
-                    QuietAction(label = "Sources", onClick = onSources)
                 }
             }
         }
@@ -402,8 +453,8 @@ private fun ExploreSourceSelector(
             )
             Text(
                 text = stringResource(
-                    if (hasSources) R.string.auras_explore_source_change_hint
-                    else R.string.auras_explore_source_connect_hint
+                    if (hasSources) R.string.auras_tv_source_change_hint
+                    else R.string.auras_tv_source_connect_hint
                 ),
                 color = AurasExplorePalette.Muted,
                 fontSize = 12.sp,
@@ -414,29 +465,36 @@ private fun ExploreSourceSelector(
 
 @Composable
 private fun TvPosterRail(
-    title: String,
+    title: String?,
     items: List<SearchResponse>,
     posterWidth: Dp,
     onOpen: (SearchResponse, Int) -> Unit,
     progressByUrl: Map<String, Float> = emptyMap(),
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    startIndex: Int = 0,
+    maxItems: Int = AURAS_POSTER_RAIL_LIMIT,
 ) {
-    if (items.isEmpty()) return
+    val visibleItems = items.take(maxItems)
+    if (visibleItems.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = title,
-                color = AurasExplorePalette.Text,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (actionLabel != null && onAction != null) {
-                QuietAction(label = actionLabel, onClick = onAction)
+        if (!title.isNullOrBlank() || (actionLabel != null && onAction != null)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                if (!title.isNullOrBlank()) {
+                    Text(
+                        text = title,
+                        color = AurasExplorePalette.Text,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (actionLabel != null && onAction != null) {
+                    QuietAction(label = actionLabel, onClick = onAction)
+                }
             }
         }
         LazyRow(
@@ -444,14 +502,14 @@ private fun TvPosterRail(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             itemsIndexed(
-                items = items,
-                key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" },
+                items = visibleItems,
+                key = { _, item -> item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}" },
             ) { index, item ->
                 TvPosterCard(
                     item = item,
                     width = posterWidth,
                     progress = progressByUrl[item.url],
-                    onClick = { onOpen(item, index) },
+                    onClick = { onOpen(item, startIndex + index) },
                 )
             }
         }
@@ -694,14 +752,14 @@ private fun BrandHeading(onHelp: () -> Unit) {
         )
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
-                text = "AURAS ORBIT",
+                text = stringResource(R.string.auras_tv_brand_name),
                 color = AurasExplorePalette.Text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp,
             )
             Text(
-                text = "Your personal watch space",
+                text = stringResource(R.string.auras_tv_brand_tagline),
                 color = AurasExplorePalette.Muted,
                 fontSize = 12.sp,
             )
@@ -717,6 +775,7 @@ private fun ExploreHero(
     firstActionFocus: FocusRequester,
     onCatalogs: () -> Unit,
     onSearch: () -> Unit,
+    showActions: Boolean = true,
 ) {
     Surface(
         color = AurasExplorePalette.Surface,
@@ -741,6 +800,7 @@ private fun ExploreHero(
                         firstActionFocus = firstActionFocus,
                         onCatalogs = onCatalogs,
                         onSearch = onSearch,
+                        showActions = showActions,
                     )
                     Spacer(Modifier.width(20.dp))
                     OrbitArtwork(modifier = Modifier.size(180.dp), centerMarkSize = 64.dp)
@@ -756,6 +816,7 @@ private fun ExploreHero(
                         firstActionFocus = firstActionFocus,
                         onCatalogs = onCatalogs,
                         onSearch = onSearch,
+                        showActions = showActions,
                     )
                 }
             }
@@ -769,11 +830,15 @@ private fun HeroCopy(
     firstActionFocus: FocusRequester,
     onCatalogs: () -> Unit,
     onSearch: () -> Unit,
+    showActions: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = if (providerCount > 0) "A world of catalogs,\none Orbit." else "One place for every\nway you watch.",
+            text = stringResource(
+                if (providerCount > 0) R.string.auras_tv_explore_hero_connected
+                else R.string.auras_tv_explore_hero_empty
+            ),
             color = AurasExplorePalette.Text,
             fontSize = 25.sp,
             lineHeight = 30.sp,
@@ -781,20 +846,22 @@ private fun HeroCopy(
             letterSpacing = (-0.25).sp,
         )
         Text(
-            text = "Bring your favorite sources together, then explore their catalogs from one calm space.",
+            text = stringResource(R.string.auras_tv_explore_hero_description),
             color = AurasExplorePalette.Muted,
             fontSize = 14.sp,
             lineHeight = 21.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryAction(
-                label = stringResource(R.string.auras_explore_browse_catalog),
-                onClick = onCatalogs,
-                focusRequester = firstActionFocus,
-            )
-            QuietAction(label = "Search", onClick = onSearch)
+        if (showActions) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrimaryAction(
+                    label = stringResource(R.string.auras_explore_browse_catalog),
+                    onClick = onCatalogs,
+                    focusRequester = firstActionFocus,
+                )
+                QuietAction(label = stringResource(R.string.auras_tv_explore_search_title), onClick = onSearch)
+            }
         }
     }
 }

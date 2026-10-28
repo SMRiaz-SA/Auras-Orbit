@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.lagradost.cloudstream3.desktop.explore.models.ExploreCatalogSourceState
 import com.lagradost.cloudstream3.desktop.explore.models.ExploreItem
 import com.lagradost.cloudstream3.desktop.explore.models.ManifestCatalogDescriptor
 import com.lagradost.cloudstream3.desktop.explore.viewmodel.EXPLORE_YEAR_OPTIONS
@@ -124,7 +125,7 @@ fun ExploreCatalogsScreen(
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 14.dp),
         ) {
-            if (uiState.isInitializing) {
+            if (uiState.isInitializing && uiState.catalogDiscoverySources.isEmpty()) {
                 // Loading state
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -149,11 +150,37 @@ fun ExploreCatalogsScreen(
                 }
             } else if (uiState.availableTypes.isEmpty()) {
                 if (uiState.catalogDiscoveryError != null) {
-                    CatalogDiscoveryFailureState(
-                        message = uiState.catalogDiscoveryError!!,
-                        onRetry = { viewModel.onEvent(ExploreUiEvent.RefreshCatalogs) },
-                        onBack = onBack,
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        CatalogDiscoveryFailureState(
+                            message = uiState.catalogDiscoveryError!!,
+                            onRetry = { viewModel.onEvent(ExploreUiEvent.RefreshCatalogs) },
+                            onBack = onBack,
+                        )
+                        CatalogSourceStatuses(uiState.catalogDiscoverySources, viewModel)
+                    }
+                } else if (uiState.catalogDiscoverySources.any { it.isLoading }) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(34.dp),
+                            strokeWidth = 3.dp,
+                        )
+                        Text(
+                            text = "Loading catalogs from enabled add-ons…",
+                            color = theme.TextMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
+                        )
+                        CatalogSourceStatuses(uiState.catalogDiscoverySources, viewModel)
+                    }
                 } else {
                     // Empty state if no catalog addon is enabled
                     EmptyCatalogState(
@@ -404,6 +431,8 @@ fun ExploreCatalogsScreen(
                     )
                 }
 
+                CatalogSourceStatuses(uiState.catalogDiscoverySources, viewModel)
+
                 if (uiState.catalogLoadError != null && uiState.displayItems.isNotEmpty()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -640,6 +669,63 @@ fun ExploreCatalogsScreen(
                     showCatalogExtrasDialog = false
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun CatalogSourceStatuses(
+    sources: List<ExploreCatalogSourceState>,
+    viewModel: ExploreViewModel,
+) {
+    val activeSources = sources.filter { it.isLoading || it.error != null }
+    if (activeSources.isEmpty()) return
+
+    Column(
+        modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        activeSources.forEach { source ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = if (source.error != null) {
+                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (source.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(source.addonName, fontSize = 11.5.sp, fontWeight = FontWeight.Medium)
+                        if (source.error != null) {
+                            Text(
+                                source.error,
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        } else {
+                            Text("Loading catalogs…", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (source.error != null) {
+                        TextButton(
+                            onClick = { viewModel.onEvent(ExploreUiEvent.RetryCatalogSource(source.addonManifestUrl)) },
+                        ) {
+                            Text("Retry", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1144,7 +1230,7 @@ private fun CatalogDiscoveryFailureState(
 ) {
     val theme = LocalDesktopTheme.current
     Box(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 250.dp).padding(12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(

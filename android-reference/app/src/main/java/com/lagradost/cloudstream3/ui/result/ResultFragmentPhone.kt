@@ -212,6 +212,8 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
     private var inlineSourceEpisodeIsResume = false
     private var inlineSourceResults: Pair<ResultEpisode, LinkLoadingResult>? = null
     private var inlineSourceShowAll = false
+    private var inlineSourceSearchInProgress = false
+    private var currentDetailComingSoon = false
 
     protected var playerHostView: PlayerView? = null
 
@@ -358,9 +360,10 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         playerHostView?.release()
         playerBinding = null
         resultBinding?.resultScroll?.setOnClickListener(null)
-        viewModel.cancelInlineSourceSearch()
+        if (::viewModel.isInitialized) viewModel.cancelPendingDetailLoad()
         inlineSourceEpisode = null
         inlineSourceResults = null
+        inlineSourceSearchInProgress = false
         resultBinding = null
         syncBinding = null
         recommendationBinding = null
@@ -747,7 +750,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         }*/
 
         observeNullable(viewModel.resumeWatching) { resume ->
-            if (resume != null && !resume.isMovie) {
+            if (resume != null && !resume.isMovie && viewModel.isDetailStageThreeReady()) {
                 setInlineSourcesEpisode(resume.result, fromResume = true)
             } else if (resume == null) {
                 inlineSourceEpisodeIsResume = false
@@ -841,8 +844,8 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     episodes is Resource.Success && episodes.value.isNotEmpty()
 
                 if (episodes is Resource.Success) {
-                    if (!inlineSourceEpisodeIsResume) {
-                        setInlineSourcesEpisode(episodes.value.firstOrNull())
+                    if (!inlineSourceEpisodeIsResume && viewModel.isDetailStageThreeReady()) {
+                        setInlineSourcesEpisode(firstUnwatchedEpisode(episodes.value))
                     }
                     (resultEpisodes.adapter as? EpisodeAdapter)?.submitList(episodes.value)
 
@@ -903,7 +906,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     data is Resource.Success && viewModel.currentRepo?.api?.hasDownloadSupport == true
 
                 (data as? Resource.Success)?.value?.let { (text, ep) ->
-                    setInlineSourcesEpisode(ep)
+                    if (viewModel.isDetailStageThreeReady()) setInlineSourcesEpisode(ep)
                     resultPlayMovie.setText(text)
                     resultPlayMovie.setOnClickListener {
                         viewModel.handleAction(
@@ -957,6 +960,15 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
             }
         }
 
+        observe(viewModel.detailStageThreeReady) { ready ->
+            if (ready) {
+                syncAutoInlineSourceEpisode()
+            } else {
+                inlineSourceEpisodeIsResume = false
+                setInlineSourcesEpisode(null)
+            }
+        }
+
         observe(viewModel.page) { data ->
             if (data == null) return@observe
             resultBinding?.apply {
@@ -964,6 +976,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                     register(resultCastItems)
                 }
                 (data as? Resource.Success)?.value?.let { d ->
+                    currentDetailComingSoon = d.comingSoon
                     resultVpn.setText(d.vpnText)
                     resultInfo.setText(d.metaText)
                     resultNoEpisodes.setText(d.noEpisodesFoundText)
@@ -1474,10 +1487,37 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         )
     }
 
+    private fun syncAutoInlineSourceEpisode() {
+        if (!viewModel.isDetailStageThreeReady()) return
+        val isComingSoon = currentDetailComingSoon ||
+            (viewModel.page.value as? Resource.Success)?.value?.comingSoon == true
+        if (isComingSoon) {
+            setInlineSourcesEpisode(null)
+            return
+        }
+        val resume = viewModel.resumeWatching.value
+        if (resume != null && !resume.isMovie) {
+            setInlineSourcesEpisode(resume.result, fromResume = true)
+            return
+        }
+        val movie = (viewModel.movie.value as? Resource.Success)?.value?.second
+        if (movie != null) {
+            setInlineSourcesEpisode(movie)
+            return
+        }
+        val episodes = (viewModel.episodes.value as? Resource.Success)?.value.orEmpty()
+        setInlineSourcesEpisode(firstUnwatchedEpisode(episodes))
+    }
+
     private fun setInlineSourcesEpisode(
         episode: ResultEpisode?,
         fromResume: Boolean = false
     ) {
+        if (episode != null && !canStartInlineSourceDiscovery(
+                viewModel.isDetailStageThreeReady(),
+                episode,
+            )
+        ) return
         if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
             if (fromResume && episode != null) inlineSourceEpisodeIsResume = true
             return
@@ -1520,16 +1560,18 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
 
     private fun findInlineSources(forceReload: Boolean = false) {
         val episode = inlineSourceEpisode ?: return
+        if (!canStartInlineSourceDiscovery(viewModel.isDetailStageThreeReady(), episode)) return
         val binding = resultBinding ?: return
 
         inlineSourceResults?.takeIf {
             isSameInlineSourceEpisode(it.first, episode) && !forceReload
         }?.let { (_, result) ->
-            showInlineSourceOptions(episode, result)
+            showInlineSourceOptions(episode, result, isSearching = inlineSourceSearchInProgress)
             return
         }
 
         inlineSourceResults = null
+        inlineSourceSearchInProgress = true
         binding.resultRetrySources.isGone = true
         binding.resultSourceCount.isGone = true
         binding.resultSourceShowAll.isGone = true
@@ -1542,14 +1584,28 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         binding.resultSourceOptions.isGone = true
         binding.resultSourceOptions.removeAllViews()
 
-        viewModel.loadInlineSources(episode, forceReload = forceReload) { result ->
+        viewModel.loadInlineSources(
+            episode,
+            forceReload = forceReload,
+            onProgress = { partial ->
+                if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
+                    inlineSourceResults = episode to partial
+                    showInlineSourceOptions(episode, partial, isSearching = true)
+                }
+            },
+        ) { result ->
             if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return@loadInlineSources
+            inlineSourceSearchInProgress = false
             inlineSourceResults = episode to result
             showInlineSourceOptions(episode, result)
         }
     }
 
-    private fun showInlineSourceOptions(episode: ResultEpisode, result: LinkLoadingResult) {
+    private fun showInlineSourceOptions(
+        episode: ResultEpisode,
+        result: LinkLoadingResult,
+        isSearching: Boolean = false,
+    ) {
         val binding = resultBinding ?: return
         if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return
 
@@ -1573,9 +1629,12 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
             return
         }
 
-        binding.resultSourcesStatusPanel.isGone = true
-        binding.resultSourcesProgress.isGone = true
-        binding.resultSourcesStatus.isGone = true
+        binding.resultSourcesStatusPanel.isVisible = isSearching
+        binding.resultSourcesProgress.isVisible = isSearching
+        binding.resultSourcesStatus.apply {
+            text = if (isSearching) context.getString(R.string.searching_sources) else null
+            isVisible = isSearching
+        }
         binding.resultRetrySources.isGone = true
         binding.resultSourceCount.apply {
             text = context.resources.getQuantityString(
@@ -1602,7 +1661,6 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                 inlineSourceShowAll
             )
         }
-
         binding.resultSourceShowAll.apply {
             isVisible = links.size > 2
             text = if (inlineSourceShowAll) {
@@ -1616,7 +1674,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
             }
             setOnClickListener {
                 inlineSourceShowAll = !inlineSourceShowAll
-                showInlineSourceOptions(episode, result)
+                showInlineSourceOptions(episode, result, isSearching = inlineSourceSearchInProgress)
             }
         }
     }
@@ -1642,6 +1700,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
             }
         }
         val card = MaterialCardView(ctx).apply {
+            tag = "inline-source-quality-$quality"
             radius = dp(11).toFloat()
             strokeWidth = dp(1)
             strokeColor = ctx.colorFromAttribute(R.attr.iconColor)
@@ -1738,6 +1797,7 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
         link: ExtractorLink,
         result: LinkLoadingResult
     ): Chip = Chip(ctx).apply {
+        tag = link.url
         text = name.ifBlank { ctx.getString(R.string.source_name) }
         isCheckable = false
         chipBackgroundColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.boxItemBackground))
@@ -1761,14 +1821,6 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                 result.syncData
             )
         )
-    }
-
-    private fun isSameInlineSourceEpisode(
-        first: ResultEpisode?,
-        second: ResultEpisode?
-    ): Boolean = when {
-        first == null || second == null -> first == second
-        else -> first.id == second.id && first.parentId == second.parentId && first.apiName == second.apiName
     }
 
     override fun onPause() {

@@ -15,6 +15,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.storage.DesktopDataStore
 import com.lagradost.runtime.executor.SafePluginInvoker
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,16 +23,26 @@ import kotlinx.coroutines.launch
 
 class PlayerStreamScraper(
     private val scope: CoroutineScope,
+    private val isEpisodeStillNext: (String) -> Boolean = { true },
+    private val preScrapeTimeoutMs: Long = SafePluginInvoker.TIMEOUT_SCRAPE_MS,
 ) {
+    private val preScrapeLock = Any()
+    private var preScrapeGeneration = 0L
+    private var activePreScrapeEpisodeId: String? = null
+
+    @Volatile
     private var preScrapeJob: Job? = null
-    private var lastPreScrapedEpisodeId: String? = null
 
     val isPreScrapeActive: Boolean
-        get() = preScrapeJob?.isActive == true
+        get() = synchronized(preScrapeLock) { preScrapeJob?.isActive == true }
 
     fun cancelPreScrape() {
-        preScrapeJob?.cancel()
-        preScrapeJob = null
+        synchronized(preScrapeLock) {
+            preScrapeGeneration++
+            preScrapeJob?.cancel()
+            preScrapeJob = null
+            activePreScrapeEpisodeId = null
+        }
     }
 
     fun preScrapeNextEpisode(
@@ -39,36 +50,130 @@ class PlayerStreamScraper(
         currentLaunchData: VideoLaunchData?,
     ) {
         val nextEpId = nextEp.data
-        if (preScrapeJob?.isActive == true || lastPreScrapedEpisodeId == nextEpId) return
+        if (nextEpId.isBlank()) return
+        cancelSupersededPreScrape(nextEpId)
         if (LinkCache.get(nextEpId) != null) return
 
         val currentData = currentLaunchData ?: return
         val apiName = currentData.history.apiName.takeIf { it.isNotBlank() } ?: currentData.loadResponse?.apiName
         val provider = apiName?.let { APIHolder.getApiFromNameNull(it) } ?: return
 
-        lastPreScrapedEpisodeId = nextEpId
-        preScrapeJob = scope.launch(Dispatchers.IO) {
-            try {
-                AppLogger.i("PlayerStreamScraper", "Starting background pre-scrape for next episode: ${nextEp.name ?: nextEp.data}")
-                val collectedLinks = mutableListOf<ExtractorLink>()
-                val collectedSubs = mutableListOf<SubtitleFile>()
+        preScrapeNextEpisode(nextEp, provider)
+    }
 
+    /** Test seam for fixture providers; production resolves the provider from the current launch data. */
+    internal fun preScrapeNextEpisode(nextEp: Episode, provider: MainAPI) {
+        val nextEpId = nextEp.data
+        if (nextEpId.isBlank()) return
+        cancelSupersededPreScrape(nextEpId)
+        if (LinkCache.get(nextEpId) != null) return
+
+        synchronized(preScrapeLock) {
+            if (preScrapeJob?.isActive == true) {
+                if (activePreScrapeEpisodeId == nextEpId) return
+                preScrapeJob?.cancel()
+            }
+
+            val generation = ++preScrapeGeneration
+            activePreScrapeEpisodeId = nextEpId
+            preScrapeJob = scope.launch(Dispatchers.IO) {
+                runPreScrape(provider, nextEp, generation)
+            }
+        }
+    }
+
+    private fun cancelSupersededPreScrape(requestedEpisodeId: String) {
+        synchronized(preScrapeLock) {
+            if (
+                preScrapeJob?.isActive == true &&
+                (activePreScrapeEpisodeId != requestedEpisodeId || LinkCache.get(requestedEpisodeId) != null)
+            ) {
+                preScrapeGeneration++
+                preScrapeJob?.cancel()
+                preScrapeJob = null
+                activePreScrapeEpisodeId = null
+            }
+        }
+    }
+
+    private suspend fun runPreScrape(provider: MainAPI, nextEp: Episode, generation: Long) {
+        val episodeId = nextEp.data
+        val callbackLock = Any()
+        val collectedLinks = mutableListOf<ExtractorLink>()
+        val collectedSubs = mutableListOf<SubtitleFile>()
+        var callbacksOpen = true
+
+        fun isCurrentAttempt(): Boolean = synchronized(preScrapeLock) {
+            preScrapeGeneration == generation && activePreScrapeEpisodeId == episodeId
+        }
+
+        val subtitleCallback = SafePluginInvoker.wrapCallback<SubtitleFile>("PreScrapeSubtitleCallback:${provider.name}") { sub ->
+            synchronized(callbackLock) {
+                if (callbacksOpen && isCurrentAttempt()) collectedSubs.add(sub)
+            }
+        }
+        val linkCallback = SafePluginInvoker.wrapCallback<ExtractorLink>("PreScrapeLinkCallback:${provider.name}") { link ->
+            synchronized(callbackLock) {
+                if (callbacksOpen && isCurrentAttempt()) collectedLinks.add(link)
+            }
+        }
+
+        try {
+            AppLogger.i("PlayerStreamScraper", "Starting background pre-scrape for next episode: ${nextEp.name ?: episodeId}")
+            val result = SafePluginInvoker.invoke(
+                tag = "PlayerStreamScraper:${provider.name}:PreScrape",
+                providerName = provider.name,
+                timeoutMs = preScrapeTimeoutMs,
+                penalizeOnTimeout = false,
+            ) {
                 provider.loadLinks(
-                    data = nextEpId,
+                    data = episodeId,
                     isCasting = false,
-                    subtitleCallback = { sub -> collectedSubs.add(sub) },
-                    callback = { link ->
-                        collectedLinks.add(link)
-                    },
+                    subtitleCallback = subtitleCallback,
+                    callback = linkCallback,
                 )
+            }
 
-                if (collectedLinks.isNotEmpty()) {
-                    val sorted = QualityDataHelper.sortLinks(collectedLinks)
-                    LinkCache.set(nextEpId, sorted, collectedSubs)
-                    AppLogger.i("PlayerStreamScraper", "Background pre-scrape complete: cached ${sorted.size} streams for ${nextEp.name ?: nextEp.data}")
+            val (links, subtitles) = synchronized(callbackLock) {
+                callbacksOpen = false
+                collectedLinks.toList() to collectedSubs.toList()
+            }
+
+            if (result.isFailure) {
+                AppLogger.w("PlayerStreamScraper", "Background pre-scrape failed for $episodeId: ${result.exceptionOrNull()?.message}")
+                return
+            }
+            if (links.isEmpty()) return
+
+            val sortedLinks = QualityDataHelper.sortLinks(links)
+            val cached = synchronized(preScrapeLock) {
+                if (
+                    preScrapeGeneration != generation ||
+                    activePreScrapeEpisodeId != episodeId ||
+                    !isEpisodeStillNext(episodeId) ||
+                    LinkCache.get(episodeId) != null
+                ) {
+                    false
+                } else {
+                    LinkCache.set(episodeId, sortedLinks, subtitles)
+                    true
                 }
-            } catch (e: Throwable) {
-                AppLogger.w("PlayerStreamScraper", "Background pre-scrape error: ${e.message}")
+            }
+
+            if (cached) {
+                AppLogger.i("PlayerStreamScraper", "Background pre-scrape complete: cached ${sortedLinks.size} streams for ${nextEp.name ?: episodeId}")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            AppLogger.w("PlayerStreamScraper", "Background pre-scrape error: ${e.message}")
+        } finally {
+            synchronized(callbackLock) { callbacksOpen = false }
+            synchronized(preScrapeLock) {
+                if (preScrapeGeneration == generation && activePreScrapeEpisodeId == episodeId) {
+                    preScrapeJob = null
+                    activePreScrapeEpisodeId = null
+                }
             }
         }
     }

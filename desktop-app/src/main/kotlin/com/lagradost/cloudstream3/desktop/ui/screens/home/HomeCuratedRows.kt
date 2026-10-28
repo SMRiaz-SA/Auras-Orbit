@@ -152,6 +152,7 @@ fun HomeDiscoveryRows(
     bookmarks: List<DesktopBookmark>,
     providersByName: Map<String, MainAPI>,
     onRetry: (HomeDiscoveryKind) -> Unit,
+    onRetrySource: (HomeDiscoveryKind, String) -> Unit = { _, _ -> },
     onViewAll: (String, List<HomeDiscoveryItem>, List<HomeDiscoveryPageSource>) -> Unit,
     onOpenItem: (HomeDiscoveryItem, Boolean) -> Unit,
 ) {
@@ -160,6 +161,7 @@ fun HomeDiscoveryRows(
         state = recent,
         providersByName = providersByName,
         onRetry = { onRetry(HomeDiscoveryKind.RECENT) },
+        onRetrySource = { key -> onRetrySource(HomeDiscoveryKind.RECENT, key) },
         onViewAll = { onViewAll("Recently Added / Updated", recent.items, recent.pageSources) },
         onOpenItem = onOpenItem,
     )
@@ -186,6 +188,7 @@ fun HomeDiscoveryRows(
         state = popular,
         providersByName = providersByName,
         onRetry = { onRetry(HomeDiscoveryKind.POPULAR) },
+        onRetrySource = { key -> onRetrySource(HomeDiscoveryKind.POPULAR, key) },
         onViewAll = { onViewAll("Trending / Popular", popular.items, popular.pageSources) },
         onOpenItem = onOpenItem,
     )
@@ -338,6 +341,7 @@ fun HomeDashboardRows(
                         state = uiState.recentDiscovery,
                         providersByName = providersByName,
                         onRetry = { viewModel.onEvent(HomeUiEvent.OnRetryDiscovery(HomeDiscoveryKind.RECENT)) },
+                        onRetrySource = { sourceKey -> viewModel.onEvent(HomeUiEvent.OnRetryDiscoverySource(HomeDiscoveryKind.RECENT, sourceKey)) },
                         onViewAll = { onViewDiscovery("Recently Added / Updated", uiState.recentDiscovery.items, uiState.recentDiscovery.pageSources) },
                         onOpenItem = onOpenDiscoveryItem,
                     )
@@ -360,6 +364,7 @@ fun HomeDashboardRows(
                         state = uiState.popularDiscovery,
                         providersByName = providersByName,
                         onRetry = { viewModel.onEvent(HomeUiEvent.OnRetryDiscovery(HomeDiscoveryKind.POPULAR)) },
+                        onRetrySource = { sourceKey -> viewModel.onEvent(HomeUiEvent.OnRetryDiscoverySource(HomeDiscoveryKind.POPULAR, sourceKey)) },
                         onViewAll = { onViewDiscovery("Trending / Popular", uiState.popularDiscovery.items, uiState.popularDiscovery.pageSources) },
                         onOpenItem = onOpenDiscoveryItem,
                     )
@@ -409,6 +414,7 @@ private fun HomeDiscoveryRow(
     state: HomeDiscoverySectionState,
     providersByName: Map<String, MainAPI>,
     onRetry: () -> Unit,
+    onRetrySource: (String) -> Unit = {},
     onViewAll: () -> Unit,
     onOpenItem: (HomeDiscoveryItem, Boolean) -> Unit,
 ) {
@@ -438,7 +444,39 @@ private fun HomeDiscoveryRow(
                     onPlayClick = { onOpenItem(homeItem, true) },
                 )
             }
-        } else {
+        }
+
+        val sourceStatuses = state.sources.filter { it.isLoading || it.error != null }
+        if (sourceStatuses.isNotEmpty()) {
+            items(sourceStatuses, key = { "$title-source-${it.sourceKey}" }) { source ->
+                Card(
+                    modifier = Modifier.width(220.dp).height(112.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (source.isLoading) CircularProgressIndicator(modifier = Modifier.width(22.dp), strokeWidth = 2.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(source.sourceName, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                            Text(
+                                if (source.isLoading) "Loading catalog…" else "Catalog failed to load",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                            )
+                            if (source.error != null) {
+                                TextButton(onClick = { onRetrySource(source.sourceKey) }) { Text("Retry") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!hasItems && sourceStatuses.isEmpty()) {
             item(key = "$title-loading-or-error") {
                 Card(
                     modifier = Modifier.width(280.dp).height(112.dp),

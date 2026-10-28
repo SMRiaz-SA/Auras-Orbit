@@ -11,11 +11,16 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.window.WindowPlacement
 import com.lagradost.cloudstream3.desktop.player.ComposeNativeWebPlayer
 import com.lagradost.cloudstream3.desktop.player.webview.WebView2RuntimeDetector
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.ui.LocalFullscreenController
 import com.lagradost.cloudstream3.desktop.ui.LocalWindowState
 import com.lagradost.cloudstream3.desktop.ui.VideoLaunchData
 import com.lagradost.cloudstream3.desktop.ui.screens.player.contract.PlayerUiEvent
 import com.lagradost.cloudstream3.fixUrlNull
+import com.lagradost.common.performance.PerformanceDiagnosticStage
+import com.lagradost.common.performance.PerformanceDiagnosticStatus
+import com.lagradost.common.performance.PerformanceDiagnostics
+import com.lagradost.common.performance.normalizePerformanceSourceLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -121,6 +126,40 @@ fun EmbeddedVideoPlayer(
     val initialPlacement = remember { windowState?.placement ?: WindowPlacement.Floating }
 
     val playerState = viewModel.playerState
+    val diagnosticActiveLink = uiState.activeLink
+    val diagnosticLinkStartedAtNanos = remember(diagnosticActiveLink?.url) { System.nanoTime() }
+    var diagnosticFirstFrame by remember(diagnosticActiveLink?.url) { mutableStateOf(false) }
+    var diagnosticBufferStartedAtNanos by remember(diagnosticActiveLink?.url) { mutableStateOf<Long?>(null) }
+    val diagnosticIsBuffering by playerState.isBuffering.collectAsState(false)
+
+    LaunchedEffect(diagnosticActiveLink?.url, diagnosticIsBuffering) {
+        if (diagnosticActiveLink == null) return@LaunchedEffect
+        if (diagnosticIsBuffering) {
+            if (diagnosticBufferStartedAtNanos == null) diagnosticBufferStartedAtNanos = System.nanoTime()
+        } else {
+            val bufferingStarted = diagnosticBufferStartedAtNanos ?: return@LaunchedEffect
+            val bufferingDuration = ((System.nanoTime() - bufferingStarted) / 1_000_000L).coerceAtLeast(0L)
+            val sourceLabel = normalizePerformanceSourceLabel(diagnosticActiveLink.source) ?: "unknown"
+            val status = PerformanceDiagnosticStatus.SUCCESS
+            PerformanceDiagnostics.recordAsync(
+                PerformanceDiagnosticStage.BUFFERING,
+                sourceLabel,
+                profileId = ProfileManager.activeProfileId.toString(),
+                status = status,
+                durationMs = bufferingDuration,
+            )
+            if (diagnosticFirstFrame) {
+                PerformanceDiagnostics.recordAsync(
+                    PerformanceDiagnosticStage.RECOVERY,
+                    sourceLabel,
+                    profileId = ProfileManager.activeProfileId.toString(),
+                    status = status,
+                    durationMs = bufferingDuration,
+                )
+            }
+            diagnosticBufferStartedAtNanos = null
+        }
+    }
 
     LaunchedEffect(actualLaunchData.history.episodeId) {
         // isLoading is already reset to true by remember(episodeId) above
@@ -312,6 +351,25 @@ fun EmbeddedVideoPlayer(
                         },
                         onPlaybackReady = {
                             com.lagradost.common.logging.AppLogger.i("EmbeddedVideoPlayer: onPlaybackReady for link index $displayLinkIndex")
+                            if (!diagnosticFirstFrame && safeLink != null) {
+                                diagnosticFirstFrame = true
+                                val sourceLabel = normalizePerformanceSourceLabel(safeLink.source) ?: "unknown"
+                                val firstFrameDuration = ((System.nanoTime() - diagnosticLinkStartedAtNanos) / 1_000_000L).coerceAtLeast(0L)
+                                PerformanceDiagnostics.recordAsync(
+                                    PerformanceDiagnosticStage.FIRST_FRAME,
+                                    sourceLabel,
+                                    profileId = ProfileManager.activeProfileId.toString(),
+                                    status = PerformanceDiagnosticStatus.SUCCESS,
+                                    durationMs = firstFrameDuration,
+                                )
+                                PerformanceDiagnostics.recordAsync(
+                                    PerformanceDiagnosticStage.SOURCE_SUCCESS,
+                                    sourceLabel,
+                                    profileId = ProfileManager.activeProfileId.toString(),
+                                    status = PerformanceDiagnosticStatus.SUCCESS,
+                                    durationMs = firstFrameDuration,
+                                )
+                            }
                             isLoading = false
                             viewModel.onEvent(PlayerUiEvent.OnPlaybackReady)
                             com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.postMessage("{\"type\":\"dismiss_probing\"}")

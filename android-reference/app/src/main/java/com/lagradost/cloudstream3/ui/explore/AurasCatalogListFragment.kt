@@ -41,6 +41,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -327,7 +329,9 @@ private fun AurasCatalogListRow(item: SearchResponse, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
         border = androidx.compose.foundation.BorderStroke(1.dp, AurasPalette.Stroke),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(19.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+            contentDescription = listOfNotNull(item.name, year?.toString(), score?.let { "Rating $it" }).joinToString(", ")
+        },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -350,14 +354,6 @@ private fun AurasCatalogListRow(item: SearchResponse, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    item.name,
-                    color = AurasPalette.Text,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 if (year != null || score != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

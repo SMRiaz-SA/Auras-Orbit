@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
 import android.widget.FrameLayout
@@ -100,6 +101,10 @@ import com.lagradost.cloudstream3.utils.CLEARKEY_DRM_UUID
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.runOnMainThread
 import com.lagradost.cloudstream3.utils.DataStoreHelper.currentAccount
+import com.lagradost.cloudstream3.utils.PerformanceDiagnosticStage
+import com.lagradost.cloudstream3.utils.PerformanceDiagnosticStatus
+import com.lagradost.cloudstream3.utils.PerformanceDiagnostics
+import com.lagradost.cloudstream3.utils.normalizePerformanceSourceLabel
 import com.lagradost.cloudstream3.utils.DrmExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkPlayList
@@ -129,6 +134,13 @@ const val toleranceBeforeUs = 300_000L
  * seek position, in microseconds. Must be non-negative.
  */
 const val toleranceAfterUs = 300_000L
+
+internal fun <T> reloadTargetAfterOnlineLoad(
+    current: T?,
+    candidate: T,
+    sourceAccepted: Boolean,
+    loadSucceeded: Boolean,
+): T? = if (sourceAccepted && loadSucceeded) candidate else current
 
 @OptIn(UnstableApi::class, ExperimentalApi::class)
 class CS3IPlayer : IPlayer {
@@ -162,6 +174,11 @@ class CS3IPlayer : IPlayer {
     private var currentLink: ExtractorLink? = null
     private var currentDownloadedFile: ExtractorUri? = null
     private var hasUsedFirstRender = false
+    private var playbackMetricsContext: Context? = null
+    private var playbackMetricsSource = "unknown"
+    private var playbackStartedAtMs = 0L
+    private var bufferingStartedAtMs: Long? = null
+    private var hasRenderedCurrentPlaybackFrame = false
 
     private var currentWindow: Int = 0
     private var playbackPosition: Long = 0
@@ -1378,7 +1395,7 @@ class CS3IPlayer : IPlayer {
         subSources: List<SingleSampleMediaSource>,
         audioSources: List<MediaSource> = emptyList(),
         onlineSource: HttpDataSource.Factory? = null,
-    ) {
+    ): Boolean {
         Log.i(TAG, "loadExo")
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(context)
         val maxVideoHeight = settingsManager.getInt(
@@ -1443,7 +1460,7 @@ class CS3IPlayer : IPlayer {
             // this is because we need PlayerAttachedEvent to be called to render the UI
             // but don't really want the rest like Player.STATE_ENDED calling next episode
             if (mediaSlices.isEmpty() && subSources.isEmpty()) {
-                return
+                return true
             }
 
             LiveHelper.registerPlayer(exoPlayer)
@@ -1595,6 +1612,20 @@ class CS3IPlayer : IPlayer {
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     super.onPlaybackStateChanged(playbackState)
+                    val now = SystemClock.elapsedRealtime()
+                    if (playbackState == Player.STATE_BUFFERING && bufferingStartedAtMs == null) {
+                        bufferingStartedAtMs = now
+                    } else if (playbackState == Player.STATE_READY) {
+                        val bufferingStart = bufferingStartedAtMs
+                        if (bufferingStart != null) {
+                            val bufferingDuration = (now - bufferingStart).coerceAtLeast(0L)
+                            recordPlaybackDiagnostic(PerformanceDiagnosticStage.BUFFERING, bufferingDuration)
+                            if (hasRenderedCurrentPlaybackFrame) {
+                                recordPlaybackDiagnostic(PerformanceDiagnosticStage.RECOVERY, bufferingDuration)
+                            }
+                            bufferingStartedAtMs = null
+                        }
+                    }
                     when (playbackState) {
                         Player.STATE_READY -> {
 
@@ -1636,11 +1667,19 @@ class CS3IPlayer : IPlayer {
                     super.onRenderedFirstFrame()
                     onRenderFirst()
                     updatedTime(source = PlayerEventSource.Player)
+                    if (!hasRenderedCurrentPlaybackFrame) {
+                        hasRenderedCurrentPlaybackFrame = true
+                        val firstFrameDuration = (SystemClock.elapsedRealtime() - playbackStartedAtMs).coerceAtLeast(0L)
+                        recordPlaybackDiagnostic(PerformanceDiagnosticStage.FIRST_FRAME, firstFrameDuration)
+                        recordPlaybackDiagnostic(PerformanceDiagnosticStage.SOURCE_SUCCESS, firstFrameDuration)
+                    }
                 }
             }.also { playerListener = it })
+            return true
         } catch (t: Throwable) {
             Log.e(TAG, "loadExo error", t)
             event(ErrorEvent(t))
+            return false
         }
     }
 
@@ -1695,6 +1734,8 @@ class CS3IPlayer : IPlayer {
     private fun loadOfflinePlayer(context: Context, data: ExtractorUri) {
         Log.i(TAG, "loadOfflinePlayer")
         try {
+            beginPlaybackDiagnostics(context, "local")
+            currentLink = null
             currentDownloadedFile = data
 
             val mediaItem = getMediaItem(MimeTypes.VIDEO_MP4, data.uri)
@@ -1774,8 +1815,27 @@ class CS3IPlayer : IPlayer {
         return exoPlayer != null
     }
 
+    private fun beginPlaybackDiagnostics(context: Context, sourceLabel: String) {
+        playbackMetricsContext = context.applicationContext ?: context
+        playbackMetricsSource = sourceLabel
+        playbackStartedAtMs = SystemClock.elapsedRealtime()
+        bufferingStartedAtMs = null
+        hasRenderedCurrentPlaybackFrame = false
+    }
+
+    private fun recordPlaybackDiagnostic(stage: PerformanceDiagnosticStage, durationMs: Long) {
+        val context = playbackMetricsContext ?: return
+        PerformanceDiagnostics.forContext(context).recordAsync(
+            stage = stage,
+            sourceLabel = playbackMetricsSource,
+            profileId = currentAccount.toString(),
+            status = PerformanceDiagnosticStatus.SUCCESS,
+            durationMs = durationMs.coerceAtLeast(0L),
+        )
+    }
+
     @MainThread
-    private fun loadTorrent(context: Context, link: ExtractorLink) {
+    private fun loadTorrent(context: Context, link: ExtractorLink, reloadTarget: ExtractorLink = link) {
         ioSafe {
             // we check exoPlayer a lot here, and that is because we don't want to load exo after
             // the user has left the player, in the case that the user click back when this is
@@ -1791,7 +1851,7 @@ class CS3IPlayer : IPlayer {
                     if (hash != null) {
                         torrentEventLooper(hash)
                     }
-                    loadOnlinePlayer(context, newLink)
+                    loadOnlinePlayer(context, newLink, reloadTarget = reloadTarget)
                 }
             } catch (t: Throwable) {
                 event(ErrorEvent(t))
@@ -1801,9 +1861,18 @@ class CS3IPlayer : IPlayer {
 
     @SuppressLint("UnsafeOptInUsageError")
     @MainThread
-    private fun loadOnlinePlayer(context: Context, link: ExtractorLink, retry: Boolean = false) {
+    private fun loadOnlinePlayer(
+        context: Context,
+        link: ExtractorLink,
+        retry: Boolean = false,
+        reloadTarget: ExtractorLink = link,
+    ) {
         Log.i(TAG, "loadOnlinePlayer $link")
         try {
+            beginPlaybackDiagnostics(
+                context,
+                normalizePerformanceSourceLabel(link.source) ?: "unknown",
+            )
             val mime = when (link.type) {
                 ExtractorLinkType.M3U8 -> MimeTypes.APPLICATION_M3U8
                 ExtractorLinkType.DASH -> MimeTypes.APPLICATION_MPD
@@ -1853,7 +1922,7 @@ class CS3IPlayer : IPlayer {
                     )
 
                     if (Torrent.hasAcceptedTorrentForThisSession == true) {
-                        loadTorrent(context, link)
+                        loadTorrent(context, link, reloadTarget)
                         return
                     }
 
@@ -1864,7 +1933,7 @@ class CS3IPlayer : IPlayer {
                             when (which) {
                                 DialogInterface.BUTTON_POSITIVE -> {
                                     Torrent.hasAcceptedTorrentForThisSession = true
-                                    loadTorrent(context, link)
+                                    loadTorrent(context, link, reloadTarget)
                                 }
 
                                 DialogInterface.BUTTON_NEGATIVE -> {
@@ -1890,8 +1959,6 @@ class CS3IPlayer : IPlayer {
                     return
                 }
             }
-
-            currentLink = link
 
             val mediaItems = when (link) {
                 is ExtractorLinkPlayList -> link.playlist.map {
@@ -1954,12 +2021,18 @@ class CS3IPlayer : IPlayer {
 
             subtitleHelper.setActiveSubtitles(activeSubtitles.toSet())
 
-            loadExo(
+            val loadSucceeded = loadExo(
                 context = context,
                 mediaSlices = mediaItems,
                 subSources = subSources,
                 audioSources = audioSources,
                 onlineSource = onlineSourceFactory
+            )
+            currentLink = reloadTargetAfterOnlineLoad(
+                current = currentLink,
+                candidate = reloadTarget,
+                sourceAccepted = true,
+                loadSucceeded = loadSucceeded,
             )
         } catch (t: Throwable) {
             Log.e(TAG, "loadOnlinePlayer error", t)

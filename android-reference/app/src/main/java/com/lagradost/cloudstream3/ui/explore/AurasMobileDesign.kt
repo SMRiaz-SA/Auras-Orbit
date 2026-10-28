@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.ui.explore
 
-import android.widget.ImageView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -41,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -48,21 +50,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
+import coil3.compose.AsyncImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import com.lagradost.cloudstream3.AnimeSearchResponse
 import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
+import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.ui.PORTRAIT_POSTER_ASPECT_RATIO
-import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
-import com.lagradost.cloudstream3.utils.getImageFromDrawable
+import com.lagradost.cloudstream3.utils.DataStoreHelper
+import coil3.request.ImageRequest
 
 internal object AurasPalette {
     val Ink = Color(0xFF100D17)
@@ -246,7 +252,7 @@ internal fun AurasSectionHeading(
 
 @Composable
 internal fun AurasPosterRail(
-    title: String,
+    title: String?,
     items: List<SearchResponse>,
     onOpen: (SearchResponse, Int) -> Unit,
     actionLabel: String? = null,
@@ -254,21 +260,159 @@ internal fun AurasPosterRail(
     progressByUrl: Map<String, Float> = emptyMap(),
     actionEnabled: Boolean = true,
     rankStart: Int? = null,
+    startIndex: Int = 0,
+    maxItems: Int = AURAS_POSTER_RAIL_LIMIT,
+    posterWidth: Dp = 98.dp,
 ) {
-    if (items.isEmpty()) return
+    val visibleItems = items.take(maxItems)
+    if (visibleItems.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
+        if (!title.isNullOrBlank()) AurasSectionHeading(title, actionLabel, onAction, actionEnabled)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-        itemsIndexed(items, key = { _, item -> item.id?.toString() ?: "${item.apiName}:${item.url}" }) { index, item ->
-            AurasPosterCard(
-                item = item,
-                width = 98.dp,
-                progress = progressByUrl[item.url],
-                rank = rankStart?.plus(index),
-                onClick = { onOpen(item, index) },
-            )
+            itemsIndexed(visibleItems, key = { _, item -> item.id?.let { "${item.apiName}:$it" } ?: "${item.apiName}:${item.url}" }) { index, item ->
+                AurasPosterCard(
+                    item = item,
+                    width = posterWidth,
+                    progress = progressByUrl[item.url],
+                    rank = rankStart?.plus(index),
+                    onClick = { onOpen(item, startIndex + index) },
+                )
             }
         }
+    }
+}
+
+internal const val AURAS_POSTER_RAIL_LIMIT = 30
+
+@Composable
+internal fun AurasResumeHero(
+    item: SearchResponse,
+    progress: Float?,
+    isTv: Boolean,
+    onResume: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val episode = (item as? DataStoreHelper.ResumeWatchingResult)?.let { resume ->
+        when {
+            resume.season != null && resume.episode != null ->
+                stringResource(R.string.auras_resume_season_episode, resume.season, resume.episode)
+            resume.episode != null -> stringResource(R.string.auras_resume_episode, resume.episode)
+            else -> null
+        }
+    }
+    val percentage = progress?.let { (it * 100).toInt().coerceIn(0, 100) }
+    val description = buildList {
+        add(item.name)
+        episode?.let(::add)
+        percentage?.let { add("$it% watched") }
+    }.joinToString(", ")
+    val posterWidth = if (isTv) 150.dp else 106.dp
+    val shape = RoundedCornerShape(if (isTv) 26.dp else 22.dp)
+
+    Card(
+        onClick = onResume,
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
+        border = BorderStroke(
+            if (isFocused) 3.dp else 1.dp,
+            if (isFocused) AurasPalette.Accent else AurasPalette.Stroke,
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .onFocusChanged { isFocused = it.isFocused }
+            .semantics(mergeDescendants = true) { contentDescription = description },
+    ) {
+        Row(
+            modifier = Modifier
+                .background(AurasPalette.SurfaceRaised)
+                .padding(if (isTv) 20.dp else 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 20.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .width(posterWidth)
+                    .aspectRatio(PORTRAIT_POSTER_ASPECT_RATIO)
+                    .clip(shape),
+            ) {
+                AurasArtwork(
+                    url = item.posterUrl,
+                    headers = item.posterHeaders,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                progress?.let { value ->
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 9.dp)
+                            .height(5.dp)
+                            .clip(CircleShape)
+                            .background(AurasPalette.Text.copy(alpha = 0.38f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(value.coerceIn(0f, 1f))
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(AurasPalette.Accent),
+                        )
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(if (isTv) 10.dp else 7.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.auras_explore_resume_title),
+                    color = AurasPalette.Accent,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                episode?.let {
+                    Text(it, color = AurasPalette.Muted, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    text = stringResource(R.string.auras_resume_action),
+                    color = AurasPalette.Text,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AurasSelectionChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        color = if (selected) AurasPalette.Accent.copy(alpha = 0.22f) else AurasPalette.Surface,
+        contentColor = if (selected) AurasPalette.Text else AurasPalette.Muted,
+        shape = CircleShape,
+        border = BorderStroke(
+            if (isFocused) 3.dp else 1.dp,
+            if (isFocused || selected) AurasPalette.Accent else AurasPalette.Stroke,
+        ),
+        modifier = modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .semantics { this.selected = selected },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
+        )
     }
 }
 
@@ -276,15 +420,20 @@ internal fun AurasPosterRail(
 internal fun AurasSourceRow(
     sourceName: String?,
     hasSources: Boolean,
+    isTv: Boolean = false,
     onClick: () -> Unit,
 ) {
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         color = AurasPalette.Surface,
         contentColor = AurasPalette.Text,
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, AurasPalette.Stroke),
-        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(
+            if (isFocused) 3.dp else 1.dp,
+            if (isFocused) AurasPalette.Accent else AurasPalette.Stroke,
+        ),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused },
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
@@ -309,8 +458,12 @@ internal fun AurasSourceRow(
             )
             Text(
                 text = stringResource(
-                    if (hasSources) R.string.auras_explore_source_change_hint
-                    else R.string.auras_explore_source_connect_hint
+                    when {
+                        hasSources && isTv -> R.string.auras_tv_source_change_hint
+                        !hasSources && isTv -> R.string.auras_tv_source_connect_hint
+                        hasSources -> R.string.auras_explore_source_change_hint
+                        else -> R.string.auras_explore_source_connect_hint
+                    },
                 ),
                 color = AurasPalette.Muted,
                 style = MaterialTheme.typography.labelMedium,
@@ -338,7 +491,9 @@ internal fun AurasRankedTrendingRow(
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
         border = BorderStroke(1.dp, AurasPalette.Stroke),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+            contentDescription = listOfNotNull(item.name, year?.toString(), score?.let { "Rating $it" }).joinToString(", ")
+        },
     ) {
         Row(
             modifier = Modifier
@@ -369,13 +524,6 @@ internal fun AurasRankedTrendingRow(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = item.name,
-                    color = AurasPalette.Text,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
                 if (year != null || score != null) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -433,12 +581,16 @@ internal fun AurasPosterCard(
         score?.let { "Rating $it" },
     ).joinToString(", ")
     val shape = RoundedCornerShape(21.dp)
+    var isFocused by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = AurasPalette.Surface),
-        border = BorderStroke(1.dp, AurasPalette.Stroke),
-        modifier = Modifier.width(width).semantics(mergeDescendants = true) {
+        border = BorderStroke(
+            if (isFocused) 3.dp else 1.dp,
+            if (isFocused) AurasPalette.Accent else AurasPalette.Stroke,
+        ),
+        modifier = Modifier.width(width).onFocusChanged { isFocused = it.isFocused }.semantics(mergeDescendants = true) {
             contentDescription = accessibilityDescription
         },
     ) {
@@ -524,9 +676,11 @@ internal fun AurasCatalogShelf(
     shelf: AurasShelf,
     onOpen: (SearchResponse, Int) -> Unit,
     onExpand: (() -> Unit)?,
+    posterWidth: Dp = 98.dp,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         val actionLabel = when {
+            shelf.hasNext.not() && shelf.items.size > AURAS_POSTER_RAIL_LIMIT -> androidx.compose.ui.res.stringResource(R.string.auras_collection_see_all)
             !shelf.hasNext -> null
             shelf.isLoadingMore -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_loading_more)
             shelf.pageError != null -> androidx.compose.ui.res.stringResource(R.string.auras_catalog_retry)
@@ -536,7 +690,7 @@ internal fun AurasCatalogShelf(
             AurasSectionHeading(
                 title = shelf.name,
                 actionLabel = actionLabel,
-                onAction = if (shelf.hasNext) onExpand else null,
+                onAction = if (shelf.hasNext || shelf.items.size > AURAS_POSTER_RAIL_LIMIT) onExpand else null,
                 actionEnabled = !shelf.isLoadingMore,
             )
             Text(
@@ -552,7 +706,7 @@ internal fun AurasCatalogShelf(
                 items = shelf.items,
                 onOpen = onOpen,
                 actionLabel = actionLabel,
-                onAction = if (shelf.hasNext) onExpand else null,
+                onAction = if (shelf.hasNext || shelf.items.size > AURAS_POSTER_RAIL_LIMIT) onExpand else null,
                 actionEnabled = !shelf.isLoadingMore,
             )
             shelf.pageError?.let { message ->
@@ -568,11 +722,14 @@ internal fun AurasCatalogShelf(
 
 @Composable
 internal fun AurasPrimaryButton(label: String, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         color = AurasPalette.Accent,
         contentColor = AurasPalette.Ink,
         shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(if (isFocused) 3.dp else 1.dp, if (isFocused) AurasPalette.Text else AurasPalette.Accent),
+        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
     ) {
         Text(
             label,
@@ -585,12 +742,14 @@ internal fun AurasPrimaryButton(label: String, onClick: () -> Unit) {
 
 @Composable
 internal fun AurasQuietButton(label: String, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         color = Color.White.copy(alpha = 0.09f),
         contentColor = AurasPalette.Text,
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, AurasPalette.Stroke),
+        border = BorderStroke(if (isFocused) 3.dp else 1.dp, if (isFocused) AurasPalette.Accent else AurasPalette.Stroke),
+        modifier = Modifier.onFocusChanged { isFocused = it.isFocused },
     ) {
         Text(
             label,
@@ -707,9 +866,7 @@ internal fun AurasArtwork(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val fallbackArtwork = remember(context) {
-        getImageFromDrawable(context, R.drawable.default_cover)
-    }
+    val fallbackArtwork = painterResource(R.drawable.default_cover)
     if (url.isNullOrBlank()) {
         Box(
             modifier.background(AurasPalette.SurfaceRaised),
@@ -723,19 +880,24 @@ internal fun AurasArtwork(
             )
         }
     } else {
-        AndroidView(
-            factory = { ImageView(context).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
-            modifier = modifier,
-            update = { imageView ->
-                val key = "$url|${headers?.hashCode()}"
-                if (imageView.tag != key) {
-                    imageView.tag = key
-                    imageView.loadImage(url, headers) {
-                        placeholder(fallbackArtwork)
-                        error(fallbackArtwork)
+        val request = remember(context, url, headers) {
+            ImageRequest.Builder(context)
+                .data(url)
+                .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+                    headerBuilder["User-Agent"] = USER_AGENT
+                    headers?.forEach { (key, value) ->
+                        headerBuilder[key] = value
                     }
-                }
-            },
+                }.build())
+                .build()
+        }
+        AsyncImage(
+            model = request,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholder = fallbackArtwork,
+            error = fallbackArtwork,
+            modifier = modifier,
         )
     }
 }

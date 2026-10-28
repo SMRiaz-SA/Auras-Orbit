@@ -3,7 +3,9 @@ package com.lagradost.cloudstream3.ui.result
 import android.app.Activity
 import android.content.Context
 import android.content.DialogInterface
+import android.os.SystemClock
 import android.util.Log
+import android.view.Choreographer
 import android.widget.Toast
 import androidx.annotation.MainThread
 import androidx.appcompat.app.AlertDialog
@@ -96,6 +98,10 @@ import com.lagradost.cloudstream3.utils.DataStore.getFolderName
 import com.lagradost.cloudstream3.utils.DataStore.setKey
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.currentAccount
+import com.lagradost.cloudstream3.utils.PerformanceDiagnosticStage
+import com.lagradost.cloudstream3.utils.PerformanceDiagnosticStatus
+import com.lagradost.cloudstream3.utils.PerformanceDiagnostics
+import com.lagradost.cloudstream3.utils.normalizePerformanceSourceLabel
 import com.lagradost.cloudstream3.utils.DataStoreHelper.deleteBookmarkedData
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getAllBookmarkedData
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getAllFavorites
@@ -141,12 +147,18 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 /** This starts at 1 */
@@ -405,6 +417,26 @@ data class LinkLoadingResult(
     val nextEpisode: ResultEpisode? = null,
 )
 
+/** Publishes the first usable source snapshot immediately, then limits UI updates to once a second. */
+internal class InlineSourceProgressGate {
+    private var lastPublishedCount = 0
+    private var lastPublishedAtMs = 0L
+
+    @Synchronized
+    fun shouldPublish(linkCount: Int, elapsedRealtimeMs: Long): Boolean {
+        if (linkCount <= lastPublishedCount) return false
+        if (lastPublishedCount != 0 &&
+            elapsedRealtimeMs - lastPublishedAtMs < INLINE_SOURCE_PROGRESS_MIN_INTERVAL_MS
+        ) return false
+
+        lastPublishedCount = linkCount
+        lastPublishedAtMs = elapsedRealtimeMs
+        return true
+    }
+}
+
+internal const val INLINE_SOURCE_PROGRESS_MIN_INTERVAL_MS = 1_000L
+
 sealed class SelectPopup {
     data class SelectText(
         val text: UiText,
@@ -458,10 +490,33 @@ data class ExtractedTrailerData(
 )
 
 class ResultViewModel2 : ViewModel() {
+    @Volatile
     private var currentResponse: LoadResponse? = null
+    private val detailLoadGeneration = ResultLoadGeneration()
+    private val inlineSourceGeneration = ResultLoadGeneration()
+    private var detailLoadJob: Job? = null
+    @Volatile
+    private var detailLoadInProgress: Boolean = false
+    @Volatile
+    private var detailLoadComplete: Boolean = false
+    @Volatile
+    private var detailLoadStartedAtMs: Long = 0
+    @Volatile
+    private var detailStageThreeReadyState: Boolean = false
+    private val metadataLock = Any()
+    @Volatile
+    private var metadataVersion: Long = 0
     var EPISODE_RANGE_SIZE: Int = 20
     fun clear() {
+        detailLoadGeneration.invalidate()
+        detailLoadJob?.cancel()
+        detailLoadJob = null
+        detailLoadInProgress = false
+        detailLoadComplete = false
+        setDetailStageThreeReady(false)
+        cancelInlineSourceSearch()
         currentResponse = null
+        currentId = null
         _page.postValue(null)
     }
 
@@ -481,7 +536,9 @@ class ResultViewModel2 : ViewModel() {
     private var currentSorting: EpisodeSortType? = null
     private var currentRange: EpisodeRange? = null
     private var currentShowFillers: Boolean = false
+    @Volatile
     var currentRepo: APIRepository? = null
+    @Volatile
     private var currentId: Int? = null
     private var fillers: HashSet<Int> = hashSetOf()
     private var generator: RepoLinkGenerator? = null
@@ -495,6 +552,26 @@ class ResultViewModel2 : ViewModel() {
     private val _page: MutableLiveData<Resource<ResultData>?> =
         MutableLiveData(null)
     val page: LiveData<Resource<ResultData>?> = _page
+
+    private val _detailStageThreeReady: MutableLiveData<Boolean> = MutableLiveData(false)
+    val detailStageThreeReady: LiveData<Boolean> = _detailStageThreeReady
+
+    fun isDetailStageThreeReady(): Boolean = detailStageThreeReadyState
+
+    private fun setDetailStageThreeReady(ready: Boolean) {
+        detailStageThreeReadyState = ready
+        _detailStageThreeReady.postValue(ready)
+    }
+
+    private suspend fun publishDetailStageThreeReady(request: Long) {
+        awaitFirstDetailPresentation()
+        withContext(Dispatchers.Main.immediate) {
+            if (detailLoadGeneration.isCurrent(request)) {
+                detailStageThreeReadyState = true
+                _detailStageThreeReady.value = true
+            }
+        }
+    }
 
     private val _episodes: MutableLiveData<Resource<List<ResultEpisode>>?> =
         MutableLiveData(Resource.Loading())
@@ -1271,25 +1348,92 @@ class ResultViewModel2 : ViewModel() {
     fun loadInlineSources(
         result: ResultEpisode,
         forceReload: Boolean = false,
+        onProgress: ((LinkLoadingResult) -> Unit)? = null,
         callback: (LinkLoadingResult) -> Unit
     ) {
-        inlineSourceSearchJob?.cancel()
+        cancelInlineSourceSearch()
+        val sourceRequest = inlineSourceGeneration.begin()
+        val detailRequest = detailLoadGeneration.currentTicket()
         inlineSourceSearchJob = viewModelScope.launch(Dispatchers.IO) {
-            val links = loadLinks(
-                result,
-                isVisible = false,
-                sourceTypes = LOADTYPE_INAPP,
-                clearCache = forceReload
+            val pendingProgressJobs = Collections.synchronizedList(mutableListOf<Job>())
+            val sourceStartedAt = SystemClock.elapsedRealtime()
+            val sourceLabel = normalizePerformanceSourceLabel(currentRepo?.api?.name) ?: "unknown"
+            Log.i(
+                TAG,
+                "detail_load stage=source_discovery_started elapsed_ms=${sourceStartedAt - detailLoadStartedAtMs} episode_id=${result.id}",
             )
-            withContext(Dispatchers.Main) {
-                callback(links)
+            try {
+                val links = loadLinks(
+                    result,
+                    isVisible = false,
+                    sourceTypes = LOADTYPE_INAPP,
+                    clearCache = forceReload,
+                    onProgress = if (onProgress == null) null else { partial ->
+                        pendingProgressJobs += launch(Dispatchers.Main.immediate) {
+                            if (inlineSourceGeneration.isCurrent(sourceRequest) &&
+                                detailLoadGeneration.isCurrent(detailRequest)
+                            ) {
+                                onProgress(partial)
+                            }
+                        }
+                    },
+                )
+                // Deliver a usable partial list before the completion callback if the provider
+                // finishes while its first UI update is still queued on Main.
+                synchronized(pendingProgressJobs) { pendingProgressJobs.toList() }.joinAll()
+                val status = if (links.links.isNotEmpty()) PerformanceDiagnosticStatus.SUCCESS else PerformanceDiagnosticStatus.FAILURE
+                recordPerformanceDiagnostic(
+                    PerformanceDiagnosticStage.SOURCE_LOOKUP,
+                    sourceLabel,
+                    profileId = currentAccount.toString(),
+                    status = status,
+                    durationMs = SystemClock.elapsedRealtime() - sourceStartedAt,
+                )
+                Log.i(
+                    TAG,
+                    "detail_load stage=source_discovery_finished elapsed_ms=${SystemClock.elapsedRealtime() - sourceStartedAt} link_count=${links.links.size} episode_id=${result.id}",
+                )
+                withContext(Dispatchers.Main.immediate) {
+                    if (inlineSourceGeneration.isCurrent(sourceRequest) &&
+                        detailLoadGeneration.isCurrent(detailRequest)
+                    ) {
+                        callback(links)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                recordPerformanceDiagnostic(
+                    PerformanceDiagnosticStage.SOURCE_LOOKUP,
+                    sourceLabel,
+                    profileId = currentAccount.toString(),
+                    status = PerformanceDiagnosticStatus.CANCELLED,
+                    durationMs = SystemClock.elapsedRealtime() - sourceStartedAt,
+                )
+                throw cancelled
             }
         }
     }
 
     fun cancelInlineSourceSearch() {
+        inlineSourceGeneration.invalidate()
         inlineSourceSearchJob?.cancel()
         inlineSourceSearchJob = null
+    }
+
+    private fun recordPerformanceDiagnostic(
+        stage: PerformanceDiagnosticStage,
+        sourceLabel: String,
+        profileId: String = currentAccount.toString(),
+        status: PerformanceDiagnosticStatus,
+        durationMs: Long,
+    ) {
+        val appContext = context ?: return
+        PerformanceDiagnostics.forContext(appContext).recordAsync(
+            stage = stage,
+            sourceLabel = sourceLabel,
+            profileId = profileId,
+            status = status,
+            durationMs = durationMs,
+        )
     }
 
     private suspend fun CoroutineScope.loadLinks(
@@ -1297,15 +1441,38 @@ class ResultViewModel2 : ViewModel() {
         isVisible: Boolean,
         sourceTypes: Set<ExtractorLinkType> = LOADTYPE_ALL,
         clearCache: Boolean = false,
-        isCasting: Boolean = false
+        isCasting: Boolean = false,
+        onProgress: ((LinkLoadingResult) -> Unit)? = null,
     ): LinkLoadingResult {
         val tempGenerator = RepoLinkGenerator(listOf(result))
 
         val links: MutableSet<ExtractorLink> = mutableSetOf()
         val subs: MutableSet<SubtitleData> = mutableSetOf()
+        val linkStateLock = Any()
+        val sourceProgressGate = InlineSourceProgressGate()
+
+        fun currentResult(): LinkLoadingResult {
+            val (linkSnapshot, subtitleSnapshot) = synchronized(linkStateLock) {
+                links.toSet() to subs.toSet()
+            }
+            val episodes = generator?.videos.orEmpty()
+            val episodeIndex = episodes.indexOfFirst { it.id == result.id }
+            val nextEpisode = episodeIndex.takeIf { it >= 0 }?.let { episodes.getOrNull(it + 1) }
+            return LinkLoadingResult(
+                links = sortUrls(linkSnapshot),
+                subs = sortSubs(subtitleSnapshot),
+                syncData = HashMap(currentResponse?.syncData ?: emptyMap()),
+                episode = result,
+                nextEpisode = nextEpisode,
+            )
+        }
+
         fun updatePage() {
             if (isVisible && isActive) {
-                _loadedLinks.postValue(LinkProgress(links.size, subs.size))
+                val (linkCount, subtitleCount) = synchronized(linkStateLock) {
+                    links.size to subs.size
+                }
+                _loadedLinks.postValue(LinkProgress(linkCount, subtitleCount))
             }
         }
         try {
@@ -1315,12 +1482,19 @@ class ResultViewModel2 : ViewModel() {
                 sourceTypes = sourceTypes,
                 callback = { (link, _) ->
                     if (link != null) {
-                        links += link
+                        synchronized(linkStateLock) { links += link }
                         updatePage()
+                        if (onProgress != null && sourceProgressGate.shouldPublish(
+                                synchronized(linkStateLock) { links.size },
+                                SystemClock.elapsedRealtime(),
+                            )
+                        ) {
+                            onProgress(currentResult())
+                        }
                     }
                 },
                 subtitleCallback = { sub ->
-                    subs += sub
+                    synchronized(linkStateLock) { subs += sub }
                     updatePage()
                 },
                 isCasting = isCasting,
@@ -1334,17 +1508,7 @@ class ResultViewModel2 : ViewModel() {
             if (isVisible) _loadedLinks.postValue(null)
         }
 
-        val episodes = generator?.videos.orEmpty()
-        val episodeIndex = episodes.indexOfFirst { it.id == result.id }
-        val nextEpisode = episodeIndex.takeIf { it >= 0 }?.let { episodes.getOrNull(it + 1) }
-
-        return LinkLoadingResult(
-            links = sortUrls(links),
-            subs = sortSubs(subs),
-            syncData = HashMap(currentResponse?.syncData ?: emptyMap()),
-            episode = result,
-            nextEpisode = nextEpisode
-        )
+        return currentResult()
     }
 
     fun handleAction(click: EpisodeClickEvent) =
@@ -1839,28 +2003,80 @@ class ResultViewModel2 : ViewModel() {
         return out to updateEpisodes
     }
 
+    private data class DetailMetadataSnapshot(
+        val meta: SyncAPI.SyncResult?,
+        val syncs: Map<String, String>?,
+        val version: Long,
+    )
+
+    private data class EnrichedDetailResponse(
+        val response: LoadResponse,
+        val updateEpisodes: Boolean,
+        val metadataVersion: Long,
+    )
+
+    private fun detailMetadataSnapshot(): DetailMetadataSnapshot = synchronized(metadataLock) {
+        DetailMetadataSnapshot(currentMeta, currentSync, metadataVersion)
+    }
+
+    private suspend fun enrichWithLatestMetadata(
+        providerResponse: LoadResponse,
+        request: Long,
+    ): EnrichedDetailResponse {
+        while (detailLoadGeneration.isCurrent(request)) {
+            val metadata = detailMetadataSnapshot()
+            val (response, updateEpisodes) = ioWork {
+                applyMeta(providerResponse.copyForEnrichment(), metadata.meta, metadata.syncs)
+            }
+            if (!detailLoadGeneration.isCurrent(request)) throw CancellationException("Detail load changed")
+            if (detailMetadataSnapshot().version == metadata.version) {
+                return EnrichedDetailResponse(response, updateEpisodes, metadata.version)
+            }
+        }
+        throw CancellationException("Detail load changed")
+    }
+
     fun setMeta(meta: SyncAPI.SyncResult, syncs: Map<String, String>?) {
-        // I dont want to update everything if the metadata is not relevant
-        if (currentMeta == meta && currentSync == syncs) {
-            Log.i(TAG, "setMeta same")
-            return
+        val copiedSyncs = syncs?.toMap()
+        val version = synchronized(metadataLock) {
+            if (currentMeta == meta && currentSync == copiedSyncs) {
+                Log.i(TAG, "setMeta same")
+                return
+            }
+            currentMeta = meta
+            currentSync = copiedSyncs
+            ++metadataVersion
         }
         Log.i(TAG, "setMeta")
-        viewModelScope.launchSafe {
-            currentMeta = meta
-            currentSync = syncs
-            val (value, updateEpisodes) = ioWork {
-                currentResponse?.let { resp ->
-                    return@ioWork applyMeta(resp, meta, syncs)
-                }
-                return@ioWork null to null
-            }
+        // The first detail render has already been published. Let the in-flight stage-two pass
+        // consume this newer snapshot instead of racing it and prematurely publishing episodes.
+        if (detailLoadInProgress) return
 
+        val request = detailLoadGeneration.currentTicket()
+        val baseResponse = currentResponse ?: return
+        val id = currentId ?: return
+        val repo = currentRepo ?: return
+        viewModelScope.launchSafe {
+            val enriched = try {
+                withTimeout(DETAIL_ENRICHMENT_TIMEOUT_MS) {
+                    enrichWithLatestMetadata(baseResponse, request)
+                }
+            } catch (_: TimeoutCancellationException) {
+                return@launchSafe
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                logError(error)
+                return@launchSafe
+            }
+            if (!detailLoadGeneration.isCurrent(request) || detailLoadInProgress ||
+                enriched.metadataVersion != version || detailMetadataSnapshot().version != version
+            ) return@launchSafe
             postSuccessful(
-                value ?: return@launchSafe,
-                currentId ?: return@launchSafe,
-                currentRepo ?: return@launchSafe,
-                updateEpisodes ?: return@launchSafe,
+                enriched.response,
+                id,
+                repo,
+                enriched.updateEpisodes,
                 false
             )
         }
@@ -2191,6 +2407,7 @@ class ResultViewModel2 : ViewModel() {
     ) {
         currentId = mainId
         currentResponse = loadResponse
+        currentRepo = apiRepository
         postPage(loadResponse, apiRepository)
         postSubscription(loadResponse)
         postFavorites(loadResponse)
@@ -2198,6 +2415,8 @@ class ResultViewModel2 : ViewModel() {
 
         if (updateEpisodes)
             postEpisodes(loadResponse, mainId, updateFillers)
+        detailLoadInProgress = false
+        detailLoadComplete = true
     }
 
     private suspend fun postEpisodes(
@@ -2541,7 +2760,67 @@ class ResultViewModel2 : ViewModel() {
         _page.postValue(Resource.Success(loadResponse.toResultData(apiRepository)))
     }
 
-    fun hasLoaded() = currentResponse != null
+    private fun beginDetailLoad(): Long {
+        detailLoadJob?.cancel()
+        val request = detailLoadGeneration.begin()
+        detailLoadStartedAtMs = SystemClock.elapsedRealtime()
+        detailLoadInProgress = true
+        detailLoadComplete = false
+        setDetailStageThreeReady(false)
+        currentResponse = null
+        currentId = null
+        currentRepo = null
+        fillers = hashSetOf()
+        cancelInlineSourceSearch()
+        return request
+    }
+
+    /** Called when leaving the detail view so a pending provider/enrichment result cannot publish. */
+    fun cancelPendingDetailLoad() {
+        val shouldResetLoad = shouldResetDetailLoadAfterCancellation(
+            inProgress = detailLoadInProgress,
+            complete = detailLoadComplete,
+            stageThreeReady = detailStageThreeReadyState,
+        )
+        detailLoadGeneration.invalidate()
+        detailLoadJob?.cancel()
+        detailLoadJob = null
+        if (shouldResetLoad) {
+            detailLoadInProgress = false
+            detailLoadComplete = false
+            setDetailStageThreeReady(false)
+            currentResponse = null
+            currentId = null
+            currentRepo = null
+        }
+        cancelInlineSourceSearch()
+    }
+
+    fun hasLoaded() = detailLoadComplete || detailLoadInProgress
+
+    private suspend fun awaitFirstDetailPresentation() {
+        withContext(Dispatchers.Main.immediate) {
+            suspendCancellableCoroutine { continuation ->
+                val choreographer = Choreographer.getInstance()
+                var presentedFrameCount = 0
+                val callback = object : Choreographer.FrameCallback {
+                    override fun doFrame(frameTimeNanos: Long) {
+                        if (!continuation.isActive) return
+                        presentedFrameCount++
+                        if (presentedFrameCount >= 2) {
+                            continuation.resume(Unit)
+                        } else {
+                            choreographer.postFrameCallback(this)
+                        }
+                    }
+                }
+                choreographer.postFrameCallback(callback)
+                continuation.invokeOnCancellation {
+                    choreographer.removeFrameCallback(callback)
+                }
+            }
+        }
+    }
 
     private fun handleAutoStart(activity: Activity?, autostart: AutoResume?) =
         viewModelScope.launchSafe {
@@ -2606,43 +2885,103 @@ class ResultViewModel2 : ViewModel() {
         val id: Int?,
     ) : LoadResponse
 
-    fun loadSmall(searchResponse: SearchResponse) = ioSafe {
-        val url = searchResponse.url
-        _page.postValue(Resource.Loading(url))
-        _episodes.postValue(Resource.Loading())
-        val api =
-            APIHolder.getApiFromNameNull(searchResponse.apiName) ?: APIHolder.getApiFromUrlNull(
-                searchResponse.url
-            ) ?: APIRepository.noneApi
-        val repo = APIRepository(api)
-        val response = LoadResponseFromSearch(
-            name = searchResponse.name,
-            url = searchResponse.url,
-            apiName = api.name,
-            type = searchResponse.type ?: TvType.Others,
-            posterUrl = searchResponse.posterUrl,
-            id = searchResponse.id
-        ).apply {
-            if (searchResponse is SyncAPI.LibraryItem) {
-                this.plot = searchResponse.plot
-                this.score = searchResponse.personalRating ?: searchResponse.score
-                this.tags = searchResponse.tags
-            }
-            if (searchResponse is DataStoreHelper.BookmarkedData) {
-                this.plot = searchResponse.plot
-                this.score = searchResponse.score
-                this.tags = searchResponse.tags
-            }
-        }
-        val mainId = response.getId()
+    private fun LoadResponse.copyForEnrichment(): LoadResponse {
+        val copiedTrailers = trailers.toMutableList()
+        val copiedRecommendations = recommendations?.toList()
+        val copiedActors = actors?.toList()
+        val copiedSyncData = syncData.toMutableMap()
+        return when (this) {
+            is AnimeLoadResponse -> copy(
+                episodes = episodes.mapValues { (_, episodes) -> episodes.map { it.copy() } }.toMutableMap(),
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
 
-        postSuccessful(
-            loadResponse = response,
-            mainId = mainId,
-            apiRepository = repo,
-            updateEpisodes = false,
-            updateFillers = false
-        )
+            is TvSeriesLoadResponse -> copy(
+                episodes = episodes.map { it.copy() },
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
+
+            is MovieLoadResponse -> copy(
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
+
+            is LiveStreamLoadResponse -> copy(
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
+
+            is TorrentLoadResponse -> copy(
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
+
+            is LoadResponseFromSearch -> copy(
+                trailers = copiedTrailers,
+                recommendations = copiedRecommendations,
+                actors = copiedActors,
+                syncData = copiedSyncData,
+            )
+
+            else -> error("Unsupported LoadResponse for optional enrichment: ${this::class.java.name}")
+        }
+    }
+
+    fun loadSmall(searchResponse: SearchResponse): Job {
+        val request = beginDetailLoad()
+        val job = ioSafe {
+            val url = searchResponse.url
+            _page.postValue(Resource.Loading(url))
+            _episodes.postValue(Resource.Loading())
+            val api =
+                APIHolder.getApiFromNameNull(searchResponse.apiName) ?: APIHolder.getApiFromUrlNull(
+                    searchResponse.url
+                ) ?: APIRepository.noneApi
+            val repo = APIRepository(api)
+            val response = LoadResponseFromSearch(
+                name = searchResponse.name,
+                url = searchResponse.url,
+                apiName = api.name,
+                type = searchResponse.type ?: TvType.Others,
+                posterUrl = searchResponse.posterUrl,
+                id = searchResponse.id
+            ).apply {
+                if (searchResponse is SyncAPI.LibraryItem) {
+                    this.plot = searchResponse.plot
+                    this.score = searchResponse.personalRating ?: searchResponse.score
+                    this.tags = searchResponse.tags
+                }
+                if (searchResponse is DataStoreHelper.BookmarkedData) {
+                    this.plot = searchResponse.plot
+                    this.score = searchResponse.score
+                    this.tags = searchResponse.tags
+                }
+            }
+            if (!detailLoadGeneration.isCurrent(request)) return@ioSafe
+            val mainId = response.getId()
+            postSuccessful(
+                loadResponse = response,
+                mainId = mainId,
+                apiRepository = repo,
+                updateEpisodes = false,
+                updateFillers = false
+            )
+            publishDetailStageThreeReady(request)
+        }
+        detailLoadJob = job
+        return job
     }
 
     fun load(
@@ -2653,93 +2992,244 @@ class ResultViewModel2 : ViewModel() {
         dubStatus: DubStatus,
         autostart: AutoResume?,
         loadTrailers: Boolean = true,
-    ) =
-        ioSafe {
+    ): Job {
+        val request = beginDetailLoad()
+        preferDubStatus = dubStatus
+        currentShowFillers = showFillers
+        val job = ioSafe {
             _page.postValue(Resource.Loading(url))
             _episodes.postValue(Resource.Loading())
 
-            preferDubStatus = dubStatus
-            currentShowFillers = showFillers
-
-            // set api
             val api = APIHolder.getApiFromNameNull(apiName) ?: APIHolder.getApiFromUrlNull(url)
             if (api == null) {
-                _page.postValue(
-                    Resource.Failure(
-                        false,
-                        "This provider does not exist"
-                    )
+                publishLoadFailure(
+                    request,
+                    Resource.Failure(false, "This provider does not exist"),
                 )
                 return@ioSafe
             }
 
-
-            // validate url
             val validUrlResource = safeApiCall {
-                SyncRedirector.redirect(
-                    url,
-                    api
-                )
+                SyncRedirector.redirect(url, api)
             }
-
+            if (!detailLoadGeneration.isCurrent(request)) return@ioSafe
             if (validUrlResource !is Resource.Success) {
                 if (validUrlResource is Resource.Failure) {
-                    _page.postValue(validUrlResource)
+                    publishLoadFailure(request, validUrlResource)
+                } else {
+                    markLoadFailed(request)
                 }
-
                 return@ioSafe
             }
 
             val validUrl = validUrlResource.value
             val repo = APIRepository(api)
             currentRepo = repo
-
+            val providerStartedAt = SystemClock.elapsedRealtime()
+            val providerLabel = normalizePerformanceSourceLabel(api.name) ?: "unknown"
             when (val data = repo.load(validUrl)) {
                 is Resource.Failure -> {
-                    _page.postValue(data)
+                    recordPerformanceDiagnostic(
+                        PerformanceDiagnosticStage.PROVIDER_DETAIL,
+                        providerLabel,
+                        profileId = currentAccount.toString(),
+                        status = PerformanceDiagnosticStatus.FAILURE,
+                        durationMs = SystemClock.elapsedRealtime() - providerStartedAt,
+                    )
+                    publishLoadFailure(request, data)
                 }
-
                 is Resource.Success -> {
-                    if (!isActive) return@ioSafe
-                    val loadResponse = ioWork {
-                        applyMeta(data.value, currentMeta, currentSync).first
-                    }
-                    if (!isActive) return@ioSafe
-                    val mainId = loadResponse.getId()
+                    recordPerformanceDiagnostic(
+                        PerformanceDiagnosticStage.PROVIDER_DETAIL,
+                        providerLabel,
+                        profileId = currentAccount.toString(),
+                        status = PerformanceDiagnosticStatus.SUCCESS,
+                        durationMs = SystemClock.elapsedRealtime() - providerStartedAt,
+                    )
+                    if (!isActive || !detailLoadGeneration.isCurrent(request)) return@ioSafe
+                    val providerResponse = data.value
+                    val mainId = providerResponse.getId()
+                    Log.i(
+                        TAG,
+                        "detail_load stage=provider_response elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                    )
 
                     preferDubStatus = getDub(mainId) ?: preferDubStatus
                     preferStartEpisode = getResultEpisode(mainId)
                     preferStartSeason = getResultSeason(mainId) ?: 1
 
-                    setKey(
-                        DOWNLOAD_HEADER_CACHE,
-                        mainId.toString(),
-                        DownloadObjects.DownloadHeaderCached(
-                            apiName = apiName,
-                            url = validUrl,
-                            type = loadResponse.type,
-                            name = loadResponse.name,
-                            poster = loadResponse.posterUrl,
-                            id = mainId,
-                            cacheTime = System.currentTimeMillis(),
-                        )
+                    var enrichmentStartedAt = 0L
+                    var enrichmentStatus = PerformanceDiagnosticStatus.UNKNOWN
+                    runProviderFirstDetailStages(
+                        provider = providerResponse,
+                        isCurrent = { isActive && detailLoadGeneration.isCurrent(request) },
+                        publishProvider = { response ->
+                            withContext(Dispatchers.Main.immediate) {
+                                if (!detailLoadGeneration.isCurrent(request)) return@withContext
+                                currentResponse = response
+                                currentId = mainId
+                                currentRepo = repo
+                                _recommendations.value = response.recommendations ?: emptyList()
+                                postSubscription(response)
+                                postFavorites(response)
+                                _watchStatus.value = getResultWatchState(mainId)
+                                _page.value = Resource.Success(response.toResultData(repo))
+                                Log.i(
+                                    TAG,
+                                    "detail_load stage=provider_page_published elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                                )
+                            }
+                            postEpisodes(response, mainId, updateFillers = false)
+                        },
+                        awaitFirstPresentation = {
+                            awaitFirstDetailPresentation()
+                            Log.i(
+                                TAG,
+                                "detail_load stage=provider_first_presentation elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                            )
+                        },
+                        enrich = { response ->
+                            enrichmentStartedAt = SystemClock.elapsedRealtime()
+                            val enrichmentLabel = normalizePerformanceSourceLabel(response.apiName) ?: providerLabel
+                            Log.i(
+                                TAG,
+                                "detail_load stage=enrichment_started elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                            )
+                            try {
+                                enrichWithLatestMetadata(response, request).also {
+                                    enrichmentStatus = PerformanceDiagnosticStatus.SUCCESS
+                                    recordPerformanceDiagnostic(
+                                        PerformanceDiagnosticStage.METADATA_ENRICHMENT,
+                                        enrichmentLabel,
+                                        profileId = currentAccount.toString(),
+                                        status = enrichmentStatus,
+                                        durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
+                                    )
+                                    Log.i(
+                                        TAG,
+                                        "detail_load stage=enrichment_finished elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                                    )
+                                }
+                            } catch (cancelled: CancellationException) {
+                                enrichmentStatus = if (cancelled is kotlinx.coroutines.TimeoutCancellationException) {
+                                    PerformanceDiagnosticStatus.TIMEOUT
+                                } else {
+                                    PerformanceDiagnosticStatus.CANCELLED
+                                }
+                                if (enrichmentStatus == PerformanceDiagnosticStatus.CANCELLED) {
+                                    recordPerformanceDiagnostic(
+                                        PerformanceDiagnosticStage.METADATA_ENRICHMENT,
+                                        enrichmentLabel,
+                                        profileId = currentAccount.toString(),
+                                        status = enrichmentStatus,
+                                        durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
+                                    )
+                                }
+                                Log.i(
+                                    TAG,
+                                    "detail_load stage=enrichment_cancelled elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                                )
+                                throw cancelled
+                            } catch (error: Exception) {
+                                enrichmentStatus = PerformanceDiagnosticStatus.FAILURE
+                                Log.i(
+                                    TAG,
+                                    "detail_load stage=enrichment_failed elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs} error_type=${error.javaClass.simpleName}",
+                                )
+                                throw error
+                            }
+                        },
+                        fallback = { response ->
+                            if (enrichmentStartedAt > 0L) {
+                                recordPerformanceDiagnostic(
+                                    PerformanceDiagnosticStage.METADATA_ENRICHMENT,
+                                    normalizePerformanceSourceLabel(response.apiName) ?: providerLabel,
+                                    profileId = currentAccount.toString(),
+                                    status = enrichmentStatus.takeIf { it != PerformanceDiagnosticStatus.UNKNOWN }
+                                        ?: PerformanceDiagnosticStatus.FAILURE,
+                                    durationMs = SystemClock.elapsedRealtime() - enrichmentStartedAt,
+                                )
+                            }
+                            Log.i(
+                                TAG,
+                                "detail_load stage=enrichment_fallback elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                            )
+                            EnrichedDetailResponse(
+                                response = response,
+                                updateEpisodes = false,
+                                metadataVersion = detailMetadataSnapshot().version,
+                            )
+                        },
+                        publishEpisodes = { firstEnrichment ->
+                            if (!detailLoadGeneration.isCurrent(request)) return@runProviderFirstDetailStages
+
+                            val loadResponse = firstEnrichment.response
+                            setKey(
+                                DOWNLOAD_HEADER_CACHE,
+                                mainId.toString(),
+                                DownloadObjects.DownloadHeaderCached(
+                                    apiName = apiName,
+                                    url = validUrl,
+                                    type = loadResponse.type,
+                                    name = loadResponse.name,
+                                    poster = loadResponse.posterUrl,
+                                    id = mainId,
+                                    cacheTime = System.currentTimeMillis(),
+                                )
+                            )
+                            if (loadTrailers) loadTrailers(loadResponse)
+                            postSuccessful(
+                                loadResponse,
+                                mainId,
+                                updateEpisodes = true,
+                                updateFillers = showFillers,
+                                apiRepository = repo,
+                            )
+                            publishDetailStageThreeReady(request)
+                            Log.i(
+                                TAG,
+                                "detail_load stage=episodes_published elapsed_ms=${SystemClock.elapsedRealtime() - detailLoadStartedAtMs}",
+                            )
+                            handleAutoStart(activity, autostart)
+                        },
+                        enrichmentTimeoutMs = DETAIL_ENRICHMENT_TIMEOUT_MS,
                     )
-                    if (loadTrailers)
-                        loadTrailers(data.value)
-                    postSuccessful(
-                        data.value,
-                        mainId,
-                        updateEpisodes = true,
-                        updateFillers = showFillers,
-                        apiRepository = repo
-                    )
-                    if (!isActive) return@ioSafe
-                    handleAutoStart(activity, autostart)
                 }
 
                 is Resource.Loading -> {
                     debugException { "Invalid load result" }
+                    markLoadFailed(request)
                 }
             }
         }
+        detailLoadJob = job
+        return job
+    }
+
+    private suspend fun publishLoadFailure(request: Long, failure: Resource.Failure) {
+        withContext(Dispatchers.Main.immediate) {
+            if (!detailLoadGeneration.isCurrent(request)) return@withContext
+            detailLoadInProgress = false
+            detailLoadComplete = false
+            setDetailStageThreeReady(false)
+            _page.value = failure
+        }
+    }
+
+    private suspend fun markLoadFailed(request: Long) {
+        withContext(Dispatchers.Main.immediate) {
+            if (!detailLoadGeneration.isCurrent(request)) return@withContext
+            detailLoadInProgress = false
+            detailLoadComplete = false
+            setDetailStageThreeReady(false)
+        }
+    }
 }
+
+internal fun shouldResetDetailLoadAfterCancellation(
+    inProgress: Boolean,
+    complete: Boolean,
+    stageThreeReady: Boolean,
+): Boolean = inProgress || (complete && !stageThreeReady)
+
+private const val DETAIL_ENRICHMENT_TIMEOUT_MS = 4_000L

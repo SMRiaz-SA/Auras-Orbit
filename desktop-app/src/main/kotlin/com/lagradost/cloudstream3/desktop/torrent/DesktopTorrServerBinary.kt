@@ -167,6 +167,7 @@ class DesktopTorrServerBinary internal constructor(
                 }
 
                 if (!proc.isAlive) {
+                    if (stopRequested) throw IllegalStateException("TorrServer startup was stopped")
                     val exitCode = runCatching { proc.exitValue() }.getOrNull()
                     throw IllegalStateException("TorrServer process exited prematurely with code $exitCode. See log: ${logFile.absolutePath}")
                 }

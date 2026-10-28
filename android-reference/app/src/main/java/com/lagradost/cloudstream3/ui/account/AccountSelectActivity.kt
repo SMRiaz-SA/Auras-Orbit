@@ -68,15 +68,34 @@ class AccountSelectActivity : FragmentActivity(), BiometricCallback {
             return
         }
 
-        loadThemes(this)
-
-        enableEdgeToEdgeCompat()
-        setNavigationBarColorCompat(R.attr.primaryBlackBackground)
-
         val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
         val skipStartup = settingsManager.getBoolean(
             getString(R.string.skip_startup_account_select_key), false
         ) || accounts.count() <= 1
+        val startupAccount = accounts.firstOrNull { it.keyIndex == selectedKeyIndex }
+
+        // The launcher is only a trampoline when startup account selection is skipped. Avoid
+        // loading an account screen theme just before MainActivity immediately loads it again.
+        if (
+            !isFromMainActivity &&
+            !isEditingFromMainActivity &&
+            skipStartup &&
+            startupAccount?.lockPin == null
+        ) {
+            if (accounts.count() > 1) {
+                showToast(
+                    this,
+                    getString(R.string.logged_account, startupAccount?.name)
+                )
+            }
+            navigateToMainActivity()
+            return
+        }
+
+        loadThemes(this)
+
+        enableEdgeToEdgeCompat()
+        setNavigationBarColorCompat(R.attr.primaryBlackBackground)
 
         fun askBiometricAuth() {
 
@@ -105,7 +124,7 @@ class AccountSelectActivity : FragmentActivity(), BiometricCallback {
         // Don't show account selection if there is only
         // one account that exists
         if (!isFromMainActivity && !isEditingFromMainActivity && skipStartup) {
-            val currentAccount = accounts.firstOrNull { it.keyIndex == selectedKeyIndex }
+            val currentAccount = startupAccount
             if (currentAccount?.lockPin != null) {
                 CommonActivity.init(this)
                 accountViewModel.handleAccountSelect(currentAccount, this, true)

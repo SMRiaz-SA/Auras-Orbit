@@ -384,6 +384,10 @@ class HomeViewModel : ViewModel() {
                         }
                     }
 
+                    // Publish the provider shelves as soon as they are ready. Preview details
+                    // can take much longer to load and should not keep the homepage in Loading.
+                    _page.postValue(Resource.Success(expandable.toMap()))
+
                     val items = data.value.mapNotNull { it?.items }.flatten()
 
 
@@ -423,7 +427,6 @@ class HomeViewModel : ViewModel() {
                     } else {
                         _preview.postValue(Resource.Success((previewResponsesAdded.size < currentShuffledList.size) to previewResponses))
                     }
-                    _page.postValue(Resource.Success(expandable))
                 } catch (e: Exception) {
                     _randomItems.postValue(emptyList())
                     logError(e)

@@ -34,6 +34,15 @@ data class ManifestCatalogDescriptor(
     val addonManifestUrl: String = "",
 )
 
+data class ExploreCatalogSourceState(
+    val addonManifestUrl: String,
+    val addonName: String,
+    val isLoading: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val error: String? = null,
+    val catalogCount: Int = 0,
+)
+
 data class ProviderMatch(
     val providerName: String,
     val searchResponse: SearchResponse,

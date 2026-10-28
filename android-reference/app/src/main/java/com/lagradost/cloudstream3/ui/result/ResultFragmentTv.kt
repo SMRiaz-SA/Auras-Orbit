@@ -43,7 +43,6 @@ import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.ui.download.DownloadButtonSetup
 import com.lagradost.cloudstream3.ui.player.ExtractorLinkGenerator
 import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
-import com.lagradost.cloudstream3.ui.player.NEXT_WATCH_EPISODE_PERCENTAGE
 import com.lagradost.cloudstream3.ui.quicksearch.QuickSearchFragment
 import com.lagradost.cloudstream3.ui.result.ResultFragment.bindLogo
 import com.lagradost.cloudstream3.ui.result.ResultFragment.getStoredData
@@ -88,13 +87,15 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
     private var inlineSourceEpisodeIsResume = false
     private var inlineSourceResults: Pair<ResultEpisode, LinkLoadingResult>? = null
     private var inlineSourceShowAll = false
+    private var inlineSourceSearchInProgress = false
 
     override fun onDestroyView() {
-        viewModel.cancelInlineSourceSearch()
+        if (::viewModel.isInitialized) viewModel.cancelPendingDetailLoad()
         inlineSourceEpisode = null
         inlineSourceEpisodeIsResume = false
         inlineSourceResults = null
         inlineSourceShowAll = false
+        inlineSourceSearchInProgress = false
         updateUIEvent -= ::updateUI
         activity?.detachBackPressedCallback(this@ResultFragmentTv.toString())
         super.onDestroyView()
@@ -503,7 +504,9 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         }
 
         observeNullable(viewModel.resumeWatching) { resume ->
-            if (resume != null && !resume.isMovie && !comingSoon) {
+            if (resume != null && !resume.isMovie && !comingSoon &&
+                viewModel.isDetailStageThreeReady()
+            ) {
                 setInlineSourcesEpisode(resume.result, fromResume = true)
             } else if (resume == null) {
                 inlineSourceEpisodeIsResume = false
@@ -709,7 +712,9 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             binding.apply {
                 (data as? Resource.Success)?.value?.let { (text, ep) ->
                     resultPlayMovieText.text = text.asString(resultPlayMovieText.context)
-                    if (!comingSoon) setInlineSourcesEpisode(ep)
+                    if (!comingSoon && viewModel.isDetailStageThreeReady()) {
+                        setInlineSourcesEpisode(ep)
+                    }
                     resultPlayMovieButton.setOnClickListener {
                         viewModel.handleAction(
                             EpisodeClickEvent(ACTION_CLICK_DEFAULT, ep)
@@ -843,15 +848,12 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
 
                 //    resultEpisodeLoading.isVisible = episodes is Resource.Loading
                 if (episodes is Resource.Success) {
-                    val lastWatchedIndex = episodes.value.indexOfLast { ep ->
-                        ep.getWatchProgress() >= NEXT_WATCH_EPISODE_PERCENTAGE.toFloat() / 100.0f || ep.videoWatchState == VideoWatchState.Watched
-                    }
-
-                    val firstUnwatched =
-                        episodes.value.getOrElse(lastWatchedIndex + 1) { episodes.value.firstOrNull() }
+                    val firstUnwatched = firstUnwatchedEpisode(episodes.value)
 
                     if (firstUnwatched != null) {
-                        if (!inlineSourceEpisodeIsResume && !comingSoon) {
+                        if (!inlineSourceEpisodeIsResume && !comingSoon &&
+                            viewModel.isDetailStageThreeReady()
+                        ) {
                             setInlineSourcesEpisode(firstUnwatched)
                         }
                         resultPlaySeriesText.text =
@@ -998,12 +1000,48 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                 //resultReloadConnectionOpenInBrowser.isVisible = data is Resource.Failure
             }
         }
+
+        observe(viewModel.detailStageThreeReady) { ready ->
+            if (ready) {
+                syncAutoInlineSourceEpisode(comingSoon)
+            } else {
+                inlineSourceEpisodeIsResume = false
+                setInlineSourcesEpisode(null)
+            }
+        }
+    }
+
+    private fun syncAutoInlineSourceEpisode(comingSoon: Boolean) {
+        if (!viewModel.isDetailStageThreeReady()) return
+        val pageComingSoon =
+            (viewModel.page.value as? Resource.Success)?.value?.comingSoon == true
+        if (comingSoon || pageComingSoon) {
+            setInlineSourcesEpisode(null)
+            return
+        }
+        val resume = viewModel.resumeWatching.value
+        if (resume != null && !resume.isMovie) {
+            setInlineSourcesEpisode(resume.result, fromResume = true)
+            return
+        }
+        val movie = (viewModel.movie.value as? Resource.Success)?.value?.second
+        if (movie != null) {
+            setInlineSourcesEpisode(movie)
+            return
+        }
+        val episodes = (viewModel.episodes.value as? Resource.Success)?.value.orEmpty()
+        setInlineSourcesEpisode(firstUnwatchedEpisode(episodes))
     }
 
     private fun setInlineSourcesEpisode(
         episode: ResultEpisode?,
         fromResume: Boolean = false
     ) {
+        if (episode != null && !canStartInlineSourceDiscovery(
+                viewModel.isDetailStageThreeReady(),
+                episode,
+            )
+        ) return
         if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
             if (fromResume && episode != null) inlineSourceEpisodeIsResume = true
             return
@@ -1056,16 +1094,18 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
 
     private fun findInlineSources(forceReload: Boolean = false) {
         val episode = inlineSourceEpisode ?: return
+        if (!canStartInlineSourceDiscovery(viewModel.isDetailStageThreeReady(), episode)) return
         val binding = this.binding ?: return
 
         inlineSourceResults?.takeIf {
             isSameInlineSourceEpisode(it.first, episode) && !forceReload
         }?.let { (_, result) ->
-            showInlineSourceOptions(episode, result)
+            showInlineSourceOptions(episode, result, isSearching = inlineSourceSearchInProgress)
             return
         }
 
         inlineSourceResults = null
+        inlineSourceSearchInProgress = true
         binding.resultRetrySources.isGone = true
         binding.resultSourceCount.isGone = true
         binding.resultSourceShowAll.isGone = true
@@ -1084,18 +1124,33 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         binding.resultSourceOptions.isGone = true
         binding.resultSourceOptions.removeAllViews()
 
-        viewModel.loadInlineSources(episode, forceReload = forceReload) { result ->
+        viewModel.loadInlineSources(
+            episode,
+            forceReload = forceReload,
+            onProgress = { partial ->
+                if (isSameInlineSourceEpisode(inlineSourceEpisode, episode)) {
+                    inlineSourceResults = episode to partial
+                    showInlineSourceOptions(episode, partial, isSearching = true)
+                }
+            },
+        ) { result ->
             if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return@loadInlineSources
+            inlineSourceSearchInProgress = false
             inlineSourceResults = episode to result
             showInlineSourceOptions(episode, result)
         }
     }
 
-    private fun showInlineSourceOptions(episode: ResultEpisode, result: LinkLoadingResult) {
+    private fun showInlineSourceOptions(
+        episode: ResultEpisode,
+        result: LinkLoadingResult,
+        isSearching: Boolean = false,
+    ) {
         val binding = this.binding ?: return
         if (!isSameInlineSourceEpisode(inlineSourceEpisode, episode)) return
 
         val links = result.links
+        val focusedSourceTag = binding.resultSourceOptions.findFocus()?.tag
         binding.resultSourceOptions.removeAllViews()
         if (links.isEmpty()) {
             binding.resultSourceOptions.isGone = true
@@ -1122,11 +1177,14 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             return
         }
 
-        binding.resultSourcesStatusPanel.isGone = true
+        binding.resultSourcesStatusPanel.isVisible = isSearching
         binding.resultSourcesStatusPanel.isFocusable = false
         binding.resultSourcesStatusPanel.isClickable = false
-        binding.resultSourcesProgress.isGone = true
-        binding.resultSourcesStatus.isGone = true
+        binding.resultSourcesProgress.isVisible = isSearching
+        binding.resultSourcesStatus.apply {
+            text = if (isSearching) context.getString(R.string.searching_sources) else null
+            isVisible = isSearching
+        }
         binding.resultRetrySources.isGone = true
         binding.resultSourceCount.apply {
             text = context.resources.getQuantityString(
@@ -1152,6 +1210,11 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                 result,
                 inlineSourceShowAll
             )
+        }
+        focusedSourceTag?.let { tag ->
+            binding.resultSourceOptions.post {
+                binding.resultSourceOptions.findViewWithTag<View>(tag)?.requestFocus()
+            }
         }
 
         val optionCards = (0 until binding.resultSourceOptions.childCount).mapNotNull { index ->
@@ -1180,7 +1243,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             }
             setOnClickListener {
                 inlineSourceShowAll = !inlineSourceShowAll
-                showInlineSourceOptions(episode, result)
+                showInlineSourceOptions(episode, result, isSearching = inlineSourceSearchInProgress)
             }
             nextFocusDownId = binding.resultCastItems.id
             nextFocusUpId = optionCards.lastOrNull()?.id ?: binding.resultDescription.id
@@ -1209,6 +1272,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         }
         val card = MaterialCardView(ctx).apply {
             id = View.generateViewId()
+            tag = "inline-source-quality-$quality"
             radius = dp(11).toFloat()
             strokeWidth = dp(1)
             strokeColor = ctx.colorFromAttribute(R.attr.iconColor)
@@ -1305,6 +1369,7 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
         link: ExtractorLink,
         result: LinkLoadingResult
     ): Chip = Chip(ctx).apply {
+        tag = link.url
         text = name.ifBlank { ctx.getString(R.string.source_name) }
         isCheckable = false
         chipBackgroundColor = ColorStateList.valueOf(ctx.colorFromAttribute(R.attr.boxItemBackground))
@@ -1329,15 +1394,6 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
             )
         )
     }
-
-    private fun isSameInlineSourceEpisode(
-        first: ResultEpisode?,
-        second: ResultEpisode?
-    ): Boolean = when {
-        first == null || second == null -> first == second
-        else -> first.id == second.id && first.parentId == second.parentId && first.apiName == second.apiName
-    }
-
 
     private fun openPersonFilmography(person: com.lagradost.cloudstream3.Actor) {
         findNavController().navigate(

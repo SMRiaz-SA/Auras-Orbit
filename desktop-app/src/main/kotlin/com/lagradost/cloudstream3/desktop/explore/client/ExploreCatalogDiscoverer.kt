@@ -14,8 +14,11 @@ object ExploreCatalogDiscoverer {
     private val manifestCache = LinkedHashMap<String, List<ManifestCatalogDescriptor>>(16, 0.75f, true)
     private val manifestCacheLock = Any()
 
-    suspend fun getCatalogsForAddon(addon: ManagedStremioAddon): List<ManifestCatalogDescriptor> {
-        val cached = synchronized(manifestCacheLock) { manifestCache[addon.manifestUrl] }
+    suspend fun getCatalogsForAddon(
+        addon: ManagedStremioAddon,
+        forceRefresh: Boolean = false,
+    ): List<ManifestCatalogDescriptor> {
+        val cached = if (forceRefresh) null else synchronized(manifestCacheLock) { manifestCache[addon.manifestUrl] }
         if (cached != null) return cached
 
         val response = app.get(addon.manifestUrl, timeout = 6000L)

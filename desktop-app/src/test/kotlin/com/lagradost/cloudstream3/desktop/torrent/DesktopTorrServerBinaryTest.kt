@@ -19,6 +19,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
@@ -54,11 +55,22 @@ class DesktopTorrServerBinaryTest {
     fun stopDuringStartupTerminatesChildAndFailsTheStartCall() = runBlocking {
         supervisorScope {
             val runtime = FakeRuntime()
+            val healthCheckEntered = CountDownLatch(1)
+            val finishHealthCheck = CountDownLatch(1)
+            runtime.healthCheck = {
+                if (runtime.lastProcess != null) {
+                    healthCheckEntered.countDown()
+                    finishHealthCheck.await(3_000L, TimeUnit.MILLISECONDS)
+                }
+                false
+            }
             val server = DesktopTorrServerBinary(runtime)
             val starting = async { server.start() }
             val process = withTimeout(3_000L) { runtime.launched.receive() }
 
+            assertTrue(healthCheckEntered.await(3_000L, TimeUnit.MILLISECONDS))
             server.stop()
+            finishHealthCheck.countDown()
             val failure = assertFailsWith<IllegalStateException> { starting.await() }
 
             assertTrue(failure.message.orEmpty().contains("stopped"))

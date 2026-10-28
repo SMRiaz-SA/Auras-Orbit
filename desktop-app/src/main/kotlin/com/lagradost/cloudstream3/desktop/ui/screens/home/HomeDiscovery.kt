@@ -6,6 +6,10 @@ import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import java.util.Locale
 
 enum class HomeDiscoveryKind {
@@ -25,6 +29,17 @@ data class HomeDiscoverySectionState(
     val sourceCount: Int = 0,
     val failedSourceCount: Int = 0,
     val pageSources: List<HomeDiscoveryPageSource> = emptyList(),
+    val sources: List<HomeDiscoverySourceState> = emptyList(),
+)
+
+data class HomeDiscoverySourceState(
+    val sourceKey: String,
+    val sourceName: String,
+    val isLoading: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val error: String? = null,
+    val items: List<HomeDiscoveryItem> = emptyList(),
+    val pageSources: List<HomeDiscoveryPageSource> = emptyList(),
 )
 
 data class HomeDiscoveryPageSource(
@@ -34,6 +49,41 @@ data class HomeDiscoveryPageSource(
     val nextPage: Int = 2,
     val hasNext: Boolean = true,
 )
+
+internal fun aggregateHomeDiscoverySources(
+    sourceStates: List<HomeDiscoverySourceState>,
+    sourceCount: Int = sourceStates.size,
+): HomeDiscoverySectionState = HomeDiscoverySectionState(
+    isLoading = sourceStates.any { it.isLoading },
+    hasLoaded = sourceStates.all { it.hasLoaded },
+    items = mergeHomeDiscoveryItems(sourceStates.flatMap { it.items }),
+    sourceCount = sourceCount,
+    failedSourceCount = sourceStates.count { it.error != null },
+    pageSources = sourceStates.flatMap { it.pageSources },
+    sources = sourceStates,
+)
+
+internal fun HomeDiscoverySectionState.failedSourceKeys(): List<String> =
+    sources.filter { it.error != null }.map { it.sourceKey }
+
+internal suspend fun <S, R> loadHomeDiscoverySourcesProgressively(
+    sources: List<S>,
+    load: suspend (S) -> R,
+    onResult: suspend (S, Result<R>) -> Unit,
+) = coroutineScope {
+    sources.map { source ->
+        async {
+            val result = try {
+                Result.success(load(source))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Result.failure(failure)
+            }
+            onResult(source, result)
+        }
+    }.awaitAll()
+}
 
 /** Classifies only explicit provider catalog labels; unknown labels stay in the normal feed. */
 fun classifyHomeDiscoveryCatalog(title: String): HomeDiscoveryKind? {

@@ -5,12 +5,14 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.desktop.explore.client.ExploreCatalogClient
 import com.lagradost.cloudstream3.desktop.explore.client.ExploreCatalogDiscoverer
 import com.lagradost.cloudstream3.desktop.explore.client.TorrentSearchClient
+import com.lagradost.cloudstream3.desktop.explore.models.ExploreCatalogSourceState
 import com.lagradost.cloudstream3.desktop.explore.models.ExploreItem
 import com.lagradost.cloudstream3.desktop.explore.models.ManifestCatalogDescriptor
 import com.lagradost.cloudstream3.desktop.explore.models.ProviderMatch
 import com.lagradost.cloudstream3.desktop.explore.models.TorrentSearchResult
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient
 import com.lagradost.cloudstream3.desktop.metadata.stremio.StremioAddonClient.StremioVideo
+import com.lagradost.cloudstream3.desktop.profile.ProfileManager
 import com.lagradost.cloudstream3.desktop.stremio.ManagedStremioAddon
 import com.lagradost.cloudstream3.desktop.stremio.StremioAddonManager
 import com.lagradost.cloudstream3.desktop.ui.badges.CardTitleSanitizer
@@ -20,8 +22,15 @@ import com.lagradost.cloudstream3.desktop.ui.base.UiEvent
 import com.lagradost.cloudstream3.desktop.ui.base.UiState
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.common.performance.PerformanceDiagnosticStage
+import com.lagradost.common.performance.PerformanceDiagnosticStatus
+import com.lagradost.common.performance.PerformanceDiagnostics
+import com.lagradost.common.performance.normalizePerformanceSourceLabel
 import com.lagradost.runtime.executor.SafePluginInvoker
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.util.Collections
@@ -68,6 +77,7 @@ data class ExploreUiState(
     val canLoadMore: Boolean = true,
     val catalogDiscoveryError: String? = null,
     val catalogDiscoveryWarning: String? = null,
+    val catalogDiscoverySources: List<ExploreCatalogSourceState> = emptyList(),
     val catalogLoadError: String? = null,
     val selectedItemForMatch: ExploreItem? = null,
     val providerMatches: List<ProviderMatch> = emptyList(),
@@ -103,6 +113,7 @@ sealed interface ExploreUiEvent : UiEvent {
     data class SelectProviderMatch(val match: ProviderMatch) : ExploreUiEvent
     data object LoadMore : ExploreUiEvent
     data object RefreshCatalogs : ExploreUiEvent
+    data class RetryCatalogSource(val addonManifestUrl: String) : ExploreUiEvent
     data object RetryCatalogLoad : ExploreUiEvent
 }
 
@@ -110,20 +121,38 @@ sealed interface ExploreUiEffect : UiEffect {
     data class OpenDetails(val providerName: String, val url: String, val title: String) : ExploreUiEffect
 }
 
-private data class CatalogDiscoveryOutcome(
-    val catalogs: List<ManifestCatalogDescriptor>,
-    val error: String? = null,
-)
-
 private data class CachedCatalogItems(
     val items: List<ExploreItem>,
     val fetchedCount: Int,
 )
 
-class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, ExploreUiEffect>(ExploreUiState()) {
+class ExploreViewModel(
+    private val addonsFlow: StateFlow<List<ManagedStremioAddon>> = StremioAddonManager.addons,
+    private val catalogDiscoverer: suspend (ManagedStremioAddon, Boolean) -> List<ManifestCatalogDescriptor> =
+        { addon, forceRefresh -> ExploreCatalogDiscoverer.getCatalogsForAddon(addon, forceRefresh) },
+    private val catalogItemsLoader: suspend (
+        ManifestCatalogDescriptor,
+        String?,
+        String?,
+        Int,
+        Map<String, String>,
+    ) -> List<ExploreItem> = { catalog, genre, search, skip, extras ->
+        ExploreCatalogClient.fetchCatalogItems(
+            baseUrl = catalog.addonBaseUrl,
+            type = catalog.type,
+            catalogId = catalog.id,
+            genre = genre,
+            search = search,
+            skip = skip,
+            manifestUrl = catalog.addonManifestUrl,
+            addonName = catalog.addonName,
+            extraArgs = extras,
+        )
+    },
+    private val activeProfileId: () -> Int = { ProfileManager.activeProfileId },
+) : BaseMviViewModel<ExploreUiState, ExploreUiEvent, ExploreUiEffect>(ExploreUiState()) {
     private val TAG = "ExploreViewModel"
 
-    private var refreshJob: Job? = null
     private var loadJob: Job? = null
     private var loadMoreJob: Job? = null
     private var providerSearchJob: Job? = null
@@ -131,7 +160,14 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     private var torrentSearchJob: Job? = null
     private var remoteSearchJob: Job? = null
     private val catalogRequestGeneration = AtomicLong(0L)
-    private val catalogDiscoveryGeneration = AtomicLong(0L)
+    private val catalogSourceGenerations = mutableMapOf<String, Long>()
+    private val catalogSourceJobs = mutableMapOf<String, Job>()
+    private val catalogSourceStates = mutableMapOf<String, ExploreCatalogSourceState>()
+    private val catalogsByAddon = mutableMapOf<String, List<ManifestCatalogDescriptor>>()
+    private val catalogSourceLock = Any()
+    private var configuredAddonOrder: List<ManagedStremioAddon> = emptyList()
+    private var configuredProfileId: Int? = null
+    private var refreshSelectedCatalogAfterDiscovery = false
     private val providerSearchGeneration = AtomicLong(0L)
     private val stremioStreamGeneration = AtomicLong(0L)
     private val torrentSearchGeneration = AtomicLong(0L)
@@ -151,11 +187,13 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
 
     init {
         viewModelScope.launch {
-            StremioAddonManager.addons.collect {
-                ExploreCatalogDiscoverer.clearCache()
-                catalogItemsCache.clear()
-                refreshCatalogs()
-            }
+            combine(
+                addonsFlow,
+                ProfileManager.activeProfile.map { it.id },
+            ) { addons, profileId -> addons to profileId }
+                .collect { (addons, profileId) ->
+                    configureCatalogSources(addons, profileId, forceRefresh = false)
+                }
         }
     }
 
@@ -179,10 +217,9 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
             is ExploreUiEvent.SelectProviderMatch -> selectProviderMatch(event.match)
             is ExploreUiEvent.LoadMore -> loadMore()
             is ExploreUiEvent.RefreshCatalogs -> {
-                ExploreCatalogDiscoverer.clearCache()
-                catalogItemsCache.clear()
                 refreshCatalogs()
             }
+            is ExploreUiEvent.RetryCatalogSource -> retryCatalogSource(event.addonManifestUrl)
             is ExploreUiEvent.RetryCatalogLoad -> retryCatalogLoad()
         }
     }
@@ -199,135 +236,257 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
     }
 
     private fun refreshCatalogs() {
-        val discoveryGeneration = catalogDiscoveryGeneration.incrementAndGet()
-        refreshJob?.cancel()
         remoteSearchJob?.cancel()
         remoteSearchJob = null
         invalidateCatalogRequests()
-        updateState {
-            copy(
-                isInitializing = true,
-                allCatalogs = emptyList(),
-                availableTypes = emptyList(),
-                filteredCatalogs = emptyList(),
-                selectedCatalog = null,
-                selectedExtraArgs = emptyMap(),
-                rawItems = emptyList(),
-                catalogItemsFetched = 0,
-                displayItems = emptyList(),
-                isLoading = false,
-                isLoadingMore = false,
-                canLoadMore = false,
-                catalogDiscoveryError = null,
-                catalogDiscoveryWarning = null,
-                catalogLoadError = null,
-            )
+        catalogItemsCache.clear()
+        refreshSelectedCatalogAfterDiscovery = true
+        configureCatalogSources(
+            addons = addonsFlow.value,
+            profileId = activeProfileId(),
+            forceRefresh = true,
+        )
+    }
+
+    private fun configureCatalogSources(
+        addons: List<ManagedStremioAddon>,
+        profileId: Int,
+        forceRefresh: Boolean,
+    ) {
+        val enabledAddons = addons.filter { it.enabled }
+        val profileChanged = configuredProfileId != null && configuredProfileId != profileId
+        val enabledKeys = enabledAddons.map { it.manifestUrl }.toSet()
+        val previousSelection = uiState.value.selectedCatalog
+        if (profileChanged) {
+            invalidateCatalogRequests()
+            updateState { copy(isLoading = false, isLoadingMore = false) }
         }
-        refreshJob = viewModelScope.launch(Dispatchers.IO) {
-            val enabledAddons: List<ManagedStremioAddon> = StremioAddonManager.addons.value.filter { it.enabled }
-            val outcomes = coroutineScope {
-                enabledAddons.map { addon ->
-                    async {
-                        try {
-                            CatalogDiscoveryOutcome(
-                                catalogs = ExploreCatalogDiscoverer.getCatalogsForAddon(addon),
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            AppLogger.w(TAG, "Failed to discover catalogs for ${addon.name}: ${e.message}")
-                            CatalogDiscoveryOutcome(catalogs = emptyList(), error = e.message ?: "Request failed")
-                        }
-                    }
-                }.awaitAll()
-            }
-            val discovered = outcomes.flatMap { it.catalogs }
-            val failedAddons = outcomes.filter { it.error != null }
-            val discoveryError = if (discovered.isEmpty() && failedAddons.isNotEmpty()) {
-                "Couldn't reach enabled add-on catalogs. Check your connection and retry."
-            } else {
-                null
-            }
-            val discoveryWarning = if (discovered.isNotEmpty() && failedAddons.isNotEmpty()) {
-                "Some enabled add-ons couldn't be reached. Showing catalogs from the add-ons that responded."
-            } else {
-                null
-            }
 
-            if (catalogDiscoveryGeneration.get() != discoveryGeneration) return@launch
-
-            val types = discovered.map { it.type.lowercase() }.distinct().sortedBy {
-                when (it) {
-                    "movie" -> 0
-                    "series" -> 1
-                    "anime" -> 2
-                    else -> 3
+        synchronized(catalogSourceLock) {
+            val removedKeys = catalogSourceJobs.keys.filter { it !in enabledKeys || profileChanged || forceRefresh }
+            removedKeys.forEach { key ->
+                catalogSourceJobs.remove(key)?.cancel()
+                catalogSourceGenerations[key] = (catalogSourceGenerations[key] ?: 0L) + 1L
+            }
+            val removedAddons = catalogsByAddon.keys.filter { it !in enabledKeys }
+            removedAddons.forEach { key ->
+                catalogsByAddon.remove(key)
+                catalogSourceStates.remove(key)
+            }
+            configuredAddonOrder = enabledAddons
+            configuredProfileId = profileId
+            enabledAddons.forEach { addon ->
+                val previous = catalogSourceStates[addon.manifestUrl]
+                catalogSourceStates[addon.manifestUrl] = when {
+                    previous != null && (forceRefresh || profileChanged) -> previous.copy(
+                        addonName = addon.name,
+                        isLoading = true,
+                        error = null,
+                    )
+                    previous != null -> previous.copy(addonName = addon.name)
+                    else -> ExploreCatalogSourceState(
+                        addonManifestUrl = addon.manifestUrl,
+                        addonName = addon.name,
+                        isLoading = true,
+                    )
                 }
             }
+        }
+        reconcileCatalogDiscovery(profileId)
+        val currentSelection = uiState.value.selectedCatalog
+        if (profileChanged && previousSelection != null && currentSelection != null && previousSelection.sameCatalog(currentSelection)) {
+            loadCurrentCatalog()
+        }
 
-            val currentType = uiState.value.selectedType
-            val targetType = if (types.contains(currentType)) currentType else types.firstOrNull() ?: "movie"
-
-            val forType = discovered.filter { it.type.equals(targetType, ignoreCase = true) }
-            val nextCat = forType.firstOrNull()
-
-            if (discovered.isEmpty()) {
-                updateState {
-                    if (catalogDiscoveryGeneration.get() == discoveryGeneration) {
-                        copy(
-                            isInitializing = false,
-                            allCatalogs = emptyList(),
-                            availableTypes = emptyList(),
-                            filteredCatalogs = emptyList(),
-                            selectedCatalog = null,
-                            selectedExtraArgs = emptyMap(),
-                            rawItems = emptyList(),
-                            catalogItemsFetched = 0,
-                            displayItems = emptyList(),
-                            isLoading = false,
-                            isLoadingMore = false,
-                            canLoadMore = false,
-                            catalogDiscoveryError = discoveryError,
-                            catalogDiscoveryWarning = null,
-                            catalogLoadError = null,
-                        )
-                    } else {
-                        this
-                    }
+        enabledAddons.forEach { addon ->
+            val state = synchronized(catalogSourceLock) { catalogSourceStates[addon.manifestUrl] }
+            val activeJob = synchronized(catalogSourceLock) { catalogSourceJobs[addon.manifestUrl]?.isActive == true }
+            if (forceRefresh || profileChanged || state?.hasLoaded != true) {
+                if (!activeJob || forceRefresh || profileChanged) {
+                    startCatalogSource(addon, profileId, forceRefresh || profileChanged)
                 }
-            } else {
-                updateState {
-                    if (catalogDiscoveryGeneration.get() == discoveryGeneration) {
-                        copy(
-                            isInitializing = false,
-                            allCatalogs = discovered,
-                            availableTypes = types,
-                            selectedType = targetType,
-                            filteredCatalogs = forType,
-                            selectedCatalog = nextCat,
-                            selectedGenre = "All",
-                            selectedExtraArgs = emptyMap(),
-                            selectedYear = "All Years",
-                            searchQuery = "",
-                            rawItems = emptyList(),
-                            catalogItemsFetched = 0,
-                            displayItems = emptyList(),
-                            isLoading = false,
-                            isLoadingMore = false,
-                            canLoadMore = true,
-                            catalogDiscoveryError = null,
-                            catalogDiscoveryWarning = discoveryWarning,
-                            catalogLoadError = null,
-                        )
-                    } else {
-                        this
-                    }
-                }
-                if (catalogDiscoveryGeneration.get() != discoveryGeneration) return@launch
-                loadCurrentCatalog()
             }
         }
     }
+
+    private fun retryCatalogSource(addonManifestUrl: String) {
+        val addon = synchronized(catalogSourceLock) {
+            configuredAddonOrder.firstOrNull { it.manifestUrl == addonManifestUrl }
+        } ?: return
+        startCatalogSource(addon, activeProfileId(), forceRefresh = true)
+    }
+
+    private fun startCatalogSource(addon: ManagedStremioAddon, profileId: Int, forceRefresh: Boolean) {
+        val key = addon.manifestUrl
+        val diagnosticStartedAt = System.nanoTime()
+        val diagnosticSource = normalizePerformanceSourceLabel(addon.name) ?: "unknown"
+        val generation: Long
+        synchronized(catalogSourceLock) {
+            if (forceRefresh) catalogSourceJobs[key]?.cancel()
+            generation = (catalogSourceGenerations[key] ?: 0L) + 1L
+            catalogSourceGenerations[key] = generation
+            val current = catalogSourceStates[key] ?: ExploreCatalogSourceState(key, addon.name)
+            catalogSourceStates[key] = current.copy(
+                addonName = addon.name,
+                isLoading = true,
+                error = null,
+            )
+        }
+        reconcileCatalogDiscovery(profileId)
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            val catalogs = try {
+                catalogDiscoverer(addon, forceRefresh)
+            } catch (cancelled: CancellationException) {
+                PerformanceDiagnostics.recordAsync(
+                    PerformanceDiagnosticStage.SOURCE_LOOKUP,
+                    diagnosticSource,
+                    profileId = profileId.toString(),
+                    status = PerformanceDiagnosticStatus.CANCELLED,
+                    durationMs = ((System.nanoTime() - diagnosticStartedAt) / 1_000_000L).coerceAtLeast(0L),
+                )
+                throw cancelled
+            } catch (failure: Exception) {
+                PerformanceDiagnostics.recordAsync(
+                    PerformanceDiagnosticStage.SOURCE_LOOKUP,
+                    diagnosticSource,
+                    profileId = profileId.toString(),
+                    status = PerformanceDiagnosticStatus.FAILURE,
+                    durationMs = ((System.nanoTime() - diagnosticStartedAt) / 1_000_000L).coerceAtLeast(0L),
+                )
+                AppLogger.w(TAG, "Failed to discover catalogs for ${addon.name}: ${failure.message}")
+                completeCatalogSource(
+                    addon = addon,
+                    profileId = profileId,
+                    generation = generation,
+                    catalogs = null,
+                    error = failure.message ?: "Request failed",
+                )
+                return@launch
+            }
+            PerformanceDiagnostics.recordAsync(
+                PerformanceDiagnosticStage.SOURCE_LOOKUP,
+                diagnosticSource,
+                profileId = profileId.toString(),
+                status = PerformanceDiagnosticStatus.SUCCESS,
+                durationMs = ((System.nanoTime() - diagnosticStartedAt) / 1_000_000L).coerceAtLeast(0L),
+            )
+            completeCatalogSource(addon, profileId, generation, catalogs, error = null)
+        }
+        synchronized(catalogSourceLock) {
+            if (catalogSourceGenerations[key] == generation) catalogSourceJobs[key] = job else job.cancel()
+        }
+    }
+
+    private fun completeCatalogSource(
+        addon: ManagedStremioAddon,
+        profileId: Int,
+        generation: Long,
+        catalogs: List<ManifestCatalogDescriptor>?,
+        error: String?,
+    ) {
+        val key = addon.manifestUrl
+        synchronized(catalogSourceLock) {
+            if (catalogSourceGenerations[key] != generation ||
+                configuredProfileId != profileId ||
+                activeProfileId() != profileId ||
+                configuredAddonOrder.none { it.manifestUrl == key }
+            ) {
+                return
+            }
+
+            if (catalogs != null) {
+                catalogsByAddon[key] = catalogs.map { it.copy(addonName = addon.name) }
+            }
+            val current = catalogSourceStates[key] ?: ExploreCatalogSourceState(key, addon.name)
+            catalogSourceStates[key] = current.copy(
+                addonName = addon.name,
+                isLoading = false,
+                hasLoaded = true,
+                error = error,
+                catalogCount = catalogsByAddon[key].orEmpty().size,
+            )
+        }
+        reconcileCatalogDiscovery(profileId)
+    }
+
+    private fun reconcileCatalogDiscovery(profileId: Int) {
+        if (activeProfileId() != profileId) return
+        val sources: List<ExploreCatalogSourceState>
+        val discovered: List<ManifestCatalogDescriptor>
+        synchronized(catalogSourceLock) {
+            if (configuredProfileId != profileId) return
+            sources = configuredAddonOrder.mapNotNull { catalogSourceStates[it.manifestUrl] }
+            discovered = configuredAddonOrder.flatMap { catalogsByAddon[it.manifestUrl].orEmpty() }
+        }
+        val types = discovered.map { it.type.lowercase(Locale.US) }.distinct().sortedBy {
+            when (it) {
+                "movie" -> 0
+                "series" -> 1
+                "anime" -> 2
+                else -> 3
+            }
+        }
+        val current = uiState.value
+        val targetType = if (current.selectedType in types) current.selectedType else types.firstOrNull() ?: "movie"
+        val forType = discovered.filter { it.type.equals(targetType, ignoreCase = true) }
+        val selected = current.selectedCatalog?.let { selected ->
+            forType.firstOrNull { it.sameCatalog(selected) }
+        } ?: forType.firstOrNull()
+        val selectionUnchanged = selected != null && current.selectedCatalog?.sameCatalog(selected) == true
+        val failed = sources.count { it.error != null }
+        val allFinished = sources.all { it.hasLoaded && !it.isLoading }
+        val discoveryError = if (allFinished && discovered.isEmpty() && failed > 0) {
+            "Couldn't reach enabled add-on catalogs. Check the add-on connection and retry."
+        } else {
+            null
+        }
+        val discoveryWarning = if (failed > 0 && discovered.isNotEmpty()) {
+            "Some enabled add-ons couldn't be reached. Showing catalogs from the add-ons that responded."
+        } else {
+            null
+        }
+
+        updateState {
+            if (activeProfileId() != profileId) return@updateState this
+            val keepCatalogFilters = selectionUnchanged
+            copy(
+                isInitializing = sources.isEmpty() && !allFinished,
+                allCatalogs = discovered,
+                availableTypes = types,
+                selectedType = targetType,
+                filteredCatalogs = forType,
+                selectedCatalog = selected,
+                selectedGenre = if (keepCatalogFilters) selectedGenre else "All",
+                selectedExtraArgs = if (keepCatalogFilters) selectedExtraArgs else emptyMap(),
+                selectedYear = if (keepCatalogFilters) selectedYear else "All Years",
+                searchQuery = if (keepCatalogFilters) searchQuery else "",
+                catalogDiscoverySources = sources,
+                catalogDiscoveryError = discoveryError,
+                catalogDiscoveryWarning = discoveryWarning,
+                catalogLoadError = if (keepCatalogFilters) catalogLoadError else null,
+                rawItems = if (keepCatalogFilters) rawItems else emptyList(),
+                displayItems = if (keepCatalogFilters) displayItems else emptyList(),
+                catalogItemsFetched = if (keepCatalogFilters) catalogItemsFetched else 0,
+                canLoadMore = if (keepCatalogFilters) canLoadMore else selected != null,
+                isLoading = if (keepCatalogFilters) isLoading else false,
+                isLoadingMore = if (keepCatalogFilters) isLoadingMore else false,
+            )
+        }
+
+        val shouldRefreshItems = synchronized(catalogSourceLock) {
+            if (refreshSelectedCatalogAfterDiscovery && allFinished) {
+                refreshSelectedCatalogAfterDiscovery = false
+                true
+            } else {
+                false
+            }
+        }
+        if (selected != null && (!selectionUnchanged || shouldRefreshItems)) loadCurrentCatalog()
+    }
+
+    private fun ManifestCatalogDescriptor.sameCatalog(other: ManifestCatalogDescriptor): Boolean =
+        addonManifestUrl == other.addonManifestUrl && type.equals(other.type, true) && id == other.id
 
     private fun selectType(type: String) {
         if (uiState.value.selectedType == type) return
@@ -533,17 +692,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val fetched = ExploreCatalogClient.fetchCatalogItems(
-                    baseUrl = cat.addonBaseUrl,
-                    type = cat.type,
-                    catalogId = cat.id,
-                    genre = genreArg,
-                    search = queryArg,
-                    skip = skip,
-                    manifestUrl = cat.addonManifestUrl,
-                    addonName = cat.addonName,
-                    extraArgs = requestExtras,
-                )
+                val fetched = catalogItemsLoader(cat, genreArg, queryArg, skip, requestExtras)
 
                 if (catalogRequestGeneration.get() != requestGeneration) return@launch
 
@@ -605,17 +754,7 @@ class ExploreViewModel : BaseMviViewModel<ExploreUiState, ExploreUiEvent, Explor
         updateCatalogState(requestGeneration) { copy(isLoadingMore = true, catalogLoadError = null) }
         loadMoreJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val fetched = ExploreCatalogClient.fetchCatalogItems(
-                    baseUrl = cat.addonBaseUrl,
-                    type = cat.type,
-                    catalogId = cat.id,
-                    genre = genreArg,
-                    search = queryArg,
-                    skip = skip,
-                    manifestUrl = cat.addonManifestUrl,
-                    addonName = cat.addonName,
-                    extraArgs = requestExtras,
-                )
+                val fetched = catalogItemsLoader(cat, genreArg, queryArg, skip, requestExtras)
 
                 if (catalogRequestGeneration.get() != requestGeneration) return@launch
 

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -276,28 +277,53 @@ private fun AurasExploreScreen(
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 34.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AurasBrandBar(onHelpClick = onHelpClick)
-                    AurasSourceRow(
-                        sourceName = state.sourceName,
-                        hasSources = state.sources.isNotEmpty(),
-                        onClick = {
-                            if (state.sources.isEmpty()) onConnectSource() else onSourceClick()
-                        },
+            item(key = "explore-brand") {
+                AurasBrandBar(onHelpClick = onHelpClick)
+            }
+            item(key = "explore-heading") {
+                AurasPageTitle(
+                    title = stringResource(R.string.auras_tv_explore_title),
+                    subtitle = stringResource(R.string.auras_tv_explore_subtitle),
+                )
+            }
+            state.resumeItems.firstOrNull()?.let { latestResume ->
+                item(key = "explore-resume-hero") {
+                    AurasResumeHero(
+                        item = latestResume,
+                        progress = resumeProgressByUrl[latestResume.url],
+                        isTv = false,
+                        onResume = { onResumeTitle(latestResume, 0) },
                     )
                 }
             }
-            if (state.resumeItems.isNotEmpty()) {
-                item {
+            if (state.resumeItems.size > 1) {
+                item(key = "explore-resume-more") {
                     AurasPosterRail(
-                        title = stringResource(R.string.auras_explore_resume_title),
-                        items = state.resumeItems,
-                        onOpen = onResumeTitle,
+                        title = stringResource(R.string.auras_explore_resume_more_title),
+                        items = state.resumeItems.drop(1),
+                        onOpen = { item, index -> onResumeTitle(item, index + 1) },
                         progressByUrl = resumeProgressByUrl,
                         actionLabel = stringResource(R.string.auras_explore_resume_see_all),
                         onAction = onViewContinueWatching,
                     )
+                }
+            }
+            item(key = "explore-source") {
+                AurasSourceRow(
+                    sourceName = state.sourceName,
+                    hasSources = state.sources.isNotEmpty(),
+                    onClick = {
+                        if (state.sources.isEmpty()) onConnectSource() else onSourceClick()
+                    },
+                )
+            }
+            item(key = "explore-actions") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AurasPrimaryButton(stringResource(R.string.auras_explore_browse_catalog), onOpenCatalogs)
+                    AurasQuietButton(stringResource(R.string.auras_explore_search), onOpenSearch)
                 }
             }
             if (state.loading) {
@@ -345,14 +371,21 @@ private fun AurasExploreScreen(
                     )
                 }
             }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    AurasPrimaryButton(stringResource(R.string.auras_explore_browse_catalog), onOpenCatalogs)
-                    AurasQuietButton(stringResource(R.string.auras_explore_search), onOpenSearch)
-                }
+            items(
+                items = state.shelves.filter {
+                    it.name != discoveryShelf?.name && (it.items.isNotEmpty() || it.hasNext || it.pageError != null)
+                },
+                key = { shelf -> "explore-shelf-${shelf.name}" },
+            ) { shelf ->
+                AurasCatalogShelf(
+                    shelf = shelf,
+                    onOpen = onOpenTitle,
+                    onExpand = if (shelf.hasNext || shelf.items.size > AURAS_POSTER_RAIL_LIMIT) {
+                        { onSeeAllTrending(shelf.name) }
+                    } else {
+                        null
+                    },
+                )
             }
         }
         AurasSourcePicker(
