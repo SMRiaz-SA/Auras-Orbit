@@ -11,6 +11,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -43,6 +44,29 @@ public final class OrbitTorrentEngineFileSelectionInstrumentationTest {
 
         assertEquals("second-id-one.mkv", selected.getString("path"));
         assertEquals(1, selected.getInt("id"));
+    }
+
+    @Test(expected = IOException.class)
+    public void omittedIdOnLaterEntryIsNotInferredAsZero() throws Exception {
+        JSONArray files = fileStats("["
+                + "{\"id\":2,\"path\":\"first-id-two.mkv\"},"
+                + "{\"path\":\"later-missing-id.mkv\"}"
+                + "]");
+
+        selectFile(files, 0);
+    }
+
+    @Test
+    public void explicitZeroIdAtLaterPositionRemainsAuthoritative() throws Exception {
+        JSONArray files = fileStats("["
+                + "{\"id\":2,\"path\":\"first-id-two.mkv\"},"
+                + "{\"id\":0,\"path\":\"second-explicit-zero.mkv\"}"
+                + "]");
+
+        JSONObject selected = selectFile(files, 0);
+
+        assertEquals("second-explicit-zero.mkv", selected.getString("path"));
+        assertEquals(0, selected.getInt("id"));
     }
 
     @Test
