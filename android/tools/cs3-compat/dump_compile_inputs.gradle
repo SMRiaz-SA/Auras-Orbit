@@ -1,0 +1,122 @@
+gradle.projectsEvaluated {
+    def app = gradle.rootProject.findProject(":app")
+    if (app == null) throw new GradleException("Pinned CloudStream checkout has no :app project")
+    def library = gradle.rootProject.findProject(":library")
+    if (library == null) throw new GradleException("Pinned CloudStream checkout has no :library project")
+
+    app.tasks.register("dumpCs3CrosswalkCompileInputs") {
+        group = "verification"
+        description = "Writes resolved app and library JVM compile inputs for the static CS3 crosswalk."
+        doLast {
+            def output = app.findProperty("cs3CrosswalkOutput")
+            if (output == null) throw new GradleException("Pass -Pcs3CrosswalkOutput=<path>")
+            def configurationName = app.findProperty("cs3CrosswalkConfiguration") ?: "prereleaseDebugCompileClasspath"
+            def appConfiguration = app.configurations.findByName(configurationName)
+            if (appConfiguration == null) {
+                throw new GradleException("Missing app configuration " + configurationName +
+                    "; available compile configurations: " +
+                    app.configurations.names.findAll { it.toLowerCase().contains("compileclasspath") }.sort().join(", "))
+            }
+            def libraryConfiguration = library.configurations.findByName("jvmCompileClasspath")
+            if (libraryConfiguration == null) {
+                def available = library.configurations.names.findAll { it.toLowerCase().contains("compileclasspath") }.sort()
+                throw new GradleException("Missing :library:jvmCompileClasspath; available library compile classpaths: " + available)
+            }
+
+            def sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+            if (sdkRoot == null) throw new GradleException("Set ANDROID_HOME or ANDROID_SDK_ROOT for the selected compile SDK")
+            def catalog = new File(gradle.rootProject.projectDir, "gradle/libs.versions.toml")
+            def catalogText = catalog.getText("UTF-8")
+            def sdkMatch = catalogText =~ /(?m)^compileSdk\s*=\s*"(\d+)"/
+            if (!sdkMatch.find()) throw new GradleException("Could not read compileSdk from " + catalog)
+            def sdkApi = sdkMatch.group(1)
+            def platformsDir = new File(sdkRoot, "platforms")
+            def candidates = platformsDir.listFiles()?.findAll { platform ->
+                platform.isDirectory() && platform.name.startsWith("android-" + sdkApi) &&
+                    new File(platform, "android.jar").isFile()
+            }?.sort { left, right -> left.name <=> right.name } ?: []
+            if (candidates.isEmpty()) throw new GradleException("Missing selected Android platform API " + sdkApi + " under " + platformsDir)
+            def exact = candidates.find { it.name == "android-" + sdkApi }
+            def androidJar = new File(exact ?: candidates[0], "android.jar")
+
+            def compileConfigurations = [
+                [configuration: appConfiguration, path: ":app:" + configurationName, scope: "app:" + configurationName],
+                [configuration: libraryConfiguration, path: ":library:jvmCompileClasspath", scope: "library:jvmCompileClasspath"]
+            ]
+            def artifactViews = compileConfigurations.collect { entry ->
+                def collection = entry.configuration.incoming.artifactView {
+                    lenient true
+                    componentFilter { component ->
+                        component instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier
+                    }
+                }.artifacts
+                [configuration: entry, artifacts: collection]
+            }
+
+            def diagnostics = artifactViews.collect { view ->
+                def failures = view.artifacts.failures.collect { failure ->
+                    def stack = new StringWriter()
+                    failure.printStackTrace(new PrintWriter(stack))
+                    [
+                        type: failure.class.name,
+                        message: failure.message ?: failure.toString(),
+                        stackTrace: stack.toString()
+                    ]
+                }
+                [
+                    configuration: view.configuration.path,
+                    artifactCollectionFailureCount: failures.size(),
+                    failures: failures
+                ]
+            }
+            def diagnosticsPath = app.findProperty("cs3CrosswalkDiagnostics")
+            if (diagnosticsPath == null) throw new GradleException("Pass -Pcs3CrosswalkDiagnostics=<path>")
+            def diagnosticsFile = new File(diagnosticsPath.toString())
+            diagnosticsFile.parentFile.mkdirs()
+            diagnosticsFile.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+                failureCount: diagnostics.sum { it.artifactCollectionFailureCount },
+                configurations: diagnostics
+            ])) + "\n", "UTF-8")
+
+            def failureCount = diagnostics.sum { it.artifactCollectionFailureCount }
+            if (failureCount > 0) {
+                def details = diagnostics.findAll { it.artifactCollectionFailureCount > 0 }.collect { entry ->
+                    "Configuration " + entry.configuration + " reported " + entry.artifactCollectionFailureCount +
+                        " ArtifactCollection.failure(s):\n" +
+                        entry.failures.collect { " - " + it.type + ": " + it.message + "\n" + it.stackTrace }.join("\n")
+                }.join("\n")
+                throw new GradleException("CS3 compile-input inventory is incomplete. " + details)
+            }
+
+            def target = new File(output.toString())
+            target.parentFile.mkdirs()
+            target.withWriter("UTF-8") { writer ->
+                writer.write("platform\tAndroid SDK API " + sdkApi + "\t" + androidJar.canonicalPath + "\n")
+                def artifactsByPath = [:]
+                artifactViews.each { view ->
+                    view.artifacts.artifacts.each { artifact ->
+                        if (artifact.file.name.endsWith(".jar") || artifact.file.name.endsWith(".aar")) {
+                            def id = artifact.id.componentIdentifier
+                            def coordinate = id.group + ":" + id.module + ":" + id.version
+                            def path = artifact.file.canonicalPath
+                            def existing = artifactsByPath[path]
+                            if (existing == null) {
+                                artifactsByPath[path] = [coordinate: coordinate, scopes: new TreeSet([view.configuration.scope]), file: path]
+                            } else {
+                                existing.scopes.add(view.configuration.scope)
+                            }
+                        }
+                    }
+                }
+                artifactsByPath.values().sort { left, right ->
+                    (left.coordinate + ":" + left.file) <=> (right.coordinate + ":" + right.file)
+                }.each { artifact ->
+                    writer.write("external\t" + artifact.scopes.join("+") + " :: " + artifact.coordinate +
+                        "\t" + artifact.file + "\n")
+                }
+            }
+            logger.lifecycle("Wrote " + target.canonicalPath + " and " + diagnosticsFile.canonicalPath +
+                "; ArtifactCollection failures: 0 across " + diagnostics.size() + " compile configurations")
+        }
+    }
+}

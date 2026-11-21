@@ -1,0 +1,1 @@
+package com.auras.orbit.providers; public interface Cs3ActionContext { default Result getResult(){return new Result();} public static class Result { public java.util.List<ProviderLinkCandidate> getLinks(){return java.util.Collections.emptyList();} }}

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="orbit_base">#080C0F</color>
+    <color name="orbit_surface">#0C1115</color>
+    <color name="orbit_panel">#11181D</color>
+    <color name="orbit_panel_raised">#182127</color>
+    <color name="orbit_accent">#61C5AD</color>
+    <color name="orbit_accent_outline">#61C5AD</color>
+    <color name="orbit_signal">#55CEB8</color>
+    <color name="orbit_metadata_text">#C5CDD1</color>
+    <color name="orbit_metadata_separator">#799B95</color>
+    <color name="orbit_text">#EEF3F1</color>
+    <color name="orbit_text_secondary">#A2AFB5</color>
+    <color name="orbit_text_quiet">#738188</color>
+    <color name="orbit_line">#252C33</color>
+    <color name="orbit_green">#15352F</color>
+    <color name="orbit_status_bg">#122B27</color>
+    <color name="orbit_button_focus">#1B302D</color>
+    <color name="orbit_button_pressed">#1D5145</color>
+    <color name="orbit_button_selected">#15352F</color>
+    <color name="orbit_button_text">#EEF3F1</color>
+    <color name="orbit_focus_surface">#182127</color>
+    <color name="orbit_banner_start">#080C0F</color>
+    <color name="orbit_banner_end">#143B34</color>
+    <color name="orbit_control_highlight">#3361C5AD</color>
+</resources>

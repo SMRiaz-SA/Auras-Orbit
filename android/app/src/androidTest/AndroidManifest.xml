@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.auras.orbit" />
+        <package android:name="com.auras.orbit.debug" />
+    </queries>
+    <application>
+        <provider
+            android:name="com.auras.orbit.intent.IncomingRequestReadTrackingProvider"
+            android:authorities="${applicationId}.incomingrequest.readtracking"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:label="Orbit Incoming Request Read Fixture" />
+        <activity
+            android:name="com.auras.orbit.downloads.QueueLifecycleTreeGrantActivity"
+            android:exported="true"
+            android:label="Queue Lifecycle SAF Grant Helper" />
+        <provider
+            android:name="com.auras.orbit.backup.OrbitRestoreDocumentsProvider"
+            android:authorities="${applicationId}.orbitlibrestore"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:label="Orbit Restore Failure Fixture"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:process=":orbitlib_restore_provider">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <provider
+            android:name="com.auras.orbit.downloads.QueueLifecycleDocumentsProvider"
+            android:authorities="${applicationId}.downloadqueue"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:label="Orbit Download Queue Lifecycle Fixture"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:process=":queue_lifecycle_provider">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <provider
+            android:name="com.auras.orbit.downloads.QueueLifecycleControlProvider"
+            android:authorities="${applicationId}.downloadqueue.control"
+            android:exported="true"
+            android:process=":queue_lifecycle_provider" />
+    </application>
+</manifest>

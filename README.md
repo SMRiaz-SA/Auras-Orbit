@@ -6,11 +6,15 @@ Auras Orbit brings the providers you choose into a personal discovery and watch 
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Current version (desktop and Android):** **1.0.0.06**<br>
-**Highlights:** Better Android TV focus, watchlist and actor controls, correctly shaped poster art, reliable provider retries, and safer desktop playback and downloads.<br>
+**Desktop and Android workspace version:** **1.0.0.10**, configured as a local coordinated candidate; unpublished<br>
+**Legacy Android updater reference:** **1.0.0.06**<br>
+**Latest published GitHub release (checked 2026-11-18):** [v1.0.0.06](https://github.com/SMRiaz-SA/Auras-Orbit/releases/tag/v1.0.0.06)<br>
+**Workspace highlights:** Better Android TV focus, watchlist and actor controls, correctly shaped poster art, reliable provider retries, and safer desktop playback and downloads.<br>
 **Platform:** Windows 10 or 11, 64-bit; Android phones and TVs<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
-**Changelog:** [Release history](CHANGELOG.md)
+**Changelog:** [Release history](CHANGELOG.md)<br>
+**Local release status:** [Current Orbit status and release evidence](PROJECT_STATUS_REPORT_2026-11-21.md) stays in workspace-only records and is not included in the source archive.<br>
+**Optional integrations:** Jellyfin and FCast remain in development. Live-server and receiver acceptance is unfinished; this work does not block the current release.<br>
 
 ## Navigate this guide
 
@@ -122,23 +126,23 @@ cd Auras-Orbit
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ~~~
 
-The local packaging helper builds and verifies the portable app, Windows installer, Android APK, and a source ZIP containing the public source tree. It checks formatting, compilation, JVM and native tests, and packaged deliverables. The CloudStream-compatible library and Orbit's episode-date fixes are included directly in **android-reference/**; no submodule setup or patch step is needed.
+The full local packaging helper builds and verifies the portable app, Windows installer, Android release APK, and a source ZIP containing the public source tree. It also runs formatting, compilation, JVM and native tests. To refresh only the source ZIP without GitHub version checks, signing setup, builds, or tests, run `powershell -NoProfile -File .github/scripts/build-local-deliverables.ps1 -SourceArchiveOnly -ForceArchives`. The current Android application is in **android/**; **android-reference/** is retained as the legacy compatibility source and updater reference.
 
 GitHub Actions CI runs on pushes to **main**, pull requests, and manual dispatches using GitHub-hosted Windows x64 runners. It checks formatting, runs JVM and native tests, builds and verifies a test portable app, and uploads test reports. The separate release workflow runs for version tags beginning with **v** and attaches the Android APK.
 
-The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in **gradle.properties** to change the app version; installer version metadata is generated under **desktop-app/build/generated/installer/**.
+The portable application tree includes the WebView2 SDK and required license and provenance notices under **legal/**. The Gradle wrapper pins its version and distribution checksum. Local Maven repositories are disabled unless explicitly enabled with **-PuseMavenLocal=true**. Set **APP_VERSION** in the repository's **gradle.properties** for the Windows application and installer. The Android release version is set separately with **ORBIT_RELEASE_VERSION_NAME** in **android/gradle.properties**; both release paths compare it with published stable versions and require a strictly higher numeric version.
 
 ### Android build foundation
 
-The Android app has a separate Gradle root in **android-reference/** and does not build the Windows application. It preserves the Android extension API namespace for compatibility. Android reads **APP_VERSION** from the repository-root **gradle.properties**, so the APK and desktop use the same version without a second version setting. Local packaging builds the **stableRelease** variant with the ignored test signing configuration in **android-reference/app/build/test-signing/local-signing.properties**. That key is for local validation and is not the GitHub release key.
+The current Android app has a separate Gradle root in **android/** and retains application ID **com.auras.orbit** for the legacy updater's in-place update path. **android-reference/** supplies the legacy package, signing, version, and updater compatibility reference; its library module remains mapped into the desktop build. The Android release variant reads **ORBIT_RELEASE_VERSION_NAME** and uses the established release signer; there is no local test-key fallback. Local builds load the ignored `android-reference/app/build/test-signing/local-signing.properties` automatically, while CI uses protected environment secrets. Release verification checks the APK package/version/code, signer fingerprint, native library and APK alignment, and publishes a numeric **<version>.apk** asset that the old updater recognizes alongside **Auras-Orbit.apk**.
 
-Build and verify the local deliverables, including the stable test APK, from the repository root:
+Build and verify local deliverables from the repository root. The Android build reads the existing local signing properties automatically; environment variables can still override them when needed:
 
 ~~~powershell
 pwsh -File .\.github\scripts\build-local-deliverables.ps1
 ~~~
 
-The verifier checks the APK's embedded package name and version, validates its signature, and compares the signer certificate with the configured keystore. This command builds locally; it does not publish an APK or write to GitHub.
+The helper compares the Android version against published stable GitHub releases, builds **:app:assembleRelease** from **android/**, and verifies the APK's embedded package/version, established legacy signer, native libraries, and ZIP alignment. It writes both the numeric updater asset and generic Android APK under **desktop-app/build/outputs/**. The command builds locally and does not publish a release.
 
 ## Acknowledgements
 

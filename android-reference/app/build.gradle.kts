@@ -53,28 +53,28 @@ val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
 val repositoryGradleProperties = providers.fileContents(
     rootProject.layout.projectDirectory.file("../gradle.properties")
 ).asText.get()
-val aurasVersionName = Regex("(?m)^APP_VERSION\\s*=\\s*([^\\r\\n]+)")
+val legacyAndroidVersionName = Regex("(?m)^LEGACY_ANDROID_APP_VERSION\\s*=\\s*([^\\r\\n]+)")
     .find(repositoryGradleProperties)
     ?.groupValues
     ?.getOrNull(1)
     ?.trim()
-    ?: error("APP_VERSION must be set in the repository root gradle.properties file.")
-val aurasVersionParts = aurasVersionName.split(".")
-require(aurasVersionParts.size in 3..4) {
-    "APP_VERSION must contain three or four numeric components: $aurasVersionName"
+    ?: error("LEGACY_ANDROID_APP_VERSION must be set in the repository root gradle.properties file.")
+val legacyAndroidVersionParts = legacyAndroidVersionName.split(".")
+require(legacyAndroidVersionParts.size in 3..4) {
+    "LEGACY_ANDROID_APP_VERSION must contain three or four numeric components: $legacyAndroidVersionName"
 }
-val numericVersionParts = aurasVersionParts.map { part ->
-    part.toIntOrNull() ?: error("APP_VERSION must contain only numeric components: $aurasVersionName")
+val numericVersionParts = legacyAndroidVersionParts.map { part ->
+    part.toIntOrNull() ?: error("LEGACY_ANDROID_APP_VERSION must contain only numeric components: $legacyAndroidVersionName")
 }
 val (versionMajor, versionMinor, versionPatch, versionBuild) =
     if (numericVersionParts.size == 3) numericVersionParts + 0 else numericVersionParts
 require(versionMajor in 0..21 && versionMinor in 0..99 && versionPatch in 0..99 && versionBuild in 0..9999) {
-    "Auras Android version components exceed the versionCode allocation: $aurasVersionName"
+    "Legacy Android version components exceed the versionCode allocation: $legacyAndroidVersionName"
 }
 val aurasVersionCode =
     versionMajor * 100_000_000 + versionMinor * 1_000_000 + versionPatch * 10_000 + versionBuild
 require(aurasVersionCode in 1..2_100_000_000) {
-    "APP_VERSION exceeds Android's versionCode range: $aurasVersionName"
+    "LEGACY_ANDROID_APP_VERSION exceeds Android's versionCode range: $legacyAndroidVersionName"
 }
 
 abstract class GenerateGitHashTask : DefaultTask() {
@@ -258,7 +258,7 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = aurasVersionCode
-        versionName = aurasVersionName
+        versionName = legacyAndroidVersionName
 
         manifestPlaceholders["target_sdk_version"] = libs.versions.targetSdk.get()
 

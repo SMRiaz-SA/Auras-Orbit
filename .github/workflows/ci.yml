@@ -57,8 +57,8 @@ jobs:
     - name: Run Android stable debug unit tests
       timeout-minutes: 30
       shell: pwsh
-      working-directory: android-reference
-      run: .\gradlew.bat :app:testStableDebugUnitTest --no-daemon --no-configuration-cache --console=plain --stacktrace --max-workers=2
+      working-directory: android
+      run: .\gradlew.bat :app:testDebugUnitTest --no-daemon --no-configuration-cache --console=plain --stacktrace --max-workers=2
 
     - name: Upload Test Reports
       if: always()
@@ -70,5 +70,5 @@ jobs:
           desktop-app/build/reports/tests/
           plugin-runtime/build/reports/tests/
           player-abstraction/build/reports/tests/
-          android-reference/app/build/reports/tests/testStableDebugUnitTest/
-          android-reference/app/build/test-results/testStableDebugUnitTest/
+          android/app/build/reports/tests/testDebugUnitTest/
+          android/app/build/test-results/testDebugUnitTest/

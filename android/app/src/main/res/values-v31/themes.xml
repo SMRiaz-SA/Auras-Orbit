@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="OrbitTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/orbit_accent</item>
+        <item name="android:colorControlHighlight">@color/orbit_control_highlight</item>
+        <item name="android:windowBackground">@color/orbit_base</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/orbit_base</item>
+        <item name="android:navigationBarColor">@color/orbit_base</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowSplashScreenBackground">@color/orbit_base</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/auras_orbit_mark</item>
+        <item name="android:windowSplashScreenAnimationDuration">500</item>
+    </style>
+</resources>

@@ -1,0 +1,1 @@
+These are custom compiled gomobile classes to be inserted into the aar manually. This is because gomobile is fucked and static init everything even when we do not want it.

@@ -8,6 +8,46 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$localSigningPropertiesPath = Join-Path $repositoryRoot 'android-reference/app/build/test-signing/local-signing.properties'
+$localSigningProperties = @{}
+if (Test-Path -LiteralPath $localSigningPropertiesPath -PathType Leaf) {
+    foreach ($propertyLine in Get-Content -LiteralPath $localSigningPropertiesPath) {
+        if ($propertyLine -match '^\s*([^#!][^=]*)\s*=\s*(.*?)\s*$') {
+            $localSigningProperties[$matches[1].Trim()] = $matches[2].Trim()
+        }
+    }
+}
+
+$releaseStoreFile = [Environment]::GetEnvironmentVariable('AURAS_RELEASE_STORE_FILE', 'Process')
+if ([string]::IsNullOrWhiteSpace($releaseStoreFile)) {
+    $releaseStoreFile = [string] $localSigningProperties.storeFile
+    if (-not [string]::IsNullOrWhiteSpace($releaseStoreFile)) {
+        if ([System.IO.Path]::IsPathRooted($releaseStoreFile)) {
+            $releaseStoreFile = [System.IO.Path]::GetFullPath($releaseStoreFile)
+        } else {
+            $releaseStoreFile = Join-Path (Split-Path -Parent $localSigningPropertiesPath) $releaseStoreFile
+        }
+    }
+} elseif (-not [System.IO.Path]::IsPathRooted($releaseStoreFile)) {
+    $releaseStoreFile = Join-Path $repositoryRoot $releaseStoreFile
+}
+$releaseStorePassword = [Environment]::GetEnvironmentVariable('AURAS_RELEASE_STORE_PASSWORD', 'Process')
+if ([string]::IsNullOrWhiteSpace($releaseStorePassword)) { $releaseStorePassword = [string] $localSigningProperties.storePassword }
+$releaseKeyAlias = [Environment]::GetEnvironmentVariable('AURAS_RELEASE_KEY_ALIAS', 'Process')
+if ([string]::IsNullOrWhiteSpace($releaseKeyAlias)) { $releaseKeyAlias = [string] $localSigningProperties.keyAlias }
+$releaseKeyPassword = [Environment]::GetEnvironmentVariable('AURAS_RELEASE_KEY_PASSWORD', 'Process')
+if ([string]::IsNullOrWhiteSpace($releaseKeyPassword)) { $releaseKeyPassword = [string] $localSigningProperties.keyPassword }
+$releaseSigningValues = @($releaseStoreFile, $releaseStorePassword, $releaseKeyAlias, $releaseKeyPassword)
+if (@($releaseSigningValues | Where-Object { [string]::IsNullOrWhiteSpace([string] $_) }).Count -gt 0) {
+    throw 'The APK signer check needs the existing local-signing.properties file or all four AURAS_RELEASE_* environment variables.'
+}
+
+# This is the public certificate identity observed on the legacy stable APKs.
+# Comparing only against the configured keystore would allow an accidental key
+# swap to produce an internally consistent APK that the old app cannot update.
+$requiredLegacySignerDigest = '92647a8d29d7eeca8d51ba91344fe1eb46ac46bccb46d2a88be3998a9b39b344'
+
 if (-not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
     throw "Android APK was not found: $ApkPath"
 }
@@ -19,8 +59,8 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 
 $metadata = Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json
 $expectedApplicationId = switch ($metadata.variantName) {
-    'stableRelease' { 'com.auras.orbit' }
-    default { throw "Expected a stable Android APK, received '$($metadata.variantName)'." }
+    'release' { 'com.auras.orbit' }
+    default { throw "Expected an Android release APK, received variant '$($metadata.variantName)'." }
 }
 if ($metadata.applicationId -ne $expectedApplicationId) {
     throw "Unexpected Android application ID for $($metadata.variantName): '$($metadata.applicationId)'."
@@ -89,24 +129,13 @@ if ($actualVersionCode -ne $expectedVersionCode) {
     throw "Android APK manifest versionCode '$actualVersionCode' does not match expected versionCode '$expectedVersionCode'."
 }
 
-foreach ($requiredSigningVariable in @(
-    'AURAS_RELEASE_STORE_FILE',
-    'AURAS_RELEASE_STORE_PASSWORD',
-    'AURAS_RELEASE_KEY_ALIAS',
-    'AURAS_RELEASE_KEY_PASSWORD'
-)) {
-    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($requiredSigningVariable))) {
-        throw "Expected Android release signing configuration in $requiredSigningVariable."
-    }
-}
-$releaseStoreFile = [Environment]::GetEnvironmentVariable('AURAS_RELEASE_STORE_FILE')
 if (-not (Test-Path -LiteralPath $releaseStoreFile -PathType Leaf)) {
     throw 'AURAS_RELEASE_STORE_FILE does not point to an existing signing keystore.'
 }
 $certificates = [System.Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
 $certificates.Import(
     $releaseStoreFile,
-    [Environment]::GetEnvironmentVariable('AURAS_RELEASE_STORE_PASSWORD'),
+    $releaseStorePassword,
     [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
 )
 $privateKeyCertificates = @($certificates | Where-Object { $_.HasPrivateKey })
@@ -135,6 +164,9 @@ if (-not $signerMatch.Success) {
     throw "Could not parse the APK signer certificate digest from apksigner output: $digestLine"
 }
 $actualSignerDigest = $signerMatch.Groups[1].Value.Replace(':', '').ToLowerInvariant()
+if ($actualSignerDigest -ne $requiredLegacySignerDigest) {
+    throw "Android APK signer certificate '$actualSignerDigest' does not match the established legacy signer '$requiredLegacySignerDigest'."
+}
 if ($actualSignerDigest -ne $expectedSignerDigest) {
     throw "Android APK signer certificate '$actualSignerDigest' does not match the configured release keystore."
 }

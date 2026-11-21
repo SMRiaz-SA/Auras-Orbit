@@ -17,6 +17,10 @@ desktop-app/appResources/windows/mpv/portable_config/watch_later/
 *.jar
 *.cs3
 
+# Android test inputs: active manifest-driven corpus plus one dormant historical canary fixture outside the active test source set.
+!/android/app/src/androidTest/assets/cs3-corpus/*.cs3
+!/android/app/src/androidTestCs3Canary/assets/cs3-canary/StreamPlay_v694_1e4c7749_pinned.cs3
+
 # Executables and Native Binaries
 *.exe
 *.msi
@@ -34,6 +38,7 @@ desktop-app/appResources/windows/mpv/libmpv-2.dll
 
 # Binary Exceptions (MUST come after wildcard rules above to take effect)
 !gradle/wrapper/gradle-wrapper.jar
+!/android/gradle/wrapper/gradle-wrapper.jar
 !desktop-app/appResources/windows/jni/*.dll
 
 # OS

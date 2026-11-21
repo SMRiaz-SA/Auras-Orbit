@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="24dp" />
+            <gradient
+                android:angle="135"
+                android:endColor="@color/orbit_banner_end"
+                android:startColor="@color/orbit_base" />
+        </shape>
+    </item>
+    <item
+        android:bottom="22dp"
+        android:drawable="@drawable/auras_orbit_mark"
+        android:left="22dp"
+        android:right="22dp"
+        android:top="22dp" />
+</layer-list>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application
+        android:name="com.auras.orbit.network.WebViewResolverFixtureApplication"
+        android:networkSecurityConfig="@xml/orbit_webview_fixture_network_security"
+        android:usesCleartextTraffic="false"
+        tools:replace="android:name,android:usesCleartextTraffic">
+        <activity
+            android:name="com.auras.orbit.ui.OrbitShellActivity"
+            tools:node="remove" />
+        <activity
+            android:name="com.auras.orbit.network.WebViewResolverFixtureActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

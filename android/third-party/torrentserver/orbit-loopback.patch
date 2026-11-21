@@ -1,0 +1,499 @@
+diff --git a/bindings/main.go b/bindings/main.go
+index 4b67698..4ecedb6 100644
+--- a/bindings/main.go
++++ b/bindings/main.go
+@@ -4,18 +4,6 @@ import (
+ 	server "server"
+ )
+ 
+-func StartTorrentServer(pathdb string, port int) int {
+-	return server.Start(pathdb, port, false, false)
+-}
+-
+-func WaitTorrentServer() {
+-	server.WaitServer()
+-}
+-
+-func StopTorrentServer() {
+-	server.Stop()
+-}
+-
+-func AddTrackers(trackers string) {
+-	server.AddTrackers(trackers)
++func StartTorrentServer(pathdb string, port int, authToken string) int {
++	return server.Start(pathdb, port, false, false, authToken)
+ }
+diff --git a/server.go b/server.go
+index 181a8f6..e8d8b6f 100644
+--- a/server.go
++++ b/server.go
+@@ -1,6 +1,8 @@
+ package server
+ 
+ import (
++	"io"
++	stdlog "log"
+ 	"net"
+ 	"os"
+ 	"path/filepath"
+@@ -15,7 +17,11 @@ import (
+ 
+ // returns the port of the server or -1 if failed
+ // specify port 0 if you want a random port
+-func Start(pathdb string, port int, roSets, searchWA bool) int {
++func Start(pathdb string, port int, roSets, searchWA bool, authToken string) int {
++	stdlog.SetOutput(io.Discard)
++	if !validOrbitAuthToken(authToken) {
++		return -1
++	}
+ 	settings.Path = pathdb
+ 	if !settings.InitSets(roSets, searchWA) {
+ 		return -1
+@@ -27,25 +33,34 @@ func Start(pathdb string, port int, roSets, searchWA bool) int {
+ 	// http checks
+ 	log.TLogln("Check web port", port)
+ 
+-	l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+-	if l != nil {
+-		l.Close()
+-	}
++	listener, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+ 	if err != nil {
+ 		log.TLogln("Port", port, "already in use! Please set different sslport for HTTP. Abort")
++		settings.CloseDB()
+ 		return -1
+ 		//os.Exit(1)
+ 	}
+-	realPort := l.Addr().(*net.TCPAddr).Port
++	realPort := listener.Addr().(*net.TCPAddr).Port
+ 	// remove old disk caches
+ 	go cleanCache()
+ 	// set settings http Start web server.
+ 	settings.Port = strconv.Itoa(realPort)
+-	if web.Start() {
++	if err := web.Start(listener, authToken); err == nil {
+ 		return realPort
+-	} else {
+-		return -1
+ 	}
++	return -1
++}
++
++func validOrbitAuthToken(token string) bool {
++	if len(token) != 64 {
++		return false
++	}
++	for _, ch := range token {
++		if !(ch >= '0' && ch <= '9') && !(ch >= 'a' && ch <= 'f') && !(ch >= 'A' && ch <= 'F') {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ func cleanCache() {
+diff --git a/settings/settings.go b/settings/settings.go
+index c15389e..1101480 100644
+--- a/settings/settings.go
++++ b/settings/settings.go
+@@ -27,7 +27,6 @@ func InitSets(readOnly, searchWA bool) bool {
+ 		return false
+ 	}
+ 	loadBTSets()
+-	Migrate()
+ 	return true
+ }
+ 
+diff --git a/torr/stream.go b/torr/stream.go
+index 6ad9ffc..76a4611 100644
+--- a/torr/stream.go
++++ b/torr/stream.go
+@@ -59,8 +59,6 @@ func (t *Torrent) Stream(fileID int, req *http.Request, resp http.ResponseWriter
+ 		}
+ 	}
+ 
+-	sets.SetViewed(&sets.Viewed{Hash: t.Hash().HexString(), FileIndex: fileID})
+-
+ 	resp.Header().Set("Connection", "close")
+ 	etag := hex.EncodeToString([]byte(fmt.Sprintf("%s/%s", t.Hash().HexString(), file.Path())))
+ 	resp.Header().Set("ETag", httptoo.EncodeQuotedString(etag))
+diff --git a/torr/utils/torrent.go b/torr/utils/torrent.go
+index 7698ab5..14bcdcd 100644
+--- a/torr/utils/torrent.go
++++ b/torr/utils/torrent.go
+@@ -2,69 +2,23 @@ package utils
+ 
+ import (
+ 	"encoding/base32"
+-	"io"
+ 	"math/rand"
+-	"net/http"
+-	"os"
+-	"path/filepath"
+-	"strings"
+-
+-	"server/settings"
+ 
+ 	"golang.org/x/time/rate"
+ )
+ 
+ var defTrackers = []string{}
+ 
+-var loadedTrackers []string
+-
+ func SetDefTrackers(trackers []string) {
+ 	defTrackers = trackers
+ }
+ 
+ func GetTrackerFromFile() []string {
+-	name := filepath.Join(settings.Path, "trackers.txt")
+-	buf, err := os.ReadFile(name)
+-	if err == nil {
+-		list := strings.Split(string(buf), "\n")
+-		var ret []string
+-		for _, l := range list {
+-			if strings.HasPrefix(l, "udp") || strings.HasPrefix(l, "http") {
+-				ret = append(ret, l)
+-			}
+-		}
+-		return ret
+-	}
+ 	return nil
+ }
+ 
+ func GetDefTrackers() []string {
+-	loadNewTracker()
+-	if len(loadedTrackers) == 0 {
+-		return defTrackers
+-	}
+-	return loadedTrackers
+-}
+-
+-func loadNewTracker() {
+-	if len(loadedTrackers) > 0 {
+-		return
+-	}
+-	resp, err := http.Get("https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best_ip.txt")
+-	if err == nil {
+-		buf, err := io.ReadAll(resp.Body)
+-		if err == nil {
+-			arr := strings.Split(string(buf), "\n")
+-			var ret []string
+-			for _, s := range arr {
+-				s = strings.TrimSpace(s)
+-				if len(s) > 0 {
+-					ret = append(ret, s)
+-				}
+-			}
+-			loadedTrackers = append(ret, defTrackers...)
+-		}
+-	}
++	return defTrackers
+ }
+ 
+ func PeerIDRandom(peer string) string {
+diff --git a/web/api/route.go b/web/api/route.go
+index bef65ee..27c3e73 100644
+--- a/web/api/route.go
++++ b/web/api/route.go
+@@ -35,3 +35,13 @@ func SetupRoute(route *gin.RouterGroup) {
+ 
+ 	route.GET("/download/:size", download)
+ }
++
++// SetupOrbitRoutes exposes only the in-memory torrent playback API. Admin,
++// upload, playlist, shutdown, viewed, and persistence endpoints stay disabled.
++func SetupOrbitRoutes(route *gin.RouterGroup) {
++	route.POST("/torrents", torrents)
++	route.HEAD("/stream", stream)
++	route.HEAD("/stream/*fname", stream)
++	route.GET("/stream", stream)
++	route.GET("/stream/*fname", stream)
++}
+diff --git a/web/api/stream.go b/web/api/stream.go
+index a7082e1..ab1c969 100644
+--- a/web/api/stream.go
++++ b/web/api/stream.go
+@@ -23,10 +23,6 @@ import (
+ // stream torrent
+ // http://127.0.0.1:8090/stream/fname?link=...&index=1&play
+ // http://127.0.0.1:8090/stream/fname?link=...&index=1&play&preload
+-// http://127.0.0.1:8090/stream/fname?link=...&index=1&play&save
+-// http://127.0.0.1:8090/stream/fname?link=...&index=1&play&save&title=...&poster=...
+-// only save
+-// http://127.0.0.1:8090/stream/fname?link=...&save&title=...&poster=...
+ 
+ // stream godoc
+ //
+@@ -39,7 +35,6 @@ import (
+ //	@Param			index		query	string	false	"File index in torrent"
+ //	@Param			preload		query	string	false	"Should preload torrent"
+ //	@Param			stat		query	string	false	"Get statistics from torrent"
+-//	@Param			save		query	string	false	"Should save torrent"
+ //	@Param			m3u		query	string	false	"Get torrent as M3U playlist"
+ //	@Param			fromlast		query	string	false	"Get m3u from last play"
+ //	@Param			play		query	string	false	"Start stream torrent"
+@@ -55,7 +50,6 @@ func stream(c *gin.Context) {
+ 	indexStr := c.Query("index")
+ 	_, preload := c.GetQuery("preload")
+ 	_, stat := c.GetQuery("stat")
+-	_, save := c.GetQuery("save")
+ 	_, m3u := c.GetQuery("m3u")
+ 	_, fromlast := c.GetQuery("fromlast")
+ 	_, play := c.GetQuery("play")
+@@ -112,12 +106,6 @@ func stream(c *gin.Context) {
+ 		tor.Title = tor.Name()
+ 	}
+ 
+-	// save to db
+-	if save {
+-		torr.SaveTorrentToDB(tor)
+-		c.Status(200) // only set status, not return
+-	}
+-
+ 	// find file
+ 	index := -1
+ 	if len(tor.Files()) == 1 {
+diff --git a/web/api/torrents.go b/web/api/torrents.go
+index 8ad08d0..6258838 100644
+--- a/web/api/torrents.go
++++ b/web/api/torrents.go
+@@ -5,7 +5,6 @@ import (
+ 	"strings"
+ 	"time"
+ 
+-	"server/log"
+ 	"server/torr"
+ 	"server/torr/state"
+ 	"server/web/api/utils"
+@@ -51,22 +50,10 @@ func torrents(c *gin.Context) {
+ 		{
+ 			addTorrent(req, c)
+ 		}
+-	case "get":
+-		{
+-			getTorrent(req, c)
+-		}
+-	case "set":
+-		{
+-			setTorrent(req, c)
+-		}
+ 	case "rem":
+ 		{
+ 			remTorrent(req, c)
+ 		}
+-	case "list":
+-		{
+-			listTorrent(req, c)
+-		}
+ 	case "drop":
+ 		{
+ 			dropTorrent(req, c)
+@@ -80,25 +67,21 @@ func addTorrent(req torrReqJS, c *gin.Context) {
+ 		return
+ 	}
+ 
+-	log.TLogln("add torrent", req.Link)
+ 	req.Link = strings.ReplaceAll(req.Link, "&amp;", "&")
+ 	torrSpec, err := utils.ParseLink(req.Link)
+ 	if err != nil {
+-		log.TLogln("error parse link:", err)
+ 		c.AbortWithError(http.StatusBadRequest, err)
+ 		return
+ 	}
+ 
+ 	tor, err := torr.AddTorrent(torrSpec, req.Title, req.Poster, req.Data)
+ 	if err != nil {
+-		log.TLogln("error add torrent:", err)
+ 		c.AbortWithError(http.StatusInternalServerError, err)
+ 		return
+ 	}
+ 
+ 	go func() {
+ 		if !tor.GotInfo() {
+-			log.TLogln("error add torrent:", "timeout connection get torrent info")
+ 			return
+ 		}
+ 
+@@ -111,9 +94,6 @@ func addTorrent(req torrReqJS, c *gin.Context) {
+ 			}
+ 		}
+ 
+-		if req.SaveToDB {
+-			torr.SaveTorrentToDB(tor)
+-		}
+ 	}()
+ 	for tor.Status().FileStats == nil {
+ 		// wait for file stats to be set
+diff --git a/web/api/upload.go b/web/api/upload.go
+index e0352ca..999acc4 100644
+--- a/web/api/upload.go
++++ b/web/api/upload.go
+@@ -36,7 +36,6 @@ func torrentUpload(c *gin.Context) {
+ 	}
+ 	defer form.RemoveAll()
+ 
+-	save := len(form.Value["save"]) > 0
+ 	title := ""
+ 	if len(form.Value["title"]) > 0 {
+ 		title = form.Value["title"][0]
+@@ -82,9 +81,6 @@ func torrentUpload(c *gin.Context) {
+ 				tor.Title = tor.Name()
+ 			}
+ 
+-			if save {
+-				torr.SaveTorrentToDB(tor)
+-			}
+ 		}()
+ 
+ 		break
+diff --git a/web/server.go b/web/server.go
+index 24f34c3..2730f80 100644
+--- a/web/server.go
++++ b/web/server.go
+@@ -1,12 +1,15 @@
+ package web
+ 
+ import (
++	"crypto/subtle"
++	"errors"
++	"io"
+ 	"net"
+ 	"net/http"
+ 	"sort"
++	"strconv"
++	"time"
+ 
+-	"github.com/gin-contrib/cors"
+-	"github.com/gin-contrib/location"
+ 	"github.com/gin-gonic/gin"
+ 
+ 	"server/settings"
+@@ -36,7 +39,10 @@ var (
+ // @externalDocs.description	OpenAPI
+ // @externalDocs.url			https://swagger.io/resources/open-api/
+ // returns true iff successful
+-func Start() bool {
++func Start(listener net.Listener, authToken string) error {
++	if listener == nil || len(authToken) != 64 {
++		return errors.New("invalid Orbit torrent server startup arguments")
++	}
+ 	log.TLogln("Start TorrServer " + version.Version + " torrent " + version.GetTorrentVersion())
+ 	ips := getLocalIps()
+ 	if len(ips) > 0 {
+@@ -46,38 +52,99 @@ func Start() bool {
+ 	if err != nil {
+ 		log.TLogln("BTS.Connect() error!", err) // waitChan <- err
+ 		//os.Exit(1)                              // return
+-		return false
++		_ = listener.Close()
++		BTS.Disconnect()
++		settings.CloseDB()
++		return errors.New("torrent engine initialization failed")
+ 	}
+ 
+ 	gin.SetMode(gin.ReleaseMode)
+ 
+-	// corsCfg := cors.DefaultConfig()
+-	// corsCfg.AllowAllOrigins = true
+-	// corsCfg.AllowHeaders = []string{"*"}
+-	// corsCfg.AllowMethods = []string{"*"}
+-	// corsCfg.AllowPrivateNetwork = true
+-	corsCfg := cors.DefaultConfig()
+-	corsCfg.AllowAllOrigins = true
+-	corsCfg.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "X-Requested-With", "Accept", "Authorization"}
+-
+ 	route := gin.New()
+-	route.Use(log.WebLogger(), gin.Recovery(), cors.New(corsCfg), location.Default())
++	route.Use(requireOrbitAuth(authToken), gin.RecoveryWithWriter(io.Discard))
+ 
+ 	route.GET("/echo", echo)
+ 
+-	api.SetupRoute(&route.RouterGroup)
++	api.SetupOrbitRoutes(&route.RouterGroup)
+ 
+ 	httpServer = &http.Server{
+-		Addr:    ":" + settings.Port,
+ 		Handler: route,
+ 	}
+ 
++	serveErr := make(chan error, 1)
+ 	go func() {
+ 		log.TLogln("Start http server at port", settings.Port)
+-		httpServer.ListenAndServe()
+-		//waitChan <- route.Run(" :" + settings.Port)
++		err := httpServer.Serve(listener)
++		if err != nil && !errors.Is(err, http.ErrServerClosed) {
++			select {
++			case serveErr <- err:
++			default:
++			}
++		}
+ 	}()
+-	return true
++
++	if err := awaitHTTPServer(listener, authToken, serveErr); err != nil {
++		_ = httpServer.Close()
++		_ = listener.Close()
++		BTS.Disconnect()
++		settings.CloseDB()
++		return err
++	}
++	return nil
++}
++
++func awaitHTTPServer(listener net.Listener, authToken string, serveErr <-chan error) error {
++	addr, ok := listener.Addr().(*net.TCPAddr)
++	if !ok || addr.Port < 1 || addr.Port > 65535 || !addr.IP.Equal(net.IPv4(127, 0, 0, 1)) {
++		return errors.New("Orbit torrent listener is not IPv4 loopback")
++	}
++
++	url := "http://127.0.0.1:" + strconv.Itoa(addr.Port) + "/echo"
++	client := &http.Client{
++		Timeout: 500 * time.Millisecond,
++		Transport: &http.Transport{
++			Proxy: nil,
++		},
++	}
++	defer client.CloseIdleConnections()
++
++	deadline := time.Now().Add(3 * time.Second)
++	for time.Now().Before(deadline) {
++		request, err := http.NewRequest(http.MethodGet, url, nil)
++		if err != nil {
++			return errors.New("Orbit torrent readiness request failed")
++		}
++		request.Header.Set("X-Orbit-Torrent-Token", authToken)
++		response, err := client.Do(request)
++		if err == nil {
++			response.Body.Close()
++			if response.StatusCode != http.StatusOK {
++				return errors.New("Orbit torrent HTTP server returned an unexpected status")
++			}
++			return nil
++		}
++
++		select {
++		case serveErr := <-serveErr:
++			if serveErr != nil {
++				return errors.New("Orbit torrent HTTP server failed to start")
++			}
++		default:
++		}
++		time.Sleep(25 * time.Millisecond)
++	}
++	return errors.New("Orbit torrent HTTP server readiness timed out")
++}
++
++func requireOrbitAuth(expected string) gin.HandlerFunc {
++	return func(c *gin.Context) {
++		provided := c.GetHeader("X-Orbit-Torrent-Token")
++		if len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
++			c.AbortWithStatus(http.StatusUnauthorized)
++			return
++		}
++		c.Next()
++	}
+ }
+ 
+ func Wait() error {
