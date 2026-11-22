@@ -149,12 +149,18 @@ public final class OrbitPlayerActivity extends Activity {
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable hideControlsTask = () -> setControlsVisible(false);
+    private final Runnable timelineRefreshTask = new Runnable() {
+        @Override public void run() {
+            if (!shouldRefreshTimeline()) return;
+            updateTimeAndPrompts();
+            main.postDelayed(this, PlayerTimelineRefreshPolicy.refreshIntervalMs());
+        }
+    };
     private final Runnable progressTask = new Runnable() {
         @Override public void run() {
             if (player != null && request != null) {
                 saveProgress();
                 sendObserverProgress();
-                updateTimeAndPrompts();
                 main.postDelayed(this, PROGRESS_INTERVAL_MS);
             }
         }
@@ -222,6 +228,7 @@ public final class OrbitPlayerActivity extends Activity {
     private Object api33BackCallback;
     private int returnOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
     private boolean controlsVisible = true;
+    private boolean activityResumed;
     private boolean seeking;
     private boolean wasPlayingBeforePause;
     private boolean activityStopNotified;
@@ -1036,6 +1043,7 @@ public final class OrbitPlayerActivity extends Activity {
                 }
                 seeking = false;
                 updateTimeAndPrompts();
+                scheduleTimelineRefresh();
             }
         });
         bottomBar.addView(times);
@@ -1116,6 +1124,7 @@ public final class OrbitPlayerActivity extends Activity {
                     if (!pendingSubtitleId.isEmpty()) selectSubtitleAfterLoad(pendingSubtitleId);
                     else applySubtitleDefaultsIfNeeded();
                     updateTimeAndPrompts();
+                    scheduleTimelineRefresh();
                 } else if (playbackState == Player.STATE_ENDED) {
                     onCurrentItemEnded();
                 }
@@ -1128,8 +1137,11 @@ public final class OrbitPlayerActivity extends Activity {
                         startedForCurrentItem = true;
                         notifyObserverStarted();
                     }
+                    updateTimeAndPrompts();
+                    scheduleTimelineRefresh();
                     scheduleControlsHide();
                 } else {
+                    main.removeCallbacks(timelineRefreshTask);
                     saveProgress();
                     sendObserverProgress();
                     setControlsVisible(true);
@@ -2484,6 +2496,7 @@ public final class OrbitPlayerActivity extends Activity {
                 sendObserverProgress();
                 activePromptId = "";
                 updateTimeAndPrompts();
+                scheduleTimelineRefresh();
                 return;
             }
         } else if (activePromptId.equals("next") && !request.queue.isEmpty()) {
@@ -2496,8 +2509,11 @@ public final class OrbitPlayerActivity extends Activity {
         long position = Math.max(0L, player.getCurrentPosition());
         long duration = player.getDuration();
         if (duration < 0L) duration = 0L;
-        if (!seeking) seekBar.setProgress(duration > 0L
-                ? (int) Math.min(10_000L, position * 10_000L / duration) : 0);
+        if (!seeking && !seekBar.isAccessibilityFocused()) {
+            int progress = duration > 0L
+                    ? (int) Math.min(10_000L, position * 10_000L / duration) : 0;
+            if (seekBar.getProgress() != progress) seekBar.setProgress(progress);
+        }
         currentTimeView.setText(formatTime(position));
         durationView.setText(duration > 0L ? formatTime(duration) : "--:--");
 
@@ -2532,6 +2548,7 @@ public final class OrbitPlayerActivity extends Activity {
         saveProgress();
         sendObserverProgress();
         updateTimeAndPrompts();
+        scheduleTimelineRefresh();
         setControlsVisible(true);
     }
 
@@ -2877,7 +2894,26 @@ public final class OrbitPlayerActivity extends Activity {
         centerControls.setVisibility(visible && player != null && !player.isPlaying() ? View.VISIBLE : visibility);
         infoView.setVisibility(visible && !television ? View.VISIBLE : View.GONE);
         pauseMetaView.setVisibility(visible && player != null && !player.isPlaying() ? View.VISIBLE : View.GONE);
-        if (visible) scheduleControlsHide(); else main.removeCallbacks(hideControlsTask);
+        if (visible) {
+            updateTimeAndPrompts();
+            scheduleTimelineRefresh();
+            scheduleControlsHide();
+        } else {
+            main.removeCallbacks(hideControlsTask);
+            main.removeCallbacks(timelineRefreshTask);
+        }
+    }
+
+    private boolean shouldRefreshTimeline() {
+        return PlayerTimelineRefreshPolicy.shouldRefresh(
+                player != null && player.isPlaying(), controlsVisible, activityResumed);
+    }
+
+    private void scheduleTimelineRefresh() {
+        main.removeCallbacks(timelineRefreshTask);
+        if (shouldRefreshTimeline()) {
+            main.postDelayed(timelineRefreshTask, PlayerTimelineRefreshPolicy.refreshIntervalMs());
+        }
     }
 
     private void scheduleControlsHide() {
@@ -4008,26 +4044,33 @@ public final class OrbitPlayerActivity extends Activity {
 
     @Override protected void onPause() {
         super.onPause();
+        activityResumed = false;
+        main.removeCallbacks(timelineRefreshTask);
         if (player != null && player.isPlaying()) {
             wasPlayingBeforePause = true;
             player.pause();
         }
         saveProgress();
         sendObserverProgress();
+        updateTimeAndPrompts();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        activityResumed = true;
         hideSystemChrome();
         if (player != null && wasPlayingBeforePause) {
             wasPlayingBeforePause = false;
             player.play();
         }
+        updateTimeAndPrompts();
+        scheduleTimelineRefresh();
     }
 
     @Override protected void onDestroy() {
         unregisterApi33BackCallback();
         main.removeCallbacks(hideControlsTask);
+        main.removeCallbacks(timelineRefreshTask);
         main.removeCallbacks(progressTask);
         providerResolutionGeneration++;
         if (providerLinksBatch != null) providerLinksBatch.close();
