@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0.10 — 2026-11-22 (local workspace candidate; unpublished)
+## 1.0.0.10 — 2026-11-23
 
 - Add episode artwork and synopsis to the long-press sheet while retaining its title and actions. Separate the sheet sections with teal dividers and use nested scrolling to keep touch gestures distinct.
 - Add safe-area padding to the phone launcher icon and Android 12 splash mark to prevent logo cropping.

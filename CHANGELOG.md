@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.0.10 — 2026-11-22 (local workspace candidate; unpublished)
+## 1.0.0.10 — 2026-11-23
 
-### Candidate changes
+### Stable release
 
 - Add episode artwork, synopsis, and teal separators to the Android episode long-press sheet. Keep the existing episode title and actions, and use nested scrolling so sheet gestures and page swipes do not compete.
 - Add safe-area padding to the Android launcher and splash marks so device icon masks do not crop the logo.
