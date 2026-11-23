@@ -73,7 +73,7 @@ dependencies {
     // Desktop counterpart of Android's WebView system (now native CDP).
     // Android's built-in AES-GCM crypto is not available on desktop JVM.
     implementation(libs.bcprov)
-    implementation("org.conscrypt:conscrypt-openjdk-uber:2.5.2")
+    implementation("org.conscrypt:conscrypt-openjdk-uber:2.8.0")
 
     // JNA for MPV
     implementation(libs.jna)
