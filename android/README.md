@@ -4,7 +4,7 @@ This directory is the canonical Android Gradle project. The separate `android-re
 
 ## Version and variants
 
-The prepared Android and desktop source version is `1.0.0.11` (Android version code `100000011`); this candidate is unpublished. The latest public release is `1.0.0.10`; `LEGACY_ANDROID_APP_VERSION=1.0.0.06` remains the separate reference app's updater baseline. Android's `ORBIT_RELEASE_VERSION_NAME` and the desktop root's `APP_VERSION` are aligned at the prepared source version. The release version code is derived from the numeric version components. Stable release builds keep application ID `com.auras.orbit` for the legacy updater path.
+The coordinated Android and desktop release is `1.0.0.11` (Android version code `100000011`). `LEGACY_ANDROID_APP_VERSION=1.0.0.06` remains the separate reference app's updater baseline. Android's `ORBIT_RELEASE_VERSION_NAME` and the desktop root's `APP_VERSION` are aligned at the release version. The release version code is derived from the numeric version components. Stable release builds keep application ID `com.auras.orbit` for the legacy updater path.
 
 Debug and diagnostic variants use version name `0.1.0-shell`; diagnostic variants apply their configured application ID suffixes. The `cs3Acceptance` variant uses `.cs3acceptance`. These variants are for development and acceptance work, not stable release delivery.
 
@@ -22,7 +22,7 @@ Local stable builds automatically read the existing update-compatible signer fro
 
 ## Release and verification status — 2026-11-23
 
-Version `1.0.0.11` is prepared in source and remains unpublished; no `.11` APK is available from GitHub. The latest public release is `1.0.0.10`. Before publication, the Android Release APK must keep the existing update-compatible signer and application ID, and pass the release workflow's package/version, signer, native library, and 16 KB alignment checks. Downloads are listed on the project [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases).
+The coordinated Android and desktop release is `1.0.0.11`. The Android Release APK keeps the existing update-compatible signer and application ID. The release workflow checks package/version metadata, signer, native libraries, and 16 KB alignment before attaching it to the project [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases).
 
 The candidate does not claim full TV acceptance. TV testing remains deferred. Real provider-stream subtitle acceptance and complete phone TalkBack review remain follow-up work. Jellyfin and FCast remain in development; live service acceptance is separate and nonblocking.
 
