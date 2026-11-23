@@ -58,7 +58,7 @@ video = "1.0.0"
 slf4j = "2.0.12"
 logback = "1.5.0"
 workRuntimeKtx = "2.11.2"
-zipline = "1.27.0"
+zipline = "1.28.0"
 
 sqldelight = "2.4.0"
 cryptography = "0.6.0"
