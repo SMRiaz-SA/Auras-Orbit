@@ -2,6 +2,8 @@
 
 ### Your extensions. Your watchlist. Your screen.
 
+Still A Work In Progress.
+
 Auras Orbit brings the providers you choose into a personal discovery and watch library on Windows desktop, Android phones, and Android TV. Browse add-on catalogs, find something to watch, play videos, and return to your own progress later. Build a home screen that feels personal, switch between local profiles, and keep bookmarks and watch history close at hand.
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
