@@ -131,6 +131,7 @@ import com.auras.orbit.providers.ProviderBatch;
 import com.auras.orbit.providers.ProviderDescriptor;
 import com.auras.orbit.providers.ProviderOperationCoordinator;
 import com.auras.orbit.providers.ProviderOutcome;
+import com.auras.orbit.providers.Cs3MediaProviderAdapter;
 import com.auras.orbit.providers.Cs3ProviderRegistry;
 import com.auras.orbit.providers.SearchRequest;
 import com.auras.orbit.providers.SearchType;
@@ -220,8 +221,6 @@ public final class OrbitShellActivity extends Activity implements
     // top-level scroll recovery; ordinary data refreshes do not reset the viewport.
     private ShellRoute pendingTopLevelScrollRestore;
     private static final int MAX_HOME_FEATURED_ITEMS = 6;
-    private static final int HOME_ARTWORK_PREFETCH_COUNT = 2;
-    private static final int HOME_ARTWORK_PREFETCH_MAX_QUEUED = 12;
     private static final Object PROVIDER_ARTWORK_CACHE_LOCK = new Object();
     private static final Set<String> PROVIDER_ARTWORK_MAINTENANCE_PENDING =
             Collections.synchronizedSet(new HashSet<>());
@@ -503,12 +502,6 @@ public final class OrbitShellActivity extends Activity implements
     /** Invalidates pending library callbacks when another library is selected. */
     private int jellyfinLibraryRequestEpoch;
     private final Handler providerUiHandler = new Handler(Looper.getMainLooper());
-    private final Runnable homeArtworkPrefetchRunnable = () -> {
-        if (shellState == null || shellState.getRoute() != ShellRoute.HOME
-                || isFinishing() || isDestroyed()) return;
-        View routeScroll = findTaggedView(getWindow().getDecorView(), "route_page_scroll");
-        if (routeScroll != null) prefetchVisibleHomeRailArtwork(routeScroll);
-    };
     private ProviderBatch<AttributedHomePage> homeProviderBatch;
     private List<ProviderOutcome<AttributedHomePage>> homeProviderOutcomes = Collections.emptyList();
     private String homeProviderBatchKey;
@@ -532,6 +525,8 @@ public final class OrbitShellActivity extends Activity implements
     private RecyclerView expandedHomeRailList;
     private int homeFeaturedIndex;
     private String homeFeaturedSelectionKey;
+    private int homeFeaturedSelectionGeneration;
+    private HomeFeaturedHeroDetailsState homeFeaturedDetailsState;
     private ProviderBatch<List<AttributedSearchHit>> homeQuickSearchBatch;
     private List<ProviderOutcome<List<AttributedSearchHit>>> homeQuickSearchOutcomes = Collections.emptyList();
     private String homeQuickSearchBatchKey;
@@ -2544,6 +2539,8 @@ public final class OrbitShellActivity extends Activity implements
         }
         String homeSelectionKey = homeProviderBatchKeyForSources(profile.id, selectedHomeSources);
         if (!TextUtils.equals(homeSelectionKey, homeFeaturedSelectionKey)) {
+            clearHomeFeaturedDetailsState(true);
+            homeFeaturedSelectionGeneration++;
             homeFeaturedSelectionKey = homeSelectionKey;
             homeFeaturedIndex = 0;
         }
@@ -2682,15 +2679,25 @@ public final class OrbitShellActivity extends Activity implements
         MediaProvider provider = featured.provider;
         com.auras.orbit.providers.MediaItem item = featured.item;
         if (provider == null || provider.descriptor() == null || item == null) return;
-        String artworkUrl = hasPosterUrl(item.backgroundPosterUrl)
-                ? item.backgroundPosterUrl : item.posterUrl;
-        if (hasPosterUrl(artworkUrl)) {
+        if (hasPosterUrl(item.posterUrl)) {
             ImageView artwork = new ImageView(this);
             artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
             hero.addView(artwork, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            requestProviderArtworkImage(artwork, provider.profileScopeId(), provider.descriptor().id,
-                    artworkUrl, item.posterHeaders, artworkUrl);
+            requestProviderArtworkImage(artwork, profileId, provider.descriptor().id,
+                    item.posterUrl, item.posterHeaders, item.posterUrl);
+        }
+        ImageView backdrop = new ImageView(this);
+        backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        hero.addView(backdrop, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (hasPosterUrl(item.backgroundPosterUrl)) {
+            requestProviderArtworkImage(backdrop, profileId,
+                    provider.descriptor().id, item.backgroundPosterUrl,
+                    item.posterHeaders, item.posterUrl);
+        } else if (provider.descriptor().details && !TextUtils.isEmpty(item.detailUrl)) {
+            loadHomeFeaturedHeroDetails(backdrop, provider, item, profileId, selectionKey,
+                    selectedIndex);
         }
         hero.addView(new HomeHeroShadeView(this), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -2833,6 +2840,107 @@ public final class OrbitShellActivity extends Activity implements
         }
     }
 
+    private void loadHomeFeaturedHeroDetails(ImageView backdrop, MediaProvider provider,
+            com.auras.orbit.providers.MediaItem item, String profileId,
+            String selectionKey, int selectedIndex) {
+        final int uiGeneration = providerUiGeneration;
+        HomeFeaturedHeroDetailsState state = homeFeaturedDetailsState;
+        if (state == null || !state.matches(provider, profileId, item, selectionKey,
+                selectedIndex, homeFeaturedSelectionGeneration, uiGeneration)) {
+            clearHomeFeaturedDetailsState(true);
+            state = new HomeFeaturedHeroDetailsState(profileId, provider, item, selectionKey,
+                    selectedIndex, homeFeaturedSelectionGeneration, uiGeneration);
+            homeFeaturedDetailsState = state;
+        }
+        state.updateOverlay(backdrop);
+        final HomeFeaturedHeroDetailsState requestState = state;
+
+        if (hasPosterUrl(state.backgroundPosterUrl)) {
+            requestHomeFeaturedBackdrop(state, state.backgroundPosterUrl,
+                    state.backgroundPosterHeaders, state.backgroundPosterHeaderOriginUrl);
+            return;
+        }
+        if (state.detailsAttempted || !isCurrentHomeFeaturedDetailsState(state)) return;
+
+        MediaProvider registeredProvider = findProvider(profileId, provider.descriptor().id);
+        if (registeredProvider == provider) {
+            com.auras.orbit.providers.MediaItem cached = providerDetailsMemoryCache.get(
+                    provider, profileId, item, SystemClock.elapsedRealtime());
+            if (cached != null && provider.isLoadedDetailsContextCurrent(cached)
+                    && state.matchesDetailsIdentity(item, cached)) {
+                state.markDetailsAttempted();
+                if (state.applyDetails(item, cached, true,
+                        hasPosterUrl(cached.backgroundPosterUrl))) {
+                    requestHomeFeaturedBackdrop(state, state.backgroundPosterUrl,
+                            state.backgroundPosterHeaders,
+                            state.backgroundPosterHeaderOriginUrl);
+                }
+                return;
+            }
+        }
+        if (providerOperationCoordinator == null || !state.markDetailsAttempted()) return;
+        requestState.detailsBatch = providerOperationCoordinator.loadDetails(provider,
+                item.detailUrl, 30_000L, outcomes -> providerUiHandler.post(() -> {
+                    com.auras.orbit.providers.ProviderOutcome<com.auras.orbit.providers.MediaItem> outcome =
+                            outcomes == null || outcomes.isEmpty() ? null : outcomes.get(0);
+                    if (outcome == null || outcome.status ==
+                            com.auras.orbit.providers.ProviderOutcome.Status.LOADING) return;
+                    requestState.detailsBatch = null;
+                    if (!isCurrentHomeFeaturedDetailsState(requestState)
+                            || outcome.status !=
+                            com.auras.orbit.providers.ProviderOutcome.Status.SUCCESS
+                            || outcome.value == null) return;
+
+                    com.auras.orbit.providers.MediaItem details = outcome.value;
+                    if (!requestState.applyDetails(item, details, true,
+                            hasPosterUrl(details.backgroundPosterUrl))) return;
+                    if (findProvider(profileId, provider.descriptor().id) == provider
+                            && provider.isLoadedDetailsContextCurrent(details)) {
+                        providerDetailsMemoryCache.put(provider, profileId, item,
+                                details, SystemClock.elapsedRealtime());
+                    }
+                    requestHomeFeaturedBackdrop(requestState, requestState.backgroundPosterUrl,
+                            requestState.backgroundPosterHeaders,
+                            requestState.backgroundPosterHeaderOriginUrl);
+                }));
+    }
+
+    private boolean isCurrentHomeFeaturedDetailsState(HomeFeaturedHeroDetailsState state) {
+        if (state == null || state != homeFeaturedDetailsState
+                || state.selectionGeneration != homeFeaturedSelectionGeneration
+                || homeFeaturedIndex != state.selectedIndex
+                || !isCurrentHomeFeaturedSelection(state.profileId, state.selectionKey,
+                        state.uiGeneration)
+                || !isProviderAvailableForProfile(state.profileId, state.provider)) return false;
+        MediaProvider current = findProvider(state.profileId, state.provider.descriptor().id);
+        // CS3 may rebuild a wrapper around the same live registration. In either case the
+        // request adapter must still prove that registration is current before applying metadata.
+        if (state.provider instanceof Cs3MediaProviderAdapter) {
+            return state.provider.isRegistrationCurrent();
+        }
+        return current == state.provider;
+    }
+
+    private void requestHomeFeaturedBackdrop(HomeFeaturedHeroDetailsState state,
+            String artworkUrl, Map<String, String> headers, String headerOriginUrl) {
+        ImageView backdrop = state == null ? null : state.currentOverlay;
+        if (backdrop == null || !hasPosterUrl(artworkUrl)
+                || !isCurrentHomeFeaturedDetailsState(state)) return;
+        requestProviderArtworkImage(backdrop, state.profileId,
+                state.provider.descriptor().id, artworkUrl, headers, headerOriginUrl);
+    }
+
+    private void clearHomeFeaturedDetailsState(boolean cancelRequest) {
+        HomeFeaturedHeroDetailsState previous = homeFeaturedDetailsState;
+        homeFeaturedDetailsState = null;
+        if (previous == null) return;
+        previous.clearViewReferences();
+        if (cancelRequest && previous.detailsBatch != null) {
+            previous.detailsBatch.close();
+            previous.detailsBatch = null;
+        }
+    }
+
     private Drawable homeFeaturedControlBackground() {
         GradientDrawable normal = new GradientDrawable();
         normal.setColor(Color.TRANSPARENT);
@@ -2861,6 +2969,10 @@ public final class OrbitShellActivity extends Activity implements
                                          int index, int candidateCount, String focusTag) {
         if (!isCurrentHomeFeaturedSelection(profileId, selectionKey, uiGeneration)
                 || index < 0 || index >= candidateCount) return;
+        if (homeFeaturedIndex != index) {
+            clearHomeFeaturedDetailsState(true);
+            homeFeaturedSelectionGeneration++;
+        }
         homeFeaturedIndex = index;
         if (isTelevision) pendingFocusTag = focusTag;
         renderProviderResultsPreservingViewport();
@@ -3285,6 +3397,8 @@ public final class OrbitShellActivity extends Activity implements
 
     private void clearHomeProviderBatch() {
         homeProviderBatchGeneration++;
+        clearHomeFeaturedDetailsState(true);
+        homeFeaturedSelectionGeneration++;
         resetHomeScrollGestureTracking();
         ProviderBatch<AttributedHomePage> previousBatch = homeProviderBatch;
         homeProviderBatch = null;
@@ -3596,10 +3710,6 @@ public final class OrbitShellActivity extends Activity implements
         boolean homeRoute = shellState != null
                 && HomeContinuationTriggerPolicy.isHomeContinuationContent(
                         shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen);
-        if (homeRoute) {
-            providerUiHandler.removeCallbacks(homeArtworkPrefetchRunnable);
-            providerUiHandler.postDelayed(homeArtworkPrefetchRunnable, 100L);
-        }
         if (!HomeContinuationTriggerPolicy.isCapturedDownwardScroll(homeRoute,
                 homeScrollMovePending, gestureId, homeScrollActiveGestureId,
                 scrollY, oldScrollY)) return;
@@ -3997,9 +4107,14 @@ public final class OrbitShellActivity extends Activity implements
                 || state.exhausted || TextUtils.isEmpty(state.nextCursor)
                 || !isCurrentHomeRailState(state)) return;
         int count = adapter.getItemCount();
-        int lastVisible = layoutManager.findLastCompletelyVisibleItemPosition();
-        if (!recyclerView.canScrollHorizontally(1) || (lastVisible >= 0 && lastVisible >= count - 7)) {
-            requestNextHomeRailPage(state);
+        int continuationWindowStart = Math.max(0, count - 7);
+        for (int position = continuationWindowStart; position < count; position++) {
+            // Adapter positions, rather than physical left/right coordinates, also work for
+            // RTL and reverse-layout rails.
+            if (layoutManager.findViewByPosition(position) != null) {
+                requestNextHomeRailPage(state);
+                return;
+            }
         }
     }
 
@@ -4318,19 +4433,14 @@ public final class OrbitShellActivity extends Activity implements
             @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 int firstVisible = layoutManager.findFirstVisibleItemPosition();
                 if (firstVisible >= 0) providerRailFirstVisiblePositions.put(railKey, firstVisible);
+                // Horizontal scroll deltas reverse in RTL. The continuation check uses adapter
+                // positions to find the rail end and runs only after actual horizontal movement.
                 if (homeRailState != null && dx != 0) {
-                    prefetchAdjacentHomeRailArtwork(recyclerView, layoutManager, adapter, dx > 0);
+                    maybeLoadHorizontalHomeRail(recyclerView, layoutManager, adapter, homeRailState);
                 }
-                maybeLoadHorizontalHomeRail(recyclerView, layoutManager, adapter, homeRailState);
             }
         });
         parent.addView(scroll, fullWidth());
-        if (homeRailState != null) {
-            scroll.post(() -> {
-                prefetchAdjacentHomeRailArtwork(scroll, layoutManager, adapter, true);
-                maybeLoadHorizontalHomeRail(scroll, layoutManager, adapter, homeRailState);
-            });
-        }
         if (railWindow.hasPager()) {
             LinearLayout pager = new LinearLayout(this);
             pager.setGravity(Gravity.CENTER_VERTICAL);
@@ -4365,67 +4475,6 @@ public final class OrbitShellActivity extends Activity implements
             }
             parent.addView(pager, fullWidth());
         }
-    }
-
-    /** Prefetches only the next two posters for Home rails intersecting the viewport. */
-    private void prefetchVisibleHomeRailArtwork(View view) {
-        if (view == null || view.getVisibility() != View.VISIBLE) return;
-        if (view instanceof RecyclerView
-                && view.getTag() instanceof String
-                && ((String) view.getTag()).startsWith("provider_rail_view_")
-                && view.getGlobalVisibleRect(new android.graphics.Rect())) {
-            RecyclerView rail = (RecyclerView) view;
-            RecyclerView.Adapter<?> rawAdapter = rail.getAdapter();
-            RecyclerView.LayoutManager rawLayoutManager = rail.getLayoutManager();
-            if (rawAdapter instanceof ProviderMediaRailAdapter
-                    && rawLayoutManager instanceof LinearLayoutManager) {
-                prefetchAdjacentHomeRailArtwork(rail,
-                        (LinearLayoutManager) rawLayoutManager,
-                        (ProviderMediaRailAdapter) rawAdapter, true);
-            }
-        }
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            for (int index = 0; index < group.getChildCount(); index++) {
-                prefetchVisibleHomeRailArtwork(group.getChildAt(index));
-            }
-        }
-    }
-
-    /**
-     * Starts at most two cacheable artwork requests beside the visible Home items. Existing
-     * request deduplication and the bounded executor keep repeated scroll callbacks cheap.
-     */
-    private void prefetchAdjacentHomeRailArtwork(RecyclerView rail,
-            LinearLayoutManager layoutManager, ProviderMediaRailAdapter adapter, boolean forward) {
-        if (rail == null || layoutManager == null || adapter == null
-                || adapter.homeRailState == null
-                || !rail.getGlobalVisibleRect(new android.graphics.Rect())
-                || POSTER_EXECUTOR.queuedCount() > HOME_ARTWORK_PREFETCH_MAX_QUEUED) return;
-        int firstVisible = layoutManager.findFirstVisibleItemPosition();
-        int lastVisible = layoutManager.findLastVisibleItemPosition();
-        if (firstVisible < 0 || lastVisible < 0) return;
-        int itemCount = adapter.getItemCount();
-        for (int offset = 1; offset <= HOME_ARTWORK_PREFETCH_COUNT; offset++) {
-            int position = forward ? lastVisible + offset : firstVisible - offset;
-            if (position < 0 || position >= itemCount) break;
-            int itemIndex = adapter.start + position;
-            if (itemIndex < adapter.start || itemIndex >= adapter.end
-                    || itemIndex >= adapter.items.size()) continue;
-            prefetchProviderRailArtwork(adapter.items.get(itemIndex));
-        }
-    }
-
-    private void prefetchProviderRailArtwork(ProviderRailItem railItem) {
-        if (railItem == null || railItem.provider == null || railItem.item == null
-                || railItem.provider.descriptor() == null
-                || !hasHttpArtworkUrl(railItem.item.posterUrl)) return;
-        // The loader weakly retains image waiters; this detached target lets it populate the
-        // normal memory/disk caches without holding a card view that is not yet on screen.
-        ImageView cacheTarget = new ImageView(this);
-        requestProviderArtworkImage(cacheTarget, railItem.provider.profileScopeId(),
-                railItem.provider.descriptor().id, railItem.item.posterUrl,
-                railItem.item.posterHeaders, railItem.item.posterUrl);
     }
 
     private LinearLayout createProviderMediaRailTile(ProviderRailItem railItem,
@@ -4867,6 +4916,8 @@ public final class OrbitShellActivity extends Activity implements
         fcastManager.stop();
         providerUiGeneration++;
         cancelHomeContinueResumeResolution();
+        clearHomeFeaturedDetailsState(true);
+        homeFeaturedSelectionGeneration++;
         if (clearHomeFeed) clearHomeProviderBatch();
         if (titleSearchBatch != null) titleSearchBatch.close();
         closeProviderTitleDetails(false);
@@ -4881,6 +4932,8 @@ public final class OrbitShellActivity extends Activity implements
     private void cancelProviderBatchesPreservingTitleDetails() {
         providerUiGeneration++;
         cancelHomeContinueResumeResolution();
+        clearHomeFeaturedDetailsState(true);
+        homeFeaturedSelectionGeneration++;
         if (titleSearchBatch != null) titleSearchBatch.close();
         if (providerDetailsBatch != null) providerDetailsBatch.close();
         if (providerLinksBatch != null) providerLinksBatch.close();

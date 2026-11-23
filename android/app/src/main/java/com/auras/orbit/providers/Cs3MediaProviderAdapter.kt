@@ -578,7 +578,8 @@ internal class Cs3MediaProviderAdapter(
         }
         return MediaItem(stableId(response.url), response.name, kind,
             response.url, response.posterUrl, year?.toString(), "", "",
-            emptyList(), 0, "", "", "", emptyMap(), response.score?.toString().orEmpty(),
+            emptyList(), 0, "", "", "", response.posterHeaders.orEmpty(),
+            response.score?.toString().orEmpty(),
             emptyList())
     }
 

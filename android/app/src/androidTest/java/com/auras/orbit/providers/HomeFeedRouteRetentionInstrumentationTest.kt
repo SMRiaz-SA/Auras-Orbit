@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.auras.orbit.BuildConfig
@@ -22,9 +23,11 @@ import com.auras.orbit.ui.OrbitShellActivity
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageData
 import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.MovieSearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.plugins.BasePlugin
@@ -127,6 +130,7 @@ class HomeFeedRouteRetentionInstrumentationTest {
         assertFalse("the fixture plugin must not already own a runtime handle", runtime.isLoaded(pluginId))
         assertFalse("APIHolder must not already contain this fixture provider",
             APIHolder.INSTANCE.allProviders.any { it === fixtureApi })
+        fixtureApi.firstHomePageHasNext = true
 
         val markerDirectory = File(target.cacheDir, FIXTURE_DIRECTORY_NAME)
         assertTrue("the fixture marker directory is app-private",
@@ -152,11 +156,83 @@ class HomeFeedRouteRetentionInstrumentationTest {
         onMain { invokeRender(shell!!) }
 
         await("the selected provider Home shelf must arrive") {
-            findText(shell!!, SHELF_TITLE) != null && fixtureApi.homeRequests.size == 1
+            findText(shell!!, SHELF_TITLE) != null
         }
+        await("Home requests background details for only its selected hero title") {
+            var heroBackgroundReady = false
+            onMain {
+                heroBackgroundReady = fixtureApi.detailsRequests.isNotEmpty()
+                    && (readField(shell!!, "homeFeaturedDetailsState")?.let {
+                        readField(it, "backgroundPosterUrl") == HERO_BACKGROUND_URL
+                    } == true)
+            }
+            heroBackgroundReady
+        }
+        assertEquals("the selected hero should load one provider title's metadata",
+            listOf("$FIXTURE_TITLE_URL/short"), fixtureApi.detailsRequests.toList())
+        val heroArtworkTags = ArrayList<String>()
+        onMain {
+            val heroState = readField(shell!!, "homeFeaturedDetailsState")
+                ?: throw AssertionError("the selected Home hero must retain its artwork state")
+            val heroOverlay = readField(heroState, "currentOverlay") as? View
+                ?: throw AssertionError("the selected hero must retain its backdrop view")
+            val heroFrame = heroOverlay.parent as? ViewGroup
+                ?: throw AssertionError("the selected hero artwork must remain mounted")
+            for (index in 0 until heroFrame.childCount) {
+                val tag = heroFrame.getChildAt(index).tag as? String
+                if (tag != null && tag.startsWith("orbit-artwork:")) heroArtworkTags.add(tag)
+            }
+        }
+        assertTrue("background artwork overlays the poster while preserving poster fallback; "
+                + "targets=$heroArtworkTags",
+            heroArtworkTags.size >= 2)
+        onMain { invokeRender(shell!!) }
+        instrumentation.waitForIdleSync()
+        assertEquals("recomposing Home with a fresh CS3 adapter must not reload hero details",
+            1, fixtureApi.detailsRequests.size)
+        instrumentation.waitForIdleSync()
+        SystemClock.sleep(750L)
+        assertEquals("attaching a short Home rail must not fetch its next page automatically",
+            listOf("1:$MAIN_PAGE_NAME"), fixtureApi.homeRequests.toList())
+        val rail = findView(shell!!.window.decorView) {
+            it is RecyclerView && it.tag is String
+                && (it.tag as String).startsWith("provider_rail_view_")
+                && it.adapter?.itemCount == HOME_ITEM_COUNT
+        } as? RecyclerView ?: throw AssertionError("the provider Home rail must be mounted")
+        onMain {
+            rail.layoutDirection = View.LAYOUT_DIRECTION_RTL
+            rail.requestLayout()
+        }
+        instrumentation.waitForIdleSync()
+        var observedScrollDx = 0
+        var laterAdapterItemsWereVisible = false
+        onMain {
+            rail.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    observedScrollDx += dx
+                    val count = recyclerView.adapter?.itemCount ?: 0
+                    val layoutManager = recyclerView.layoutManager
+                    if (layoutManager != null) {
+                        laterAdapterItemsWereVisible = (maxOf(0, count - 7) until count).any {
+                            layoutManager.findViewByPosition(it) != null
+                        }
+                    }
+                }
+            })
+            rail.scrollBy(-100_000, 0)
+        }
+        assertTrue("the RTL fixture must move left, observed dx=$observedScrollDx",
+            observedScrollDx < 0)
+        assertTrue("the RTL scroll must expose later adapter items", laterAdapterItemsWereVisible)
+        await("scrolling toward the end of an RTL Home rail loads its next page") {
+            fixtureApi.homeRequests.size == 2
+        }
+        assertEquals("one user scroll loads exactly one Home continuation",
+            listOf("1:$MAIN_PAGE_NAME", "2:$MAIN_PAGE_NAME"), fixtureApi.homeRequests.toList())
         val initialBatch = readField(shell!!, "homeProviderBatch")
         assertNotNull("Home must own a loaded provider batch", initialBatch)
-        assertEquals("the provider receives one Home request", listOf("1:$MAIN_PAGE_NAME"),
+        assertEquals("the provider receives one initial Home request and one continuation",
+            listOf("1:$MAIN_PAGE_NAME", "2:$MAIN_PAGE_NAME"),
             fixtureApi.homeRequests.toList())
 
         clickRoute("nav_SEARCH", ShellRoute.SEARCH)
@@ -219,7 +295,7 @@ class HomeFeedRouteRetentionInstrumentationTest {
                 activityBeforeOrientationChange.isDestroyed)
             assertSame("orientation changes retain the same Home provider batch", initialBatch,
                 readField(activityBeforeOrientationChange, "homeProviderBatch"))
-            assertEquals("orientation changes do not repeat the Home provider request", 1,
+            assertEquals("orientation changes do not repeat Home requests", 2,
                 fixtureApi.homeRequests.size)
         } finally {
             if (!activityBeforeOrientationChange.isDestroyed) {
@@ -230,14 +306,14 @@ class HomeFeedRouteRetentionInstrumentationTest {
         }
 
         invokeMetadataChanged("unrelated-profile")
-        assertEquals("metadata for another profile does not reload this Home feed", 1,
+        assertEquals("metadata for another profile does not reload this Home feed", 2,
             fixtureApi.homeRequests.size)
 
         invokeMetadataChanged(profileId)
         await("a real provider metadata change must refresh Home") {
-            fixtureApi.homeRequests.size == 2 && findText(shell!!, SHELF_TITLE) != null
+            fixtureApi.homeRequests.size == 3 && findText(shell!!, SHELF_TITLE) != null
         }
-        assertEquals("the metadata refresh starts one replacement request", 2,
+        assertEquals("the metadata refresh starts one replacement request", 3,
             fixtureApi.homeRequests.size)
         assertTrue("the metadata refresh replaces the old Home batch",
             readField(shell!!, "homeProviderBatch") !== initialBatch)
@@ -308,7 +384,7 @@ class HomeFeedRouteRetentionInstrumentationTest {
         }
         assertSame("route changes retain the same provider batch", initialBatch,
             readField(shell!!, "homeProviderBatch"))
-        assertEquals("route changes do not reload the selected provider", 1,
+        assertEquals("route changes do not reload the selected provider after pagination", 2,
             fixtureApi.homeRequests.size)
     }
 
@@ -501,6 +577,8 @@ class HomeFeedRouteRetentionInstrumentationTest {
 
     private class RetentionMainApi : MainAPI() {
         val homeRequests = CopyOnWriteArrayList<String>()
+        val detailsRequests = CopyOnWriteArrayList<String>()
+        @Volatile var firstHomePageHasNext = false
 
         override fun getName(): String = PROVIDER_NAME
         override fun getMainUrl(): String = FIXTURE_PROVIDER_URL
@@ -511,11 +589,31 @@ class HomeFeedRouteRetentionInstrumentationTest {
 
         override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
             homeRequests.add("$page:${request.name}")
-            val item = MovieSearchResponse(
-                TITLE, FIXTURE_TITLE_URL, PROVIDER_NAME, TvType.Movie,
-                null, 2026, null, null, emptyMap(), null,
+            val shortItem = MovieSearchResponse(
+                "$TITLE Short", "$FIXTURE_TITLE_URL/short", PROVIDER_NAME, TvType.Movie,
+                "https://images.fixture.invalid/hero-poster.jpg", 2026, null, null, emptyMap(), null,
             )
-            return HomePageResponse(listOf(HomePageList(SHELF_TITLE, listOf(item), true)), false)
+            val items = (0 until HOME_ITEM_COUNT).map { index ->
+                MovieSearchResponse(
+                    "$TITLE $index", "$FIXTURE_TITLE_URL/$index", PROVIDER_NAME, TvType.Movie,
+                    null, 2026, null, null, emptyMap(), null,
+                )
+            }
+            return HomePageResponse(listOf(
+                HomePageList(SHELF_TITLE, listOf(shortItem), true),
+                HomePageList(LONG_SHELF_TITLE, items, true),
+            ),
+                page == 1 && firstHomePageHasNext)
+        }
+
+        override suspend fun load(url: String): LoadResponse? {
+            detailsRequests.add(url)
+            return MovieLoadResponse(
+                "$TITLE Short", url, PROVIDER_NAME, TvType.Movie, url,
+                "https://images.fixture.invalid/poster.jpg", 2026, null, null,
+                emptyList(), null, emptyList(), emptyList(), emptyList(), false,
+                emptyMap(), emptyMap(), HERO_BACKGROUND_URL, null, null, url,
+            )
         }
     }
 
@@ -531,7 +629,10 @@ class HomeFeedRouteRetentionInstrumentationTest {
         private const val FIXTURE_TITLE_URL = "https://home-retention.example/title"
         private const val MAIN_PAGE_NAME = "Home Retention"
         private const val SHELF_TITLE = "Retained Route Shelf"
+        private const val LONG_SHELF_TITLE = "Retained Long Route Shelf"
         private const val TITLE = "Retained Provider Title"
+        private const val HERO_BACKGROUND_URL = "https://images.fixture.invalid/hero-background.jpg"
+        private const val HOME_ITEM_COUNT = 32
         private const val EXTENSION_PREFERENCES = "orbit_cloudstream_extensions_v1"
         private const val PROVIDER_PREFERENCES = "orbit_provider_selection_v1"
         private const val PROFILE_PREFERENCES = "orbit_shell_local_profiles_v1"

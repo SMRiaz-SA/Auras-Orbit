@@ -8,11 +8,11 @@ Auras Orbit brings the providers you choose into a personal discovery and watch 
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Desktop and Android release:** **1.0.0.11** (2026-11-23)<br>
+**Current desktop and Android release candidate:** **1.0.0.12** (2026-11-23)<br>
 **Latest public release:** **1.0.0.11**<br>
 **Legacy Android updater reference:** **1.0.0.06**<br>
 **GitHub Releases:** [Windows and Android downloads](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
-**Release highlights:** Prefetch adjacent posters on Android Home provider shelves and open title details directly from a shelf's **View all** page.<br>
+**Release candidate highlight:** Make Android Home shelf pagination scroll-driven and RTL-aware.<br>
 **Platform:** Windows 10 or 11, 64-bit; Android phones and TVs<br>
 **Downloads:** Windows installer and portable ZIP plus Android APK are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases).<br>
 **Changelog:** [Release history](CHANGELOG.md)<br>

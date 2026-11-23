@@ -76,6 +76,20 @@ class Cs3ProviderMetadataMappingInstrumentationTest {
     }
 
     @Test
+    fun searchPreservesPosterHeadersForPosterFallbacks() {
+        val response = movieSearch("Header poster", TvType.Movie, 2024).apply {
+            posterUrl = "https://images.fixture.invalid/poster.jpg"
+            posterHeaders = mapOf("X-Poster" to "search-fixture")
+        }
+        val api = FixtureApi(setOf(TvType.Movie)).apply { searchResponses = listOf(response) }
+
+        val item = provider(api).search(SearchRequest("Header poster", SearchType.ALL, 1)).single()
+
+        assertEquals("https://images.fixture.invalid/poster.jpg", item.posterUrl)
+        assertEquals(mapOf("X-Poster" to "search-fixture"), item.posterHeaders)
+    }
+
+    @Test
     fun tvSeriesSearchResponseRemainsASeriesWhenItsTvTypeIsMovie() {
         val response = seriesSearch("VisionQuest", TvType.Movie, 2025)
         val api = FixtureApi(setOf(TvType.Movie, TvType.TvSeries)).apply {
