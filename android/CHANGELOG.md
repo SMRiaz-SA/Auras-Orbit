@@ -2,11 +2,11 @@
 
 ## 1.0.0.12 — 2026-11-23
 
-### Release candidate — unpublished
+### Stable release
 
 - Make Home shelf pagination scroll-driven: mounting a rail no longer triggers adjacent-poster prefetch or an automatic next-page request. Horizontal scrolling into the final seven adapter items requests the next page, including in RTL layouts.
 - Use provider background artwork on Home hero cards when the selected title's details supply it; load details only for the active hero and keep the poster visible underneath as a fallback.
-- No desktop code changes are included in this release candidate.
+- No desktop code changes are included in this release.
 
 ## 1.0.0.11 — 2026-11-23
 
