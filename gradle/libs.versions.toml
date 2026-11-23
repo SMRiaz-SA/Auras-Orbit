@@ -10,7 +10,7 @@ biometric = "1.4.0-alpha06"
 buildkonfigGradlePlugin = "0.18.0"
 coil = { strictly = "3.5.0" } # Desktop targets JVM 21
 asm = "9.10.1"
-fastutil = "8.5.16"
+fastutil = "8.5.19"
 bouncycastle = "1.86"
 colorpicker = "6b46b49"
 conscryptAndroid = { strictly = "2.5.2" } # 2.5.3 crashes everything
