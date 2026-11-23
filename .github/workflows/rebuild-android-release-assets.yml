@@ -1,0 +1,349 @@
+name: Rebuild Android Release Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing stable release tag to repair (for example, v1.0.0.12)
+        required: true
+        type: string
+      expected_commit_sha:
+        description: Expected peeled 40-character commit SHA for that tag
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-android-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild-android:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Require manual dispatch from main
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -cne 'refs/heads/main') {
+            throw 'This repair workflow must be dispatched from the main branch.'
+          }
+
+      - name: Check out main for release validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag, main ancestry, stable release, and updater assets
+        id: verify-release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:RELEASE_TAG.Trim()
+          $expectedCommit = $env:EXPECTED_COMMIT_SHA.Trim().ToLowerInvariant()
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(?:\.\d+)?)$') {
+            throw "Release tag must use a numeric v-prefixed version: '$tag'."
+          }
+          $version = $Matches[1]
+          if ($expectedCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'Expected commit SHA must contain exactly 40 hexadecimal characters.'
+          }
+
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch main to verify the expected release commit.'
+          }
+          $tagRef = "refs/tags/$tag"
+          git fetch --no-tags origin "+${tagRef}:${tagRef}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch the exact remote tag '$tag'."
+          }
+          $tagCommit = (& git rev-parse --verify "$tagRef^{commit}").Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -cne $expectedCommit) {
+            throw "Tag '$tag' peels to '$tagCommit', not expected commit '$expectedCommit'."
+          }
+          git merge-base --is-ancestor $expectedCommit refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Expected release commit '$expectedCommit' is not on main."
+          }
+
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$([uri]::EscapeDataString($tag))"
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            'User-Agent' = 'Auras-Orbit-android-release-repair'
+          }
+          $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -Method Get
+          if ($release.tag_name -cne $tag -or
+              $release.draft -ne $false -or
+              $release.prerelease -ne $false -or
+              $null -eq $release.immutable -or
+              $release.immutable -ne $false) {
+            throw "GitHub must contain the exact matching stable, published, mutable release for '$tag'."
+          }
+
+          $requiredUpdaterAssets = @("$version.apk", 'Auras-Orbit.apk')
+          $backupDirectory = Join-Path $env:RUNNER_TEMP "auras-orbit-$version-updater-apk-backup"
+          New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null
+          foreach ($assetName in $requiredUpdaterAssets) {
+            $assets = @($release.assets | Where-Object { $_.name -ceq $assetName })
+            if ($assets.Count -ne 1 -or $assets[0].state -cne 'uploaded' -or [long] $assets[0].size -le 0) {
+              throw "Expected exactly one uploaded, non-empty updater asset '$assetName' on release '$tag' before overwriting it."
+            }
+
+            if ($assets[0].digest -notmatch '^sha256:([0-9a-fA-F]{64})$') {
+              throw "Release API did not provide a valid SHA-256 digest for updater asset '$assetName'."
+            }
+            $assetDigest = $Matches[1].ToLowerInvariant()
+            $backupPath = Join-Path $backupDirectory $assetName
+            Invoke-WebRequest -Uri $assets[0].browser_download_url -Headers $headers -Method Get -OutFile $backupPath
+            $backupFile = Get-Item -LiteralPath $backupPath
+            $backupHash = (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($backupFile.Length -ne [long] $assets[0].size -or $backupHash -cne $assetDigest) {
+              throw "Downloaded updater backup '$assetName' failed its release API size or SHA-256 check."
+            }
+
+            $assetKey = if ($assetName -ceq 'Auras-Orbit.apk') { 'NAMED' } else { 'NUMERIC' }
+            "ANDROID_APK_BACKUP_${assetKey}_PATH=$backupPath" >> $env:GITHUB_ENV
+            "ANDROID_APK_BACKUP_${assetKey}_SIZE=$($backupFile.Length)" >> $env:GITHUB_ENV
+            "ANDROID_APK_BACKUP_${assetKey}_SHA256=$backupHash" >> $env:GITHUB_ENV
+            "backup_$($assetKey.ToLowerInvariant())_path=$backupPath" >> $env:GITHUB_OUTPUT
+          }
+          "ANDROID_APK_BACKUP_DIR=$backupDirectory" >> $env:GITHUB_ENV
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Verified stable mutable release $tag at $expectedCommit and downloaded both updater APK backups with matching API sizes and SHA-256 digests."
+
+      - name: Check out the exact release tag source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Verify checked out commit and version metadata
+        id: verify-source
+        shell: pwsh
+        env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
+          EXPECTED_VERSION: ${{ steps.verify-release.outputs.version }}
+        run: |
+          $expectedCommit = $env:EXPECTED_COMMIT_SHA.Trim().ToLowerInvariant()
+          $checkedOutCommit = (& git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $checkedOutCommit -cne $expectedCommit) {
+            throw "Checked out '$checkedOutCommit' instead of expected release commit '$expectedCommit'."
+          }
+
+          $versionFiles = @(
+            @{ Path = 'gradle.properties'; Key = 'APP_VERSION' },
+            @{ Path = 'android/gradle.properties'; Key = 'ORBIT_RELEASE_VERSION_NAME' }
+          )
+          foreach ($item in $versionFiles) {
+            $versionLines = @(Get-Content -LiteralPath $item.Path |
+              Where-Object { $_ -cmatch "^$([regex]::Escape($item.Key))=" })
+            if ($versionLines.Count -ne 1 -or
+                (($versionLines[0] -split '=', 2)[1].Trim() -cne $env:EXPECTED_VERSION)) {
+              throw "Release tag version '$env:EXPECTED_VERSION' does not match $($item.Key) in '$($item.Path)'."
+            }
+          }
+          Write-Host "Verified release source at $checkedOutCommit and version $env:EXPECTED_VERSION."
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK and pinned NDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'ndk;28.2.13676358'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Build and verify release APK
+        timeout-minutes: 30
+        shell: pwsh
+        env:
+          AURAS_RELEASE_KEYSTORE_BASE64: ${{ secrets.AURAS_RELEASE_KEYSTORE_BASE64 }}
+          AURAS_RELEASE_STORE_PASSWORD: ${{ secrets.AURAS_RELEASE_STORE_PASSWORD }}
+          AURAS_RELEASE_KEY_ALIAS: ${{ secrets.AURAS_RELEASE_KEY_ALIAS }}
+          AURAS_RELEASE_KEY_PASSWORD: ${{ secrets.AURAS_RELEASE_KEY_PASSWORD }}
+          EXPECTED_VERSION: ${{ steps.verify-release.outputs.version }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AURAS_RELEASE_KEYSTORE_BASE64)) {
+            throw 'The stable Android release signing keystore is not configured.'
+          }
+          $keystorePath = Join-Path $env:RUNNER_TEMP 'auras-orbit-release.p12'
+          $keystoreBytes = [Convert]::FromBase64String($env:AURAS_RELEASE_KEYSTORE_BASE64)
+          [System.IO.File]::WriteAllBytes($keystorePath, $keystoreBytes)
+          [Array]::Clear($keystoreBytes, 0, $keystoreBytes.Length)
+          $env:AURAS_RELEASE_STORE_FILE = $keystorePath
+
+          Push-Location android
+          try {
+            .\gradlew.bat :app:assembleRelease "-PORBIT_RELEASE_VERSION_NAME=$env:EXPECTED_VERSION" --no-daemon --no-configuration-cache --console=plain --stacktrace --max-workers=2
+            if ($LASTEXITCODE -ne 0) {
+              throw "Orbit Android APK build failed with exit code $LASTEXITCODE."
+            }
+          } finally {
+            Pop-Location
+          }
+
+          $releaseDirectory = 'android\app\build\outputs\apk\release'
+          $releaseApks = @(Get-ChildItem -LiteralPath $releaseDirectory -Filter '*.apk' -File)
+          if ($releaseApks.Count -ne 1) {
+            throw "Expected one Orbit release APK in $releaseDirectory; found $($releaseApks.Count)."
+          }
+          .\.github\scripts\verify-android-apk.ps1 -ExpectedVersion $env:EXPECTED_VERSION -ApkPath $releaseApks[0].FullName
+
+          $releaseMetadataPath = Join-Path $releaseDirectory 'output-metadata.json'
+          foreach ($backupApk in @($env:ANDROID_APK_BACKUP_NUMERIC_PATH, $env:ANDROID_APK_BACKUP_NAMED_PATH)) {
+            $metadata = Get-Content -Raw -LiteralPath $releaseMetadataPath | ConvertFrom-Json
+            $metadataElements = @($metadata.elements)
+            if ($metadata.variantName -cne 'release' -or $metadata.applicationId -cne 'com.auras.orbit' -or $metadataElements.Count -ne 1) {
+              throw "Cannot verify existing updater backup against unexpected release metadata in '$releaseMetadataPath'."
+            }
+            $metadataElements[0].outputFile = Split-Path -Leaf $backupApk
+            $metadataPath = Join-Path (Split-Path -Parent $backupApk) 'output-metadata.json'
+            $metadata | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $metadataPath -Encoding utf8
+            .\.github\scripts\verify-android-apk.ps1 -ExpectedVersion $env:EXPECTED_VERSION -ApkPath $backupApk
+          }
+
+          $releaseOutput = 'desktop-app\build\outputs'
+          New-Item -ItemType Directory -Force -Path $releaseOutput | Out-Null
+          Copy-Item -LiteralPath $releaseApks[0].FullName -Destination (Join-Path $releaseOutput "$env:EXPECTED_VERSION.apk")
+          Copy-Item -LiteralPath $releaseApks[0].FullName -Destination (Join-Path $releaseOutput 'Auras-Orbit.apk')
+          $builtApk = Get-Item -LiteralPath $releaseApks[0].FullName
+          $builtApkSha256 = (Get-FileHash -LiteralPath $releaseApks[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "ANDROID_EXPECTED_APK_SIZE=$($builtApk.Length)" >> $env:GITHUB_ENV
+          "ANDROID_EXPECTED_APK_SHA256=$builtApkSha256" >> $env:GITHUB_ENV
+
+      - name: Replace only the two Android updater APK assets
+        id: replace_android_assets
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            desktop-app/build/outputs/${{ steps.verify-release.outputs.version }}.apk
+            desktop-app/build/outputs/Auras-Orbit.apk
+          overwrite_files: true
+          fail_on_unmatched_files: true
+
+      - name: Verify both replacement APK assets through GitHub API
+        id: verify_published_assets
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$([uri]::EscapeDataString($env:RELEASE_TAG))"
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            'User-Agent' = 'Auras-Orbit-android-release-repair'
+          }
+          $expectedDigest = "sha256:$($env:ANDROID_EXPECTED_APK_SHA256.ToLowerInvariant())"
+          $expectedSize = [long] $env:ANDROID_EXPECTED_APK_SIZE
+          $assetNames = @("$($env:RELEASE_TAG.Substring(1)).apk", 'Auras-Orbit.apk')
+          $lastProblem = 'GitHub did not return matching replacement APK assets.'
+
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            try {
+              $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -Method Get
+              $allAssetsMatch = $true
+              foreach ($assetName in $assetNames) {
+                $assets = @($release.assets | Where-Object { $_.name -ceq $assetName })
+                if ($assets.Count -ne 1 -or
+                    $assets[0].state -cne 'uploaded' -or
+                    [long] $assets[0].size -ne $expectedSize -or
+                    ([string] $assets[0].digest).ToLowerInvariant() -cne $expectedDigest) {
+                  $lastProblem = "GitHub API asset '$assetName' is missing, duplicated, or does not match the built APK size and SHA-256."
+                  $allAssetsMatch = $false
+                  break
+                }
+              }
+              if ($allAssetsMatch) {
+                Write-Host "GitHub release API confirms both updater APK assets are $expectedSize bytes with SHA-256 $($env:ANDROID_EXPECTED_APK_SHA256)."
+                exit 0
+              }
+            } catch {
+              $lastProblem = "GitHub release API request failed: $($_.Exception.Message)"
+            }
+
+            if ($attempt -lt 6) {
+              Write-Host "Release asset state is not yet visible (attempt $attempt of 6): $lastProblem"
+              Start-Sleep -Seconds 5
+            }
+          }
+          throw "Replacement APK publication could not be verified after six attempts: $lastProblem"
+
+      - name: Restore the verified original updater APK assets after a failed replacement
+        if: ${{ failure() && (steps.replace_android_assets.outcome == 'failure' || steps.verify_published_assets.outcome == 'failure') }}
+        id: restore_android_assets
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            ${{ steps.verify-release.outputs.backup_numeric_path }}
+            ${{ steps.verify-release.outputs.backup_named_path }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
+
+      - name: Verify original updater APK assets were restored
+        if: ${{ failure() && steps.restore_android_assets.outcome == 'success' }}
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$([uri]::EscapeDataString($env:RELEASE_TAG))"
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            'User-Agent' = 'Auras-Orbit-android-release-repair'
+          }
+          $expectedAssets = @(
+            @{ Name = "$($env:RELEASE_TAG.Substring(1)).apk"; Size = [long] $env:ANDROID_APK_BACKUP_NUMERIC_SIZE; Digest = "sha256:$($env:ANDROID_APK_BACKUP_NUMERIC_SHA256)" },
+            @{ Name = 'Auras-Orbit.apk'; Size = [long] $env:ANDROID_APK_BACKUP_NAMED_SIZE; Digest = "sha256:$($env:ANDROID_APK_BACKUP_NAMED_SHA256)" }
+          )
+          $lastProblem = 'GitHub did not return the restored original APK assets.'
+
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            try {
+              $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -Method Get
+              $allAssetsMatch = $true
+              foreach ($expectedAsset in $expectedAssets) {
+                $assets = @($release.assets | Where-Object { $_.name -ceq $expectedAsset.Name })
+                if ($assets.Count -ne 1 -or
+                    $assets[0].state -cne 'uploaded' -or
+                    [long] $assets[0].size -ne $expectedAsset.Size -or
+                    ([string] $assets[0].digest).ToLowerInvariant() -cne $expectedAsset.Digest) {
+                  $lastProblem = "GitHub API asset '$($expectedAsset.Name)' does not match its original backup size and SHA-256."
+                  $allAssetsMatch = $false
+                  break
+                }
+              }
+              if ($allAssetsMatch) {
+                Write-Host 'GitHub release API confirms both original updater APK assets were restored.'
+                exit 0
+              }
+            } catch {
+              $lastProblem = "GitHub release API request failed: $($_.Exception.Message)"
+            }
+
+            if ($attempt -lt 6) {
+              Write-Host "Restored asset state is not yet visible (attempt $attempt of 6): $lastProblem"
+              Start-Sleep -Seconds 5
+            }
+          }
+          throw "Original updater APK restoration could not be verified after six attempts: $lastProblem"

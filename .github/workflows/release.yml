@@ -196,6 +196,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Set up Android SDK and pinned NDK
+      uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      with:
+        packages: 'ndk;28.2.13676358'
+
     - name: Build and verify Android APK
       timeout-minutes: 30
       shell: pwsh

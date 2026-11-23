@@ -181,6 +181,7 @@ require(!(orbitCs3AcceptanceAndroidTest &&
 
 android {
     namespace = "com.auras.orbit"
+    ndkVersion = "28.2.13676358"
     compileSdk {
         version = release(libs.versions.compileSdk.get().toInt()) {
             minorApiLevel = libs.versions.compileSdkMinorApiLevel.get().toInt()
