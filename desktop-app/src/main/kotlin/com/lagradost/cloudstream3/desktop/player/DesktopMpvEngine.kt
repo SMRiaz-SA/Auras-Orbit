@@ -31,6 +31,9 @@ class DesktopMpvEngine(
     private var eventJob: Job? = null
     private val isDestroyed = AtomicBoolean(false)
 
+    @Volatile
+    internal var playbackStateToRestore: MpvPlaybackStateSnapshot? = null
+
     val nativeHandleValue: Long?
         get() = mpvHandle?.let { Pointer.nativeValue(it) }
 
@@ -141,6 +144,7 @@ class DesktopMpvEngine(
             lib.mpv_observe_property(handle, 7L, "core-idle", 3) // Flag
             lib.mpv_observe_property(handle, 8L, "paused-for-cache", 3) // Flag
             lib.mpv_observe_property(handle, 9L, "mute", 3) // Flag
+            lib.mpv_observe_property(handle, 10L, "sub-visibility", 3) // Flag
 
             var lastPositionPollMs = 0L
             var lastTrackPollMs = 0L
@@ -230,6 +234,49 @@ class DesktopMpvEngine(
                 playerState?._audioTracks?.value = disambiguatedAudioTracks
                 playerState?._subtitleTracks?.value = disambiguatedSubTracks
                 playerState?._videoTracks?.value = videoTracks
+
+                playbackStateToRestore?.takeIf { trackCount > 0 }?.let { restore ->
+                    var allTrackSelectionsRestored = true
+
+                    if (restore.hasAudioTracks) {
+                        hasAutoSwitchedAudio = true
+                        val restoredId = resolveRestoredMpvTrackId(restore.selectedAudioTrack, disambiguatedAudioTracks)
+                        if (restoredId != null) {
+                            lib.mpv_set_property_string(h, "aid", restoredId.toString())
+                        } else if (restore.selectedAudioTrack == null && disambiguatedAudioTracks.isNotEmpty()) {
+                            lib.mpv_set_property_string(h, "aid", "no")
+                        } else {
+                            allTrackSelectionsRestored = false
+                        }
+                    }
+
+                    if (restore.hasSubtitleTracks) {
+                        val restoredId = resolveRestoredMpvTrackId(restore.selectedSubtitleTrack, disambiguatedSubTracks)
+                        if (restoredId != null) {
+                            lib.mpv_set_property_string(h, "sid", restoredId.toString())
+                        } else if (restore.selectedSubtitleTrack == null && disambiguatedSubTracks.isNotEmpty()) {
+                            lib.mpv_set_property_string(h, "sid", "no")
+                        } else {
+                            allTrackSelectionsRestored = false
+                        }
+                        if (restoredId != null || (restore.selectedSubtitleTrack == null && disambiguatedSubTracks.isNotEmpty())) {
+                            lib.mpv_set_property_string(h, "sub-visibility", if (restore.subtitlesVisible) "yes" else "no")
+                        }
+                    }
+
+                    if (restore.hasVideoTracks) {
+                        val restoredId = resolveRestoredMpvTrackId(restore.selectedVideoTrack, videoTracks)
+                        if (restoredId != null) {
+                            lib.mpv_set_property_string(h, "vid", restoredId.toString())
+                        } else if (restore.isAudioMode) {
+                            lib.mpv_set_property_string(h, "vid", "no")
+                        } else if (restore.selectedVideoTrack != null) {
+                            allTrackSelectionsRestored = false
+                        }
+                    }
+
+                    if (allTrackSelectionsRestored) playbackStateToRestore = null
+                }
 
                 val vFormat = MpvLibrary.getPropertyString(h, "video-format")
                 val hasVideo = videoTracks.isNotEmpty() || (vFormat?.isNotBlank() == true && !vFormat.equals("none", ignoreCase = true))
@@ -464,6 +511,9 @@ class DesktopMpvEngine(
                                             }
                                             "mute" -> {
                                                 if (prop.format == 3) playerState?._isMuted?.value = prop.data!!.getInt(0) != 0
+                                            }
+                                            "sub-visibility" -> {
+                                                if (prop.format == 3) playerState?._isSubtitleVisible?.value = prop.data!!.getInt(0) != 0
                                             }
                                             "volume" -> {
                                                 if (prop.format == 5) {

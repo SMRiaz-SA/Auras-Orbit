@@ -201,6 +201,10 @@ fun BaseMpvPlayer(
     var showShortcutsModal by remember { mutableStateOf(false) }
     var isEngineReady by remember { mutableStateOf(false) }
     var activeProxySessionId by remember { mutableStateOf<String?>(null) }
+    var hasAttachedMpvPeer by remember { mutableStateOf(false) }
+    var pendingPeerRestoreSnapshot by remember { mutableStateOf<MpvPlaybackStateSnapshot?>(null) }
+    var lastLoadedLink by remember { mutableStateOf<ExtractorLink?>(null) }
+    var lastLoadedPlaybackGeneration by remember { mutableLongStateOf(Long.MIN_VALUE) }
 
     val currentOnPlaybackReady by rememberUpdatedState(onPlaybackReady)
     val currentOnPlaybackError by rememberUpdatedState(onPlaybackError)
@@ -210,25 +214,24 @@ fun BaseMpvPlayer(
     val currentOnFullscreenToggle by rememberUpdatedState(onFullscreenToggle)
     val currentOnShowShortcuts: () -> Unit by rememberUpdatedState({ showShortcutsModal = true })
 
-    val engine = remember {
-        DesktopMpvEngine(
-            scope = scope,
-            playerState = playerState,
-            onPlaybackReady = { currentOnPlaybackReady() },
-            onPlaybackError = { currentOnPlaybackError(it) },
-            onFinished = { currentOnFinished() },
-            onPositionChange = { pos, dur -> currentOnPositionChange(pos, dur) },
-            onEventLoopReady = onEventLoopReady,
-            isLive = isLive,
-        )
-    }
+    fun createMpvEngine() = DesktopMpvEngine(
+        scope = scope,
+        playerState = playerState,
+        onPlaybackReady = { currentOnPlaybackReady() },
+        onPlaybackError = { currentOnPlaybackError(it) },
+        onFinished = { currentOnFinished() },
+        onPositionChange = { pos, dur -> currentOnPositionChange(pos, dur) },
+        onEventLoopReady = onEventLoopReady,
+        isLive = isLive,
+    )
+    var engine by remember { mutableStateOf(createMpvEngine()) }
 
-    LaunchedEffect(playerState, isLive) {
+    LaunchedEffect(engine, playerState, isLive) {
         engine.playerState = playerState
         engine.isLive = isLive
     }
 
-    LaunchedEffect(title, isEngineReady) {
+    LaunchedEffect(engine, title, isEngineReady) {
         if (isEngineReady && !title.isNullOrBlank()) {
             engine.setPropertyString("force-media-title", title)
             engine.setPropertyString("title", title)
@@ -243,13 +246,15 @@ fun BaseMpvPlayer(
         }
     }
 
-    LaunchedEffect(link, isEngineReady, playbackGeneration) {
+    LaunchedEffect(engine, link, isEngineReady, playbackGeneration) {
         if (!isEngineReady) return@LaunchedEffect
 
         activeProxySessionId?.let(com.lagradost.player.impl.proxy.LocalStreamProxy::unregisterSession)
         activeProxySessionId = null
 
         if (link == null) {
+            engine.playbackStateToRestore = null
+            lastLoadedLink = null
             com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine.stopStream()
             engine.executeCommand("stop")
             engine.setPropertyString("pause", "yes")
@@ -257,6 +262,13 @@ fun BaseMpvPlayer(
             playerState?.reset()
             return@LaunchedEffect
         }
+
+        val restoreSnapshot = engine.playbackStateToRestore.takeIf {
+            hasAttachedMpvPeer && lastLoadedLink == link && lastLoadedPlaybackGeneration == playbackGeneration
+        }
+        engine.playbackStateToRestore = restoreSnapshot
+        lastLoadedLink = link
+        lastLoadedPlaybackGeneration = playbackGeneration
 
         val resolvedLink = if (com.lagradost.cloudstream3.desktop.torrent.DesktopTorrentEngine.isTorrentLink(link)) {
             try {
@@ -404,7 +416,23 @@ fun BaseMpvPlayer(
             engine.setPropertyString("http-header-fields", headersStr)
         }
 
-        val startSec = startPositionMs / 1000.0
+        val effectiveStartPositionMs = restoreSnapshot?.positionMs ?: startPositionMs
+        val startSec = effectiveStartPositionMs / 1000.0
+        restoreSnapshot?.let { restore ->
+            playerState?._positionMs?.value = restore.positionMs
+            playerState?._volume?.value = restore.volume
+            playerState?._playbackSpeed?.value = restore.playbackSpeed
+            playerState?._isMuted?.value = restore.isMuted
+            playerState?._isPaused?.value = restore.isPaused
+            playerState?._subtitleDelayMs?.value = restore.subtitleDelayMs
+            playerState?._isSubtitleVisible?.value = restore.subtitlesVisible
+            playerState?._isAudioMode?.value = restore.isAudioMode
+            engine.setPropertyString("volume", restore.volume.toString())
+            engine.setPropertyString("speed", restore.playbackSpeed.toString())
+            engine.setPropertyString("mute", if (restore.isMuted) "yes" else "no")
+            engine.setPropertyString("sub-delay", (restore.subtitleDelayMs / 1000.0).toString())
+            engine.setPropertyString("sub-visibility", if (restore.subtitlesVisible) "yes" else "no")
+        }
         if (startSec > 0 && !isLiveStream) {
             engine.setPropertyString("start", startSec.toString())
         }
@@ -451,7 +479,7 @@ fun BaseMpvPlayer(
             engine.executeCommand("loadfile \"$safeUrl\"")
         }
 
-        val shouldPause = shouldPauseForResume && startSec > 0
+        val shouldPause = restoreSnapshot?.isPaused ?: (shouldPauseForResume && startSec > 0)
         engine.setPropertyString("pause", if (shouldPause) "yes" else "no")
         playerState?._isPaused?.value = shouldPause
 
@@ -513,7 +541,28 @@ fun BaseMpvPlayer(
             override fun addNotify() {
                 super.addNotify()
 
-                if (engine.isHandleValid()) return
+                if (engine.isHandleValid()) {
+                    playerState?.attachEngine(engine)
+                    isEngineReady = true
+                    hasAttachedMpvPeer = true
+                    this.keyDispatcher?.let {
+                        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(it)
+                    }
+                    return
+                }
+
+                // AWT can recreate this Canvas peer when the composition reparents it.
+                // The old MPV instance is bound to the previous native window ID.
+                val previousEngine = engine
+                if (previousEngine.nativeHandleValue != null) previousEngine.destroy()
+                engine = createMpvEngine()
+                val activeEngine = engine
+                activeEngine.playbackStateToRestore = if (hasAttachedMpvPeer) {
+                    pendingPeerRestoreSnapshot
+                } else {
+                    null
+                }
+                pendingPeerRestoreSnapshot = null
 
                 val isWindows = System.getProperty("os.name").lowercase().contains("win")
                 val mpvExe = resolveMpvExecutable(isWindows)
@@ -530,7 +579,7 @@ fun BaseMpvPlayer(
                 }
 
                 val wid = com.sun.jna.Native.getComponentID(this)
-                val handle = engine.createAndInitialize(
+                val handle = activeEngine.createAndInitialize(
                     canvasWid = wid,
                     width = this.width,
                     height = this.height,
@@ -543,139 +592,150 @@ fun BaseMpvPlayer(
                 )
                 if (handle == null) return
 
-                playerState?.attachEngine(engine)
+                playerState?.attachEngine(activeEngine)
                 isEngineReady = true
+                hasAttachedMpvPeer = true
 
-                val canvas = this
-                canvas.addMouseMotionListener(object : MouseMotionAdapter() {
-                    override fun mouseMoved(e: MouseEvent) {
-                        engine.executeCommand("mouse ${e.x} ${e.y}")
-                    }
-                    override fun mouseDragged(e: MouseEvent) {
-                        engine.executeCommand("mouse ${e.x} ${e.y}")
-                    }
-                })
-
-                canvas.addMouseListener(object : MouseAdapter() {
-                    override fun mousePressed(e: MouseEvent) {
-                        if (e.button == 4) {
-                            engine.executeCommand("seek -10")
-                            com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerSeekFeedback) window.triggerSeekFeedback('left');")
-                            return
-                        } else if (e.button == 5) {
-                            engine.executeCommand("seek 10")
-                            com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerSeekFeedback) window.triggerSeekFeedback('right');")
-                            return
+                if (this.keyDispatcher == null) {
+                    val canvas = this
+                    canvas.addMouseMotionListener(object : MouseMotionAdapter() {
+                        override fun mouseMoved(e: MouseEvent) {
+                            engine.executeCommand("mouse ${e.x} ${e.y}")
                         }
-                        canvas.requestFocusInWindow()
-                        val btn = when (e.button) {
-                            MouseEvent.BUTTON1 -> "MBTN_LEFT"
-                            MouseEvent.BUTTON2 -> "MBTN_MID"
-                            MouseEvent.BUTTON3 -> "MBTN_RIGHT"
-                            else -> return
+                        override fun mouseDragged(e: MouseEvent) {
+                            engine.executeCommand("mouse ${e.x} ${e.y}")
                         }
-                        engine.executeCommand("keydown $btn")
-                    }
-                    override fun mouseReleased(e: MouseEvent) {
-                        if (e.button == 4 || e.button == 5) return
-                        val btn = when (e.button) {
-                            MouseEvent.BUTTON1 -> "MBTN_LEFT"
-                            MouseEvent.BUTTON2 -> "MBTN_MID"
-                            MouseEvent.BUTTON3 -> "MBTN_RIGHT"
-                            else -> return
+                    })
+
+                    canvas.addMouseListener(object : MouseAdapter() {
+                        override fun mousePressed(e: MouseEvent) {
+                            if (e.button == 4) {
+                                engine.executeCommand("seek -10")
+                                com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerSeekFeedback) window.triggerSeekFeedback('left');")
+                                return
+                            } else if (e.button == 5) {
+                                engine.executeCommand("seek 10")
+                                com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerSeekFeedback) window.triggerSeekFeedback('right');")
+                                return
+                            }
+                            canvas.requestFocusInWindow()
+                            val btn = when (e.button) {
+                                MouseEvent.BUTTON1 -> "MBTN_LEFT"
+                                MouseEvent.BUTTON2 -> "MBTN_MID"
+                                MouseEvent.BUTTON3 -> "MBTN_RIGHT"
+                                else -> return
+                            }
+                            engine.executeCommand("keydown $btn")
                         }
-                        engine.executeCommand("keyup $btn")
+                        override fun mouseReleased(e: MouseEvent) {
+                            if (e.button == 4 || e.button == 5) return
+                            val btn = when (e.button) {
+                                MouseEvent.BUTTON1 -> "MBTN_LEFT"
+                                MouseEvent.BUTTON2 -> "MBTN_MID"
+                                MouseEvent.BUTTON3 -> "MBTN_RIGHT"
+                                else -> return
+                            }
+                            engine.executeCommand("keyup $btn")
+                        }
+                    })
+
+                    canvas.addFocusListener(object : java.awt.event.FocusAdapter() {
+                        override fun focusGained(e: java.awt.event.FocusEvent?) {
+                            com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.focusWebView()
+                        }
+                    })
+
+                    canvas.addMouseWheelListener { e ->
+                        val key = if (e.wheelRotation < 0) "WHEEL_UP" else "WHEEL_DOWN"
+                        engine.executeCommand("keypress $key")
                     }
-                })
 
-                canvas.addFocusListener(object : java.awt.event.FocusAdapter() {
-                    override fun focusGained(e: java.awt.event.FocusEvent?) {
-                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.focusWebView()
-                    }
-                })
-
-                canvas.addMouseWheelListener { e ->
-                    val key = if (e.wheelRotation < 0) "WHEEL_UP" else "WHEEL_DOWN"
-                    engine.executeCommand("keypress $key")
-                }
-
-                this.keyDispatcher = java.awt.KeyEventDispatcher { e ->
-                    if (e.id == KeyEvent.KEY_PRESSED) {
-                        val mpvKey = awtKeyToMpv(e)
-                        val lower = mpvKey?.lowercase() ?: ""
-                        val isSeek = lower == "left" || lower == "right" || lower == "shift+left" || lower == "shift+right" || lower == "ctrl+right" || (lower.length == 1 && lower[0].isDigit())
-                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.onNativeKeyActivity) window.onNativeKeyActivity($isSeek);")
-                        if (mpvKey?.contains("QUIT_OVERRIDE") == true || e.keyCode == KeyEvent.VK_ESCAPE) {
-                            currentOnCloseRequest()
-                        } else if (mpvKey != null) {
-                            when {
-                                lower == "space" || lower == "k" -> engine.executeCommand("cycle pause")
-                                lower == "left" -> {
-                                    engine.executeCommand("seek -10")
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
-                                }
-                                lower == "right" -> {
-                                    engine.executeCommand("seek 10")
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
-                                }
-                                lower == "shift+left" -> {
-                                    engine.executeCommand("seek -2")
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
-                                }
-                                lower == "shift+right" -> {
-                                    engine.executeCommand("seek 2")
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
-                                }
-                                lower == "ctrl+right" -> {
-                                    engine.executeCommand("seek 85")
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
-                                }
-                                lower == "up" -> {
-                                    engine.executeCommand("add volume 5")
-                                    val vol = ((playerState?._volume?.value ?: 100f) + 5f).coerceIn(0f, 100f)
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol);")
-                                }
-                                lower == "down" -> {
-                                    engine.executeCommand("add volume -5")
-                                    val vol = ((playerState?._volume?.value ?: 100f) - 5f).coerceIn(0f, 100f)
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol);")
-                                }
-                                lower == "m" -> {
-                                    playerState?.toggleMute()
-                                    val isM = playerState?._isMuted?.value ?: false
-                                    val vol = playerState?._volume?.value ?: 100f
-                                    com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol, $isM);")
-                                }
-                                lower == "+" || lower == "=" || lower == "]" -> engine.executeCommand("add speed 0.25")
-                                lower == "-" || lower == "_" || lower == "[" -> engine.executeCommand("add speed -0.25")
-                                lower == "bs" || lower == "backspace" -> engine.executeCommand("set speed 1.0")
-                                lower == "z" -> engine.executeCommand("add sub-delay -0.1")
-                                lower == "x" -> engine.executeCommand("add sub-delay 0.1")
-                                lower == "c" -> engine.executeCommand("cycle sub")
-                                lower == "shift+s" || lower == "ctrl+s" -> {
-                                    engine.executeCommand("screenshot video")
-                                    val dirName = com.lagradost.common.platform.PlatformPaths.screenshotsDir.name
-                                    playerState?.showToast("Screenshot saved to $dirName")
-                                }
-                                lower == "v" -> engine.executeCommand("cycle sub-visibility")
-                                lower == "f" -> currentOnFullscreenToggle?.invoke()
-                                lower == "?" || lower == "f1" || lower == "h" -> currentOnShowShortcuts()
-                                lower.length == 1 && lower[0].isDigit() -> {
-                                    val pct = (lower[0] - '0') * 10
-                                    engine.executeCommand("seek $pct absolute-percent")
+                    this.keyDispatcher = java.awt.KeyEventDispatcher { e ->
+                        if (e.id == KeyEvent.KEY_PRESSED) {
+                            val mpvKey = awtKeyToMpv(e)
+                            val lower = mpvKey?.lowercase() ?: ""
+                            val isSeek = lower == "left" || lower == "right" || lower == "shift+left" || lower == "shift+right" || lower == "ctrl+right" || (lower.length == 1 && lower[0].isDigit())
+                            com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.onNativeKeyActivity) window.onNativeKeyActivity($isSeek);")
+                            if (mpvKey?.contains("QUIT_OVERRIDE") == true || e.keyCode == KeyEvent.VK_ESCAPE) {
+                                currentOnCloseRequest()
+                            } else if (mpvKey != null) {
+                                when {
+                                    lower == "space" || lower == "k" -> engine.executeCommand("cycle pause")
+                                    lower == "left" -> {
+                                        engine.executeCommand("seek -10")
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
+                                    }
+                                    lower == "right" -> {
+                                        engine.executeCommand("seek 10")
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
+                                    }
+                                    lower == "shift+left" -> {
+                                        engine.executeCommand("seek -2")
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
+                                    }
+                                    lower == "shift+right" -> {
+                                        engine.executeCommand("seek 2")
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
+                                    }
+                                    lower == "ctrl+right" -> {
+                                        engine.executeCommand("seek 85")
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.triggerKeyboardSeekingHud) window.triggerKeyboardSeekingHud();")
+                                    }
+                                    lower == "up" -> {
+                                        engine.executeCommand("add volume 5")
+                                        val vol = ((playerState?._volume?.value ?: 100f) + 5f).coerceIn(0f, 100f)
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol);")
+                                    }
+                                    lower == "down" -> {
+                                        engine.executeCommand("add volume -5")
+                                        val vol = ((playerState?._volume?.value ?: 100f) - 5f).coerceIn(0f, 100f)
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol);")
+                                    }
+                                    lower == "m" -> {
+                                        playerState?.toggleMute()
+                                        val isM = playerState?._isMuted?.value ?: false
+                                        val vol = playerState?._volume?.value ?: 100f
+                                        com.lagradost.cloudstream3.desktop.player.webview.NativePlayerBridge.executeScript("if (window.showVolumeOsd) window.showVolumeOsd($vol, $isM);")
+                                    }
+                                    lower == "+" || lower == "=" || lower == "]" -> engine.executeCommand("add speed 0.25")
+                                    lower == "-" || lower == "_" || lower == "[" -> engine.executeCommand("add speed -0.25")
+                                    lower == "bs" || lower == "backspace" -> engine.executeCommand("set speed 1.0")
+                                    lower == "z" -> playerState?.adjustSubtitleDelay(-100L)
+                                        ?: engine.executeCommand("add sub-delay -0.1")
+                                    lower == "x" -> playerState?.adjustSubtitleDelay(100L)
+                                        ?: engine.executeCommand("add sub-delay 0.1")
+                                    lower == "c" -> engine.executeCommand("cycle sub")
+                                    lower == "shift+s" || lower == "ctrl+s" -> {
+                                        engine.executeCommand("screenshot video")
+                                        val dirName = com.lagradost.common.platform.PlatformPaths.screenshotsDir.name
+                                        playerState?.showToast("Screenshot saved to $dirName")
+                                    }
+                                    lower == "v" -> playerState?.toggleSubtitleVisibility()
+                                        ?: engine.executeCommand("cycle sub-visibility")
+                                    lower == "f" -> currentOnFullscreenToggle?.invoke()
+                                    lower == "?" || lower == "f1" || lower == "h" -> currentOnShowShortcuts()
+                                    lower.length == 1 && lower[0].isDigit() -> {
+                                        val pct = (lower[0] - '0') * 10
+                                        engine.executeCommand("seek $pct absolute-percent")
+                                    }
                                 }
                             }
                         }
+                        false
                     }
-                    false
                 }
-                java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(this.keyDispatcher)
+                this.keyDispatcher?.let {
+                    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(it)
+                }
             }
 
             override fun removeNotify() {
                 val focusManager = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
                 this.keyDispatcher?.let {
                     focusManager.removeKeyEventDispatcher(it)
+                }
+                if (hasAttachedMpvPeer) {
+                    pendingPeerRestoreSnapshot = playerState?.let(::captureMpvPlaybackState)
                 }
                 isEngineReady = false
                 playerState?.detachEngine()

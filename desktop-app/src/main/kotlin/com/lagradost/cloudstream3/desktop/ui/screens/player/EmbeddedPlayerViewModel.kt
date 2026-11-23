@@ -55,6 +55,7 @@ class EmbeddedPlayerViewModel(
     private val linkRetries = mutableMapOf<String, Int>()
     companion object {
         private const val MAX_RETRIES = 2
+        private const val STREAM_UPDATE_BATCH_MS = 50L
     }
 
     init {
@@ -1197,49 +1198,68 @@ class EmbeddedPlayerViewModel(
 
         val scrapeStartedAtNanos = System.nanoTime()
         val scrapeDiagnosticSource = normalizePerformanceSourceLabel(provider.name) ?: "unknown"
-        val result = scraper.executeScrape(
-            provider = provider,
-            targetEpisodeId = targetEpisodeId,
-            autoPlay = autoPlay,
-            currentLaunchData = current,
-            targetEpisodeData = targetEpisodeData,
-            onSubtitle = { cleanSub ->
-                updateState {
-                    if (scrapeAttempt != scrapeAttemptGeneration.get()) return@updateState this
-                    val newSubs = (nextEpisodeSubtitles + cleanSub).distinctBy { it.url.trim().lowercase() }
-                    if (!hasStartedPlaying.get()) {
-                        copy(nextEpisodeSubtitles = newSubs)
-                    } else {
-                        val cur = launchData
-                        val updatedLaunch = if (cur != null && cur.history.episodeId == targetEpisodeId) {
-                            cur.copy(subtitles = (cur.subtitles + cleanSub).distinctBy { it.url.trim().lowercase() })
-                        } else {
-                            cur
-                        }
-                        copy(nextEpisodeSubtitles = newSubs, launchData = updatedLaunch)
-                    }
+
+        // Providers can invoke link callbacks rapidly. Keep every result, but sort and
+        // publish them in short batches instead of copying the growing list per callback.
+        val streamBatchLock = Any()
+        val streamFlushLock = Any()
+        val pendingStreamLinks = ArrayList<ExtractorLink>()
+        var pendingSeekabilityRefresh = false
+        var pendingStreamFlushJob: Job? = null
+
+        lateinit var flushPendingStreamUpdates: (Job?) -> Unit
+
+        fun scheduleStreamUpdateFlush() {
+            synchronized(streamBatchLock) {
+                if (pendingStreamFlushJob?.isActive == true) return
+                pendingStreamFlushJob = viewModelScope.launch {
+                    delay(STREAM_UPDATE_BATCH_MS)
+                    flushPendingStreamUpdates(kotlinx.coroutines.currentCoroutineContext()[Job])
                 }
-            },
-            onLink = { link ->
+            }
+        }
+
+        flushPendingStreamUpdates = flush@{ scheduledJob ->
+            // Serialize the timer and end-of-scrape flush so finalization always sees
+            // callbacks that were already removed from the pending batch.
+            synchronized(streamFlushLock) {
+                val (batchLinks, refreshOrdering) = synchronized(streamBatchLock) {
+                    if (scheduledJob != null && pendingStreamFlushJob !== scheduledJob) {
+                        return@flush
+                    }
+                    val links = pendingStreamLinks.toList()
+                    pendingStreamLinks.clear()
+                    val refresh = pendingSeekabilityRefresh
+                    pendingSeekabilityRefresh = false
+                    val currentJob = pendingStreamFlushJob
+                    pendingStreamFlushJob = null
+                    if (scheduledJob == null) currentJob?.cancel()
+                    links to refresh
+                }
+
+                if (scrapeAttempt != scrapeAttemptGeneration.get()) return@flush
+                if (batchLinks.isEmpty() && !refreshOrdering) return@flush
+
                 updateState {
                     if (scrapeAttempt != scrapeAttemptGeneration.get()) return@updateState this
-                    val newLinks = sortLinks(nextEpisodeLinks + link, startPos)
+                    val sortedLinks = sortLinks(nextEpisodeLinks + batchLinks, startPos)
                     val currentLaunch = launchData
                     val updatedLaunch = if (currentLaunch != null && currentLaunch.history.episodeId == targetEpisodeId) {
-                        currentLaunch.copy(links = newLinks)
+                        currentLaunch.copy(links = sortedLinks)
                     } else {
                         currentLaunch
                     }
 
                     copy(
-                        nextEpisodeLinks = newLinks,
+                        nextEpisodeLinks = sortedLinks,
                         launchData = updatedLaunch,
                     )
                 }
-                if (scrapeAttempt != scrapeAttemptGeneration.get()) return@executeScrape
+
+                if (scrapeAttempt != scrapeAttemptGeneration.get()) return@flush
                 val currentState = uiState.value
                 if (currentState.phase is PlayerPhase.Exhausted && !hasStartedPlaying.get()) {
-                    val sortedLinks = sortLinks(currentState.nextEpisodeLinks, startPos)
+                    val sortedLinks = currentState.nextEpisodeLinks
                     val best = pickBestActiveLink(sortedLinks, emptySet(), startPos)
                     if (best != null && hasStartedPlaying.compareAndSet(false, true)) {
                         val launch = buildLaunchData(sortedLinks, currentState.nextEpisodeSubtitles)
@@ -1268,21 +1288,51 @@ class EmbeddedPlayerViewModel(
                         }
                     }
                 }
-            },
-            onSeekabilityResolved = {
+            }
+        }
+
+        val result = scraper.executeScrape(
+            provider = provider,
+            targetEpisodeId = targetEpisodeId,
+            autoPlay = autoPlay,
+            currentLaunchData = current,
+            targetEpisodeData = targetEpisodeData,
+            onSubtitle = { cleanSub ->
                 updateState {
                     if (scrapeAttempt != scrapeAttemptGeneration.get()) return@updateState this
-                    val reSorted = sortLinks(nextEpisodeLinks, startPos)
-                    val curLaunch = launchData
-                    val updated = if (curLaunch != null && curLaunch.history.episodeId == targetEpisodeId) {
-                        curLaunch.copy(links = reSorted)
+                    val newSubs = (nextEpisodeSubtitles + cleanSub).distinctBy { it.url.trim().lowercase() }
+                    if (!hasStartedPlaying.get()) {
+                        copy(nextEpisodeSubtitles = newSubs)
                     } else {
-                        curLaunch
+                        val cur = launchData
+                        val updatedLaunch = if (cur != null && cur.history.episodeId == targetEpisodeId) {
+                            cur.copy(subtitles = (cur.subtitles + cleanSub).distinctBy { it.url.trim().lowercase() })
+                        } else {
+                            cur
+                        }
+                        copy(nextEpisodeSubtitles = newSubs, launchData = updatedLaunch)
                     }
-                    copy(nextEpisodeLinks = reSorted, launchData = updated)
                 }
             },
+            onLink = { link ->
+                if (scrapeAttempt != scrapeAttemptGeneration.get()) return@executeScrape
+                synchronized(streamBatchLock) {
+                    pendingStreamLinks.add(link)
+                }
+                scheduleStreamUpdateFlush()
+            },
+            onSeekabilityResolved = { _ ->
+                if (scrapeAttempt != scrapeAttemptGeneration.get()) return@executeScrape
+                synchronized(streamBatchLock) {
+                    pendingSeekabilityRefresh = true
+                }
+                scheduleStreamUpdateFlush()
+            },
         )
+
+        // Flush synchronous provider callbacks before choosing the first source. Late
+        // callbacks (for example from Stremio addons) continue through the same batcher.
+        flushPendingStreamUpdates(null)
 
         PerformanceDiagnostics.recordAsync(
             PerformanceDiagnosticStage.SOURCE_LOOKUP,

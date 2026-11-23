@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.downloader
 
 import com.lagradost.common.logging.AppLogger
+import com.lagradost.player.impl.proxy.CrossOriginRedirectHeaderInterceptor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellableContinuation
 import okhttp3.Call
@@ -31,6 +32,10 @@ class TurboChunkDownloader(
         .followRedirects(true)
         .build(),
 ) {
+    private val redirectSafeClient = client.newBuilder()
+        .addNetworkInterceptor(CrossOriginRedirectHeaderInterceptor())
+        .build()
+
     data class ProbeResult(
         val totalBytes: Long,
         val supportsRange: Boolean,
@@ -702,7 +707,7 @@ class TurboChunkDownloader(
 
     private suspend fun <T> executeCancellable(request: Request, consume: (Response) -> T): T =
         suspendCancellableCoroutine { continuation: CancellableContinuation<T> ->
-            val call = client.newCall(request)
+            val call = redirectSafeClient.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             try {
                 call.enqueue(

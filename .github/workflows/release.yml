@@ -31,10 +31,12 @@ jobs:
         fetch-depth: 0
 
     - name: Verify Tag is on main
+      id: verify-release-tag
       shell: pwsh
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        "allow_stable_rerun=false" >> $env:GITHUB_OUTPUT
         git fetch origin main
         if ($LASTEXITCODE -ne 0) {
           throw 'Could not fetch main to verify the release tag.'
@@ -114,6 +116,7 @@ jobs:
         } else {
           Write-Host "Allowing rerun of published stable release $($existingRelease.tag_name) at $env:GITHUB_SHA; its commit is still an ancestor of main."
         }
+        "allow_stable_rerun=true" >> $env:GITHUB_OUTPUT
 
     - name: Set up JDK 21
       uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -128,6 +131,7 @@ jobs:
       shell: pwsh
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERIFIED_STABLE_RELEASE_RERUN: ${{ steps.verify-release-tag.outputs.allow_stable_rerun }}
       run: |
         $version = $env:GITHUB_REF_NAME.Substring(1)
         if ($version -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') {
@@ -141,7 +145,8 @@ jobs:
         if ($null -eq $orbitVersionLine -or ($orbitVersionLine -split '=', 2)[1].Trim() -ne $version) {
           throw "Release tag $env:GITHUB_REF_NAME does not match ORBIT_RELEASE_VERSION_NAME in android/gradle.properties."
         }
-        .\.github\scripts\verify-android-release-version.ps1 -ExpectedVersion $version -Repository $env:GITHUB_REPOSITORY
+        $allowPublishedStableRerun = $env:VERIFIED_STABLE_RELEASE_RERUN -ceq 'true'
+        .\.github\scripts\verify-android-release-version.ps1 -ExpectedVersion $version -Repository $env:GITHUB_REPOSITORY -AllowPublishedStableRerun:$allowPublishedStableRerun
 
     - name: Fetch and verify pinned MPV runtime and notices
       shell: pwsh

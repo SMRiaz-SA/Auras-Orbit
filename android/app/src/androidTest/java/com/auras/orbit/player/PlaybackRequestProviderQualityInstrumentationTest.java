@@ -27,7 +27,7 @@ import java.util.List;
 @RunWith(AndroidJUnit4.class)
 public final class PlaybackRequestProviderQualityInstrumentationTest {
     @Test
-    public void highestUsableQualityWinsAndEqualQualityKeepsCallbackOrder() {
+    public void highestQualityWinsAndUnknownProviderTypeIsRetained() {
         String lowUri = "https://media.example/360.mp4";
         String firstEqualUri = "https://media.example/720-first.mp4";
         String secondEqualUri = "https://media.example/720-second.mp4";
@@ -47,14 +47,16 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
                 new PlaybackRequest.EpisodeMetadata("episode-id", "Pilot", 1, 1),
                 result, "Provider", 0L);
 
-        assertEquals("the highest usable quality becomes the default", "provider-source-3",
+        assertEquals("the highest provider candidate becomes the default", "provider-source-4",
                 request.defaultSourceId);
-        assertEquals("unsupported high-quality links are filtered", 4, request.sources.size());
+        assertEquals("unknown provider types remain available for a player attempt", 5,
+                request.sources.size());
         assertEquals("supported sources sort by quality while equal-quality links stay stable",
-                Arrays.asList(highUsableUri, firstEqualUri, secondEqualUri, lowUri), sourceUris(request.sources));
+                Arrays.asList(unsupportedUri, highUsableUri, firstEqualUri, secondEqualUri, lowUri),
+                sourceUris(request.sources));
         assertEquals("stable source IDs continue to identify their original callback entries",
-                Arrays.asList("provider-source-3", "provider-source-1", "provider-source-2",
-                        "provider-source-0"), sourceIds(request.sources));
+                Arrays.asList("provider-source-4", "provider-source-3", "provider-source-1",
+                        "provider-source-2", "provider-source-0"), sourceIds(request.sources));
     }
 
     @Test
@@ -75,8 +77,8 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
     }
 
     @Test
-    public void providerSourceAdmissionRetainsMoreThanFiftyCandidatesInQualityOrder() {
-        List<ProviderLinkCandidate> candidates = providerLinks(64);
+    public void providerSourceAdmissionRetainsEveryCandidateBeyond4096InQualityOrder() {
+        List<ProviderLinkCandidate> candidates = providerLinks(4_200);
         List<ProviderSubtitleCandidate> subtitles = longProviderSubtitles(30);
         PlaybackRequest request = PlaybackRequest.fromProviderLinkResult("profile-id",
                 new PlaybackRequest.MediaMetadata("series-id", "provider-id", "Series",
@@ -85,9 +87,9 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
                 new ProviderLinkResult(true, candidates, subtitles, ""),
                 "Provider", 0L);
 
-        assertEquals("all bounded provider candidates remain selectable", 64, request.sources.size());
+        assertEquals("all provider candidates remain selectable", 4_200, request.sources.size());
         List<String> expectedUris = new ArrayList<>();
-        for (int i = 63; i >= 0; i--) expectedUris.add(providerUri(i));
+        for (int i = 4_199; i >= 0; i--) expectedUris.add(providerUri(i));
         assertEquals("quality ordering remains descending after admission", expectedUris,
                 sourceUris(request.sources));
 
@@ -99,27 +101,23 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
                         && handoff.hasExtra(PlaybackRequest.EXTRA_REQUEST_KEY));
         PlaybackRequest consumed = PlaybackRequest.fromIntent(handoff);
         assertNotNull("a multi-source request survives key-only handoff", consumed);
-        assertEquals(64, consumed.sources.size());
+        assertEquals(4_200, consumed.sources.size());
     }
 
     @Test
-    public void playbackRequestRejectsMoreThanProviderAdmissionBound() {
+    public void playbackRequestRetainsMoreThan4096Sources() {
         List<PlaybackRequest.Source> sources = new ArrayList<>();
-        for (int i = 0; i <= ProviderLinkResult.MAX_LINKS; i++) {
+        for (int i = 0; i < 4_097; i++) {
             sources.add(new PlaybackRequest.Source("source-" + i, "Source",
                     "https://media.example/video.mp4", "video/mp4",
                     Collections.emptyMap(), Collections.emptyList()));
         }
-        try {
-            new PlaybackRequest("profile-id",
-                    new PlaybackRequest.MediaMetadata("movie-id", "provider-id", "Movie",
-                            "Movie", "", "", ""),
-                    new PlaybackRequest.EpisodeMetadata("", "", -1, -1), sources,
-                    "source-0", Collections.emptyList(), Collections.emptyList());
-            fail("source lists above the explicit provider admission bound must be rejected");
-        } catch (IllegalArgumentException expected) {
-            // Expected: every request constructor retains the shared provider ceiling.
-        }
+        PlaybackRequest request = new PlaybackRequest("profile-id",
+                new PlaybackRequest.MediaMetadata("movie-id", "provider-id", "Movie",
+                        "Movie", "", "", ""),
+                new PlaybackRequest.EpisodeMetadata("", "", -1, -1), sources,
+                "source-0", Collections.emptyList(), Collections.emptyList());
+        assertEquals(4_097, request.sources.size());
     }
 
     @Test
@@ -129,7 +127,7 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
         String headerValue = new String(valueCharacters);
         java.util.Map<String, String> headers = Collections.singletonMap("X-Large", headerValue);
         List<PlaybackRequest.Source> sources = new ArrayList<>();
-        for (int i = 0; i < ProviderLinkResult.MAX_LINKS; i++) {
+        for (int i = 0; i < 4_096; i++) {
             sources.add(new PlaybackRequest.Source("source-" + i, "Source",
                     "https://media.example/video.mp4", "video/mp4", headers,
                     Collections.emptyList()));
@@ -170,9 +168,9 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
     }
 
     @Test
-    public void rejectedOverLimitMergeDoesNotMutatePublishedSources() {
+    public void progressiveMergeKeepsCompleteUnionBeyondFormer4096Ceiling() {
         List<PlaybackRequest.Source> initialSources = new ArrayList<>();
-        for (int i = 0; i < ProviderLinkResult.MAX_LINKS; i++) {
+        for (int i = 0; i < 4_100; i++) {
             String id = i == 0 ? "provider-source-0" : "legacy-source-" + i;
             initialSources.add(new PlaybackRequest.Source(id, i == 0 ? "Original" : "Legacy",
                     "https://media.example/old-" + i + ".mp4", "video/mp4",
@@ -184,52 +182,47 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
                 new PlaybackRequest.EpisodeMetadata("episode-id", "Pilot", 1, 1),
                 initialSources, "provider-source-0", Collections.emptyList(),
                 Collections.emptyList());
-        List<PlaybackRequest.Source> publishedSnapshot = request.sources;
         PlaybackRequest.Source overlappingSource = request.sources.get(0);
-        String originalLabel = overlappingSource.label;
-        List<PlaybackRequest.Subtitle> originalSubtitles = overlappingSource.subtitles;
         ProviderLinkResult oversizedUnionSnapshot = new ProviderLinkResult(false,
-                providerLinks(ProviderLinkResult.MAX_LINKS), Collections.singletonList(
+                providerLinks(4_200), Collections.singletonList(
                         new ProviderSubtitleCandidate("late-caption", "English",
                                 "https://captions.example/late.vtt", Collections.emptyMap())), "");
 
-        try {
-            request.mergeProviderLinkResult(oversizedUnionSnapshot, "Provider", null);
-            fail("the union of overlapping provider IDs and retained legacy IDs exceeds the source bound");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("Merged provider sources"));
-        }
+        request.mergeProviderLinkResult(oversizedUnionSnapshot, "Provider", null);
 
-        assertSame("a rejected merge keeps the exact published source snapshot",
-                publishedSnapshot, request.sources);
-        assertSame("the overlapping source retains object identity", overlappingSource,
-                request.sources.get(0));
-        assertEquals("metadata on an overlapping source stays unchanged after rejection",
-                originalLabel, overlappingSource.label);
-        assertSame("provider subtitles are not attached before the union passes its bound",
-                originalSubtitles, overlappingSource.subtitles);
-        assertTrue("the rejected subtitle is not partially merged", overlappingSource.subtitles.isEmpty());
+        assertEquals(8_299, request.sources.size());
+        assertTrue("the final provider candidate is retained", containsSource(request.sources,
+                "provider-source-4199"));
+        assertSame("an overlapping source keeps its published identity", overlappingSource,
+                findSource(request.sources, "provider-source-0"));
+        assertEquals("provider subtitles merge after the full union is accepted", "English",
+                findSource(request.sources, "provider-source-0").subtitles.get(0).language);
     }
 
     @Test
-    public void focusedSourceKeepsItsPageWhenQualityOrderingShifts() {
-        List<PlaybackRequest.Source> originalOrder = new ArrayList<>();
-        for (int i = 0; i < 80; i++) {
-            originalOrder.add(new PlaybackRequest.Source("provider-source-" + i, "Source " + i,
-                    providerUri(i), "video/mp4", Collections.emptyMap(), Collections.emptyList()));
-        }
-        PlaybackRequest.Source focusedSource = originalOrder.get(39);
-        List<PlaybackRequest.Source> reordered = new ArrayList<>();
-        reordered.add(new PlaybackRequest.Source("provider-source-new", "New highest source",
-                "https://media.example/new.mp4", "video/mp4", Collections.emptyMap(),
-                Collections.emptyList()));
-        reordered.addAll(originalOrder);
+    public void declaredMediaTypeAndHeadersWorkWithoutMatchingUrlSuffix() {
+        java.util.Map<String, String> headers = Collections.singletonMap("User-Agent", "Orbit test client");
+        List<ProviderLinkCandidate> candidates = Arrays.asList(
+                new ProviderLinkCandidate("hls", "HLS", "Provider",
+                        "https://media.example/watch?token=hls", "", 1080, "M3U8", "", headers),
+                new ProviderLinkCandidate("dash", "DASH", "Provider",
+                        "https://media.example/manifest?token=dash", "", 720, "DASH", "", headers),
+                new ProviderLinkCandidate("video", "Video", "Provider",
+                        "https://media.example/file?token=video", "", 480, "VIDEO", "", headers));
 
-        assertEquals("a focused source that moves onto page two keeps that source in view", 1,
-                OrbitPlayerActivity.sourcePageForFocusedSource(reordered, 0, focusedSource.id));
-        assertEquals("row focus is keyed by source identity, not its position",
-                "provider_source_row:" + focusedSource.id,
-                OrbitPlayerActivity.providerSourceRowFocusTag(focusedSource.id));
+        PlaybackRequest request = PlaybackRequest.fromProviderLinkResult("profile-id",
+                new PlaybackRequest.MediaMetadata("movie-id", "provider-id", "Movie",
+                        "Movie", "", "", ""),
+                new PlaybackRequest.EpisodeMetadata("", "", -1, -1),
+                new ProviderLinkResult(true, candidates, Collections.emptyList(), ""),
+                "Provider", 0L);
+
+        assertEquals(3, request.sources.size());
+        assertEquals("application/x-mpegurl", request.sources.get(0).mimeType);
+        assertEquals("application/dash+xml", request.sources.get(1).mimeType);
+        assertEquals("video/mp4", request.sources.get(2).mimeType);
+        assertEquals("Orbit test client", request.sources.get(0).headers.get("User-Agent"));
+        assertTrue(request.sources.get(0).uri.contains("?token=hls"));
     }
 
     private static ProviderLinkCandidate link(String id, int quality, String uri, String type) {
@@ -273,5 +266,14 @@ public final class PlaybackRequestProviderQualityInstrumentationTest {
         java.util.ArrayList<String> result = new java.util.ArrayList<>();
         for (PlaybackRequest.Source source : sources) result.add(source.id);
         return result;
+    }
+
+    private static boolean containsSource(List<PlaybackRequest.Source> sources, String id) {
+        return findSource(sources, id) != null;
+    }
+
+    private static PlaybackRequest.Source findSource(List<PlaybackRequest.Source> sources, String id) {
+        for (PlaybackRequest.Source source : sources) if (id.equals(source.id)) return source;
+        return null;
     }
 }

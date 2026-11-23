@@ -72,6 +72,7 @@ object DexToJvmTranslator {
         val translatedJars = mutableListOf<File>()
 
         try {
+            File(workDir, PluginArchiveFilter.TRANSIENT_WORK_MARKER).writeText("dex-translation")
             dexFiles.forEachIndexed { index, dexFile ->
                 val dexJar = File(workDir, "classes-${index + 1}.jar")
                 translateSingleDex(dexFile, dexJar)

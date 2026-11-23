@@ -5,11 +5,25 @@ import java.util.Locale
 
 /** Keeps transformed JVM and secured plugin artifacts out of source-plugin scans. */
 object PluginArchiveFilter {
+    internal const val TRANSIENT_WORK_MARKER = ".auras-plugin-transient-work"
+
     fun isLoadablePluginArchive(file: File): Boolean {
         val name = file.name.lowercase(Locale.ROOT)
         val extension = file.extension.lowercase(Locale.ROOT)
         return file.isFile && extension in setOf("jar", "cs3") &&
+            !isInsideTransientWorkDirectory(file) &&
             !name.endsWith("-jvm.jar") &&
             !name.endsWith("-secure.jar")
+    }
+
+    private fun isInsideTransientWorkDirectory(file: File): Boolean {
+        var directory = file.canonicalFile.parentFile
+        while (directory != null) {
+            if (File(directory, TRANSIENT_WORK_MARKER).isFile) {
+                return true
+            }
+            directory = directory.parentFile
+        }
+        return false
     }
 }

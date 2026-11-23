@@ -19,6 +19,10 @@ public final class ProviderLinkCandidate {
     public final String referer;
     public final int quality;
     public final String type;
+    /** Optional provider MIME hint, used when the URI does not reveal its container. */
+    public final String mimeType;
+    /** Why Orbit cannot safely use some provider-supplied metadata, while retaining the row. */
+    public final String unavailableReason;
     public final String extractorData;
     public final Map<String, String> headers;
     public final List<AudioTrackCandidate> audioTracks;
@@ -29,28 +33,51 @@ public final class ProviderLinkCandidate {
                                  int quality, String type, String extractorData,
                                  Map<String, String> headers) {
         this(id, name, source, uri, referer, quality, type, extractorData, headers,
-                Collections.emptyList(), null);
+                Collections.emptyList(), null, "", "");
     }
 
     public ProviderLinkCandidate(String id, String name, String source, String uri, String referer,
                                  int quality, String type, String extractorData,
                                  Map<String, String> headers, List<AudioTrackCandidate> audioTracks) {
         this(id, name, source, uri, referer, quality, type, extractorData, headers,
-                audioTracks, null);
+                audioTracks, null, "", "");
     }
 
     public ProviderLinkCandidate(String id, String name, String source, String uri, String referer,
                                  int quality, String type, String extractorData,
                                  Map<String, String> headers, List<AudioTrackCandidate> audioTracks,
                                  Cs3PlaybackHooks cs3PlaybackHooks) {
+        this(id, name, source, uri, referer, quality, type, extractorData, headers,
+                audioTracks, cs3PlaybackHooks, "", "");
+    }
+
+    public ProviderLinkCandidate(String id, String name, String source, String uri, String referer,
+                                 int quality, String type, String extractorData,
+                                 Map<String, String> headers, List<AudioTrackCandidate> audioTracks,
+                                 Cs3PlaybackHooks cs3PlaybackHooks, String mimeType) {
+        this(id, name, source, uri, referer, quality, type, extractorData, headers,
+                audioTracks, cs3PlaybackHooks, mimeType, "");
+    }
+
+    public ProviderLinkCandidate(String id, String name, String source, String uri, String referer,
+                                 int quality, String type, String extractorData,
+                                 Map<String, String> headers, List<AudioTrackCandidate> audioTracks,
+                                 Cs3PlaybackHooks cs3PlaybackHooks, String mimeType,
+                                 String unavailableReason) {
         this.id = requiredWithin(id, "link id", 4096);
-        this.name = optionalWithin(name, "link name", 512);
-        this.source = optionalWithin(source, "link source", 512);
-        this.uri = requiredWithin(uri, "link URI", MAX_URI_CHARS);
-        this.referer = optionalWithin(referer, "referer", 4096);
+        this.name = boundedOptional(name, 512);
+        this.source = boundedOptional(source, 512);
+        String candidateUri = uri == null ? "" : uri.trim();
+        boolean uriTooLong = candidateUri.length() > MAX_URI_CHARS;
+        this.uri = uriTooLong ? "" : candidateUri;
+        this.referer = boundedOptional(referer, 4096);
         this.quality = quality;
-        this.type = optionalWithin(type, "link type", 128);
-        this.extractorData = optionalWithin(extractorData, "extractor verifier data", MAX_VERIFIER_CHARS);
+        this.type = boundedOptional(type, 128);
+        this.mimeType = boundedOptional(mimeType, 255);
+        this.extractorData = boundedOptional(extractorData, MAX_VERIFIER_CHARS);
+        String suppliedIssue = boundedOptional(unavailableReason, 512);
+        this.unavailableReason = !suppliedIssue.isEmpty() ? suppliedIssue
+                : uriTooLong ? "The provider URL exceeds Orbit's URI safety limit." : "";
         this.headers = immutableHeaders(headers);
         this.audioTracks = immutableAudioTracks(audioTracks);
         this.cs3PlaybackHooks = cs3PlaybackHooks;
@@ -111,12 +138,10 @@ public final class ProviderLinkCandidate {
         return cleaned;
     }
 
-    private static String optionalWithin(String value, String field, int maximum) {
+    private static String boundedOptional(String value, int maximum) {
         if (value == null) return "";
-        if (value.length() > maximum) {
-            throw new IllegalArgumentException("Invalid " + field + ".");
-        }
-        return value.trim();
+        String cleaned = value.trim();
+        return cleaned.length() <= maximum ? cleaned : cleaned.substring(0, maximum);
     }
 
     private static Map<String, String> immutableHeaders(Map<String, String> value) {

@@ -214,6 +214,7 @@ object LocalStreamProxy {
                     maxRequestsPerHost = 32
                 },
             )
+            .addNetworkInterceptor(CrossOriginRedirectHeaderInterceptor())
             .apply {
                 interceptors().removeAll {
                     it.javaClass.simpleName == "RateLimitInterceptor" ||
@@ -238,6 +239,7 @@ object LocalStreamProxy {
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
             .cache(okhttp3.Cache(cacheDir, 256L * 1024 * 1024))
+            .addNetworkInterceptor(CrossOriginRedirectHeaderInterceptor())
             .apply {
                 interceptors().removeAll {
                     it.javaClass.simpleName == "RateLimitInterceptor" ||

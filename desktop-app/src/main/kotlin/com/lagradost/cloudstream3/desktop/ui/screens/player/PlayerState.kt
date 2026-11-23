@@ -29,6 +29,8 @@ class PlayerState {
     val showControls: StateFlow<Boolean> = _showControls.asStateFlow()
     internal val _subtitleDelayMs = MutableStateFlow(0L)
     val subtitleDelayMs: StateFlow<Long> = _subtitleDelayMs.asStateFlow()
+    internal val _isSubtitleVisible = MutableStateFlow(true)
+    val isSubtitleVisible: StateFlow<Boolean> = _isSubtitleVisible.asStateFlow()
     internal val _isInterpolationEnabled = MutableStateFlow(
         com.lagradost.common.storage.DesktopDataStore.getKey<Boolean>(com.lagradost.cloudstream3.desktop.player.PlayerConfig.PREF_INTERPOLATION) ?: false,
     )
@@ -155,6 +157,7 @@ class PlayerState {
         _isBuffering.value = true
         _isProbing.value = false
         _isMuted.value = false
+        _isSubtitleVisible.value = true
         lastSeekTime = 0L
         targetSeekMs = -1L
         processedAutoSkipIntervals.clear()
@@ -358,7 +361,9 @@ class PlayerState {
     }
 
     fun toggleSubtitleVisibility() {
-        engine?.executeCommand("cycle sub-visibility")
+        val nextVisible = !_isSubtitleVisible.value
+        _isSubtitleVisible.value = nextVisible
+        engine?.setPropertyString("sub-visibility", if (nextVisible) "yes" else "no")
     }
 
     fun seekLive() {
@@ -408,6 +413,10 @@ class PlayerState {
         _subtitleDelayMs.value = delayMs
     }
 
+    fun adjustSubtitleDelay(offsetMs: Long) {
+        setSubtitleDelay(_subtitleDelayMs.value + offsetMs)
+    }
+
     fun setSubtitleFont(fontName: String?) {
         if (!fontName.isNullOrBlank()) {
             engine?.setPropertyString("sub-font", fontName)
@@ -443,6 +452,7 @@ class PlayerState {
             } else {
                 engine?.setPropertyString("sid", id.toString())
                 engine?.setPropertyString("sub-visibility", "yes")
+                _isSubtitleVisible.value = true
             }
         }
     }
@@ -624,6 +634,9 @@ class PlayerState {
 
     fun setMpvProperty(property: String, value: String) {
         engine?.setPropertyString(property, value)
+        if (property == "sub-visibility") {
+            _isSubtitleVisible.value = value.equals("yes", ignoreCase = true)
+        }
     }
 
     fun updateAudioFilters() {

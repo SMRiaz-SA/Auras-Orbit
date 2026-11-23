@@ -8,7 +8,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
-import com.auras.orbit.providers.ProviderLinkResult;
+import com.auras.orbit.providers.ProviderLinkCandidate;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -47,14 +47,16 @@ public final class StremioAddonClient {
     public static final long CALL_TIMEOUT_MS = 15_000L;
     public static final int MAX_RESPONSE_BYTES = 1_048_576;
     public static final int MAX_MANIFEST_URL_CHARS = 4_096;
+    public static final int MAX_STREAM_URL_CHARS = ProviderLinkCandidate.MAX_URI_CHARS;
     private static final int MAX_LIST_ITEMS = 1_000;
-    private static final int MAX_STREAM_ITEMS = ProviderLinkResult.MAX_LINKS;
     private static final int MAX_EXTRA_ARGS = 20;
     private static final int MAX_TEXT_CHARS = 8_192;
     private static final int MAX_PROXY_HEADERS = 64;
     private static final int MAX_PROXY_HEADER_BYTES = 16 * 1024;
     private static final int MAX_JSON_NODES = 100_000;
     private static final int MAX_JSON_DEPTH = 64;
+    private static final String STREAM_URL_TOO_LONG_DIAGNOSTIC =
+            "This provider result has a direct URL that exceeds Orbit's stream URL length limit and is unavailable.";
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -116,6 +118,23 @@ public final class StremioAddonClient {
             StremioModels.Manifest manifest,
             StremioModels.CatalogDefinition catalog,
             Map<String, String> extraArgs) throws IOException {
+        return getCatalog(addon, manifest, catalog, extraArgs, false);
+    }
+
+    StremioModels.CatalogResponse getHomeCatalog(
+            StremioAddonRegistry.InstalledAddon addon,
+            StremioModels.Manifest manifest,
+            StremioModels.CatalogDefinition catalog,
+            Map<String, String> extraArgs) throws IOException {
+        return getCatalog(addon, manifest, catalog, extraArgs, true);
+    }
+
+    private StremioModels.CatalogResponse getCatalog(
+            StremioAddonRegistry.InstalledAddon addon,
+            StremioModels.Manifest manifest,
+            StremioModels.CatalogDefinition catalog,
+            Map<String, String> extraArgs,
+            boolean allowLargeHomeSkip) throws IOException {
         requireInstalledResource(addon, manifest, "catalog");
         if (catalog == null || !manifest.catalogs.contains(catalog)) {
             throw new IOException("Choose a catalog declared by this manifest.");
@@ -123,7 +142,7 @@ public final class StremioAddonClient {
         if (!manifest.supports("catalog", catalog.type, catalog.id)) {
             throw new IOException("This add-on does not support the selected catalog type.");
         }
-        Map<String, String> cleanArgs = validateExtraArgs(catalog, extraArgs);
+        Map<String, String> cleanArgs = validateExtraArgs(catalog, extraArgs, allowLargeHomeSkip);
         String url = buildResourceUrl(addon.manifestUrlInternal(), "catalog", catalog.type, catalog.id,
                 cleanArgs);
         JsonObject root = requireObject(requestJson(url), "catalog response");
@@ -151,14 +170,23 @@ public final class StremioAddonClient {
         JsonObject root = requireObject(requestJson(buildResourceUrl(addon.manifestUrlInternal(),
                 "stream", type, videoId, Collections.emptyMap())), "stream response");
         JsonArray items = requiredArray(root, "streams");
-        if (items.size() > MAX_STREAM_ITEMS) throw new IOException("The stream response contains too many entries.");
-        List<StremioModels.Stream> streams = new ArrayList<>();
-        for (JsonElement element : items) {
-            StremioModels.Stream stream = parseStream(requireObject(element, "stream"));
-            if (stream != null) streams.add(stream);
-        }
-        return new StremioModels.StreamResponse(streams,
+        return new StremioModels.StreamResponse(parseStreams(items),
                 optionalInt(root, "cacheMaxAge", 0, 31_536_000));
+    }
+
+    /** Parses stream entries independently so malformed optional fields cannot hide siblings. */
+    List<StremioModels.Stream> parseStreams(JsonArray items) {
+        ArrayList<StremioModels.Stream> streams = new ArrayList<>();
+        if (items == null) return streams;
+        for (int index = 0; index < items.size(); index++) {
+            JsonElement element = items.get(index);
+            try {
+                streams.add(parseStream(requireObject(element, "stream")));
+            } catch (IOException | RuntimeException malformedEntry) {
+                // Skip only the malformed element so it cannot hide valid sibling streams.
+            }
+        }
+        return streams;
     }
 
     /**
@@ -244,6 +272,11 @@ public final class StremioAddonClient {
 
     private Map<String, String> validateExtraArgs(StremioModels.CatalogDefinition catalog,
                                                    Map<String, String> args) throws IOException {
+        return validateExtraArgs(catalog, args, false);
+    }
+
+    private Map<String, String> validateExtraArgs(StremioModels.CatalogDefinition catalog,
+            Map<String, String> args, boolean allowLargeHomeSkip) throws IOException {
         Map<String, String> requested = args == null ? Collections.emptyMap() : args;
         if (requested.size() > MAX_EXTRA_ARGS) throw new IOException("Too many catalog options were requested.");
         LinkedHashMap<String, String> clean = new LinkedHashMap<>();
@@ -255,12 +288,7 @@ public final class StremioAddonClient {
                 continue;
             }
             if ("skip".equals(key)) {
-                try {
-                    int skip = Integer.parseInt(value);
-                    if (skip < 0 || skip > 100_000) throw new NumberFormatException();
-                } catch (NumberFormatException error) {
-                    throw new IOException("Catalog pagination must be a non-negative bounded integer.");
-                }
+                validateCatalogSkipValue(value, allowLargeHomeSkip);
                 clean.put(key, value);
                 continue;
             }
@@ -290,6 +318,19 @@ public final class StremioAddonClient {
             }
         }
         return Collections.unmodifiableMap(clean);
+    }
+
+    static long validateCatalogSkipValue(String value, boolean allowLargeHomeSkip)
+            throws IOException {
+        try {
+            long skip = Long.parseLong(value);
+            if (skip < 0 || (!allowLargeHomeSkip && skip > 100_000L)) {
+                throw new NumberFormatException();
+            }
+            return skip;
+        } catch (NumberFormatException error) {
+            throw new IOException("Catalog pagination must be a non-negative bounded integer.");
+        }
     }
 
     private static StremioModels.CatalogDefinition findCatalogDefinition(
@@ -542,20 +583,25 @@ public final class StremioAddonClient {
         String name = optionalString(object, "name", 512);
         String title = optionalString(object, "title", 2_048);
         String description = optionalString(object, "description", 4_096);
-        String url = safeOptionalUrl(object, "url");
-        String externalUrl = safeOptionalUrl(object, "externalUrl");
+        SafeOptionalUrl parsedUrl = parseOptionalUrl(object, "url", MAX_STREAM_URL_CHARS);
+        SafeOptionalUrl parsedExternalUrl = parseOptionalUrl(object, "externalUrl",
+                MAX_STREAM_URL_CHARS);
         String ytId = optionalString(object, "ytId", 256);
         String infoHash = optionalString(object, "infoHash", 128);
         Integer fileIdx = optionalInt(object, "fileIdx", 0, 100_000);
         List<String> sources = stringArray(object, "sources", false, 64, 512);
-        List<StremioModels.Subtitle> subtitles = parseInlineSubtitles(object);
+        ParsedInlineSubtitles parsedSubtitles = parseInlineSubtitles(object);
         StremioModels.BehaviorHints hints = parseBehaviorHints(object);
-        if (hints != null && !hints.requestHeaders.isEmpty() && !Boolean.TRUE.equals(hints.notWebReady)) {
-            throw new IOException("The manifest supplied proxy headers without the required notWebReady hint.");
-        }
-        if (url == null && externalUrl == null && ytId == null && infoHash == null) return null;
-        return new StremioModels.Stream(name, title, description, url, externalUrl, ytId,
-                infoHash, fileIdx, sources, hints, subtitles);
+        String unavailableReason = parsedUrl.exceedsLimit
+                ? STREAM_URL_TOO_LONG_DIAGNOSTIC
+                : parsedUrl.value == null && parsedExternalUrl.exceedsLimit
+                        ? "This provider result has an external URL that exceeds Orbit's stream URL length limit and is unavailable."
+                        : parsedUrl.value == null
+                                ? "This provider result has no safe direct stream URL and is unavailable."
+                                : "";
+        return new StremioModels.Stream(name, title, description, parsedUrl.value,
+                parsedExternalUrl.value, ytId, infoHash, fileIdx, sources, hints,
+                parsedSubtitles.values, unavailableReason, parsedSubtitles.incomplete);
     }
 
     private StremioModels.BehaviorHints parseBehaviorHints(JsonObject object) throws IOException {
@@ -569,18 +615,40 @@ public final class StremioAddonClient {
                 parseProxyRequestHeaders(hints));
     }
 
-    private List<StremioModels.Subtitle> parseInlineSubtitles(JsonObject stream) throws IOException {
+    private ParsedInlineSubtitles parseInlineSubtitles(JsonObject stream) throws IOException {
         JsonElement value = stream.get("subtitles");
-        if (value == null || value instanceof JsonNull) return Collections.emptyList();
-        if (!value.isJsonArray() || value.getAsJsonArray().size() > MAX_LIST_ITEMS) {
+        if (value == null || value instanceof JsonNull) {
+            return new ParsedInlineSubtitles(Collections.emptyList(), false);
+        }
+        if (!value.isJsonArray()) {
             throw new IOException("The inline stream subtitle list is invalid.");
         }
+        JsonArray entries = value.getAsJsonArray();
         ArrayList<StremioModels.Subtitle> subtitles = new ArrayList<>();
-        for (JsonElement element : value.getAsJsonArray()) {
-            StremioModels.Subtitle subtitle = parseSubtitle(requireObject(element, "inline stream subtitle"));
+        int retainedEntries = Math.min(entries.size(), MAX_LIST_ITEMS);
+        boolean incomplete = entries.size() > retainedEntries;
+        for (int index = 0; index < retainedEntries; index++) {
+            JsonObject subtitleObject = requireObject(entries.get(index), "inline stream subtitle");
+            SafeOptionalUrl parsedUrl = parseOptionalUrl(subtitleObject, "url",
+                    MAX_MANIFEST_URL_CHARS);
+            if (parsedUrl.exceedsLimit) {
+                incomplete = true;
+                continue;
+            }
+            StremioModels.Subtitle subtitle = parseSubtitle(subtitleObject, parsedUrl.value);
             if (subtitle != null) subtitles.add(subtitle);
         }
-        return subtitles;
+        return new ParsedInlineSubtitles(subtitles, incomplete);
+    }
+
+    private static final class ParsedInlineSubtitles {
+        final List<StremioModels.Subtitle> values;
+        final boolean incomplete;
+
+        ParsedInlineSubtitles(List<StremioModels.Subtitle> values, boolean incomplete) {
+            this.values = values;
+            this.incomplete = incomplete;
+        }
     }
 
     private Map<String, String> parseProxyRequestHeaders(JsonObject behaviorHints) throws IOException {
@@ -625,6 +693,10 @@ public final class StremioAddonClient {
 
     private StremioModels.Subtitle parseSubtitle(JsonObject object) throws IOException {
         String url = safeOptionalUrl(object, "url");
+        return parseSubtitle(object, url);
+    }
+
+    private StremioModels.Subtitle parseSubtitle(JsonObject object, String url) throws IOException {
         if (url == null) return null;
         return new StremioModels.Subtitle(optionalString(object, "id", 512), url,
                 optionalString(object, "lang", 64), optionalString(object, "subEncoding", 128),
@@ -752,17 +824,49 @@ public final class StremioAddonClient {
     }
 
     private static String safeOptionalUrl(JsonObject object, String key) throws IOException {
-        String raw = optionalString(object, key, MAX_MANIFEST_URL_CHARS);
-        if (raw == null || raw.trim().isEmpty()) return null;
+        return safeOptionalUrl(object, key, MAX_MANIFEST_URL_CHARS);
+    }
+
+    private static String safeOptionalUrl(JsonObject object, String key, int maximumChars)
+            throws IOException {
+        return parseOptionalUrl(object, key, maximumChars).value;
+    }
+
+    private static SafeOptionalUrl parseOptionalUrl(JsonObject object, String key, int maximumChars)
+            throws IOException {
+        JsonElement element = object.get(key);
+        if (element == null || element instanceof JsonNull) return SafeOptionalUrl.empty();
+        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new IOException("The Stremio " + key + " field must be a string.");
+        }
+        String raw = boundedValue(element.getAsString(), MAX_RESPONSE_BYTES);
+        if (raw.trim().isEmpty()) return SafeOptionalUrl.empty();
+        if (raw.length() > maximumChars) return SafeOptionalUrl.tooLong();
         try {
             URI uri = parseUri(raw);
             validateHttpUri(uri);
-            if (uri.getRawFragment() != null || uri.toASCIIString().length() > MAX_MANIFEST_URL_CHARS) return null;
-            return uri.toASCIIString();
+            if (uri.getRawFragment() != null) return SafeOptionalUrl.empty();
+            String normalized = uri.toASCIIString();
+            if (normalized.length() > maximumChars) return SafeOptionalUrl.tooLong();
+            return SafeOptionalUrl.of(normalized);
         } catch (IOException error) {
             // Unsafe media and artwork links are omitted from the typed response.
-            return null;
+            return SafeOptionalUrl.empty();
         }
+    }
+
+    private static final class SafeOptionalUrl {
+        final String value;
+        final boolean exceedsLimit;
+
+        private SafeOptionalUrl(String value, boolean exceedsLimit) {
+            this.value = value;
+            this.exceedsLimit = exceedsLimit;
+        }
+
+        static SafeOptionalUrl empty() { return new SafeOptionalUrl(null, false); }
+        static SafeOptionalUrl tooLong() { return new SafeOptionalUrl(null, true); }
+        static SafeOptionalUrl of(String value) { return new SafeOptionalUrl(value, false); }
     }
 
     private static byte[] readBounded(InputStream input, int maximum) throws IOException {

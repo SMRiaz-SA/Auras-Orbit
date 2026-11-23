@@ -114,3 +114,33 @@ The Orbit worktree was not yet a clean or committed release baseline at that tim
 - Local deliverables and desktop verification (2026-11-18): artifacts/release-evidence/LOCAL_DELIVERABLES_2026-11-18.md
 - Android application and release notes: android/README.md
 - Current public GitHub Releases page: https://github.com/SMRiaz-SA/Auras-Orbit/releases
+
+## Provider link preservation follow-up — 2026-11-22
+
+This source-only update supersedes the earlier statements above that described a shared 4,096-link ceiling as current or the cross-provider correction as still in progress.
+
+- **Comparison:** CloudStream's `ResultViewModel2.loadLinks` collects complete extractor-link objects, deduplicates by URL, sorts the snapshot, and reports its count without an item-count ceiling. For playback, it maps the provider-declared media type to MIME and forwards request metadata. This is simpler and more reliable than guessing media type from a URL suffix or rejecting links because they carry legitimate query parameters or headers.
+- **Orbit source correction:** Removed arbitrary count ceilings from the CS3 callback/result path, shared provider snapshots, playback request conversion and progressive merge, Stremio parsing/conversion, and shell-side source collection. Orbit now uses declared media type where available, preserves valid HTTP(S) query/header metadata, and surfaces unsupported or malformed entries in the chooser instead of silently hiding them. A malformed Stremio entry no longer discards valid siblings, and subtitle callback overflow no longer discards video links.
+- **Resource guard:** CS3 retains a 32 MiB metadata safety budget with a visible partial-result warning. A failed reservation rejects that candidate only; later candidates are still checked against remaining budget. The regression covers a failed reservation followed by a later candidate that fits.
+- **Verification:** Focused JVM tests passed for provider results beyond 4,096, declared MIME mapping, Stremio per-entry isolation, and metadata-budget order independence. The complete `:app:testDebugUnitTest` suite then passed against the current worktree on 2026-11-22 (`BUILD SUCCESSFUL`, 27 actionable tasks, 1 executed, 26 up-to-date). `git diff --check` passed. An independent follow-up source spot-check confirmed warning propagation and budget retry behavior with no remaining actionable behavior defect.
+- **Device and remaining work:** Read-only ADB confirms the physical Huawei (`U4YYD22B11502254`) currently has Orbit 1.0.0.10 / code 100000010 installed. This is the historical package and does not contain current provider-source changes. No APK was built, installed, or changed in this execution. Full Android `PlaybackRequest.Source` construction and request URL/header handoff instrumentation remain unrun because they depend on Android runtime behavior. Dynamic same-title provider count parity, current-source subtitle checks, remaining timeline lifecycle checks, and the full phone TalkBack review remain open in the acceptance plan. The changes are local and uncommitted; no GitHub push, tag, or release was made.
+
+## Provider-link policy correction — 2026-11-22
+
+This follow-up supersedes the 4,096-link admission policy and strict source-conversion behavior described above. The user directed that Orbit apply the same behavior to every provider: do not impose an arbitrary provider-result count ceiling and do not silently drop returned links based on guessed URL suffixes or the presence of legitimate query parameters/headers. The 40-row chooser page remains presentation pagination and must continue across every result.
+
+The correction covers CS3, Stremio, and shared provider-to-player boundaries: callback capture, result snapshots, progressive merge, stream parsing/conversion, chooser rows, and playback handoff. Explicit URI/protocol, transport, and resource safety checks remain; if a source is retained but the selected playback route cannot handle it, Orbit should show that outcome instead of hiding the provider result. The Nov. 18 report's “bounded CS3 gate” concerns extension compatibility/activation evidence, not a 4,096 video-link quota; the broad per-plugin testing note does not preclude a shared contract check across provider paths.
+
+The 47-link item remains unidentified, and the Odyssey counts (43 and a separate 17 snapshot) remain pre-fix observations with uncertain request identity. They are not raw provider callback counts. The active checklist is [ORBIT_1.0.0.10_ACCEPTANCE_PLAN_2026-11-22.md](<../../plans/orbit/ORBIT_1.0.0.10_ACCEPTANCE_PLAN_2026-11-22.md>); it now requires universal count parity and focused regression coverage. Orbit source work started from clean local commit `9010dc8`; the cross-provider fix, focused JVM checks, and independent follow-up source review are complete. At the user's direction, APK packaging/install is deferred until more work is complete; no APK was built, no phone install was changed, and no GitHub push, tag, or release occurred as part of this correction.
+
+## Episode long-press sheet local build — 2026-11-22
+
+The user approved the episode long-press mockup and then requested “Build now,” authorizing a local `.10` Release APK for this feature. `OrbitShellActivity` now retains the existing episode title and action order, inserts the episode card artwork and provider synopsis, and places teal dividers below the title and synopsis. An independent source review found no issue in this scope; no phone visual/runtime review was performed.
+
+The first incremental APK failed ZIP/signature validation on `classes7.dex`. A forced rebuild (`:app:assembleRelease` with `--rerun-tasks --no-build-cache`) completed successfully; the resulting signed APK passed `apksigner` v1/v2 verification, `zipalign`, and decompressed DEX length verification. Package metadata is `com.auras.orbit`, version `1.0.0.10`, code `100000010`.
+
+| Local artifact | Size | SHA-256 | Status |
+|---|---:|---|---|
+| `android/app/build/outputs/apk/release/app-release.apk` | 71,089,876 bytes | `34E3A2933B8CFAB8FDA6DF3F35765F7B017A7E7868DF5C8FFD343290B4E70148` | Signed and locally verified; not installed or published. |
+
+This scoped build does not close the remaining phone acceptance work. No phone install, GitHub push, tag, release, or hosted-updater test occurred.

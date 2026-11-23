@@ -37,7 +37,7 @@ public final class StremioPlaybackMapper {
     }
 
     private static URI validateDirectUrl(String value) throws IOException {
-        if (value.length() > StremioAddonClient.MAX_MANIFEST_URL_CHARS) {
+        if (value.length() > StremioAddonClient.MAX_STREAM_URL_CHARS) {
             throw new IOException("The direct Stremio stream URL is too long.");
         }
         try {

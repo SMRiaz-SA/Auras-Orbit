@@ -25,8 +25,27 @@ public interface MediaProvider {
      */
     default boolean isRegistrationCurrent() { return false; }
 
+    /**
+     * Load provider-authored Home sections. An initial request has no section id and returns all
+     * sections; a later request identifies exactly one section and passes that section's opaque
+     * cursor forward. Providers that cannot page a section should return an empty next cursor.
+     */
     default List<HomeSection> loadHome(HomeRequest request) throws Exception {
         throw new UnsupportedOperationException("Home feeds are not supported by this provider");
+    }
+
+    /**
+     * Load a provider Home batch with an optional provider-level continuation cursor. Existing
+     * adapters remain source-compatible; only providers that paginate their section catalog
+     * need to override this method. Section item cursors remain on each HomeSection.
+     */
+    default HomePage loadHomePage(HomeRequest request) throws Exception {
+        if (request != null && request.isProviderContinuationRequest()) {
+            return new HomePage(java.util.Collections.<HomeSection>emptyList(), "");
+        }
+        List<HomeSection> sections = loadHome(request);
+        if (sections == null) throw new IllegalStateException("Provider returned no Home response");
+        return new HomePage(sections, "");
     }
 
     default List<MediaItem> search(SearchRequest request) throws Exception {

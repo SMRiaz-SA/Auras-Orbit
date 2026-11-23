@@ -7,6 +7,7 @@ import android.net.Uri;
 import com.auras.orbit.providers.Cs3PlaybackHooks;
 import com.auras.orbit.providers.ProviderLinkCandidate;
 import com.auras.orbit.providers.ProviderLinkResult;
+import com.auras.orbit.providers.ProviderMediaTypeMapper;
 import com.auras.orbit.providers.ProviderSubtitleCandidate;
 import com.auras.orbit.providers.ProviderOperationCoordinator;
 
@@ -35,13 +36,12 @@ public final class PlaybackRequest {
     public static final int SCHEMA_VERSION = 1;
     public static final String EXTRA_REQUEST_KEY = "com.auras.orbit.player.extra.PLAYBACK_REQUEST_KEY_V1";
     private static final int MAX_JSON_CHARS = 262_144;
-    private static final int MAX_SOURCES = ProviderLinkResult.MAX_LINKS;
+    private static final int MAX_PROVIDER_URI_CHARS = ProviderLinkCandidate.MAX_URI_CHARS;
     /** Bounds the in-process object graph; Intent handoff itself contains only a random key. */
     private static final long MAX_IN_PROCESS_SOURCE_METADATA_CHARS = 32L * 1024L * 1024L;
     private static final int MAX_SUBTITLES = 30;
     private static final int MAX_REJECTED_PROVIDER_SUBTITLES =
             ProviderLinkResult.MAX_SUBTITLES * 2;
-    private static final int MAX_PROVIDER_URI_CHARS = 4096;
     public static final int MAX_AUDIO_TRACKS = 16;
     private static final int MAX_QUEUE_ITEMS = 50;
     private static final int MAX_HEADERS = 64;
@@ -195,9 +195,6 @@ public final class PlaybackRequest {
             Source selected = existing == null ? incoming : existing;
             if (existing != null) pendingMetadataUpdates.put(existing, incoming);
             if (includedIds.add(selected.id)) {
-                if (mergedSources.size() >= MAX_SOURCES) {
-                    throw new IllegalArgumentException("Merged provider sources are too large.");
-                }
                 mergedSources.add(selected);
             }
         }
@@ -205,9 +202,6 @@ public final class PlaybackRequest {
         // Keep earlier safe candidates if a provider publishes a non-monotonic callback snapshot.
         for (Source existing : previousSources) {
             if (includedIds.add(existing.id)) {
-                if (mergedSources.size() >= MAX_SOURCES) {
-                    throw new IllegalArgumentException("Merged provider sources are too large.");
-                }
                 mergedSources.add(existing);
             }
         }
@@ -232,18 +226,10 @@ public final class PlaybackRequest {
 
     private static ArrayList<Source> providerSources(ProviderLinkResult result,
             String providerName, List<Subtitle> providerSubtitles) {
-        ArrayList<IndexedProviderCandidate> candidates = new ArrayList<>();
-        int index = 0;
-        for (ProviderLinkCandidate candidate : result.links) {
-            if (candidate != null) candidates.add(new IndexedProviderCandidate(candidate, index));
-            index++;
-        }
-        Collections.sort(candidates, (left, right) -> Integer.compare(
-                right.candidate.quality, left.candidate.quality));
         ArrayList<Source> sources = new ArrayList<>();
-        for (IndexedProviderCandidate indexed : candidates) {
-            if (sources.size() >= MAX_SOURCES) break;
-            Source source = providerSource(indexed.candidate, indexed.callbackIndex,
+        for (Integer callbackIndex : result.orderedLinkIndexesByQuality()) {
+            ProviderLinkCandidate candidate = result.links.get(callbackIndex);
+            Source source = providerSource(candidate, callbackIndex,
                     providerSubtitles, providerName);
             if (source != null) sources.add(source);
         }
@@ -328,55 +314,20 @@ public final class PlaybackRequest {
         }
     }
 
-    private static final class IndexedProviderCandidate {
-        final ProviderLinkCandidate candidate;
-        final int callbackIndex;
-        IndexedProviderCandidate(ProviderLinkCandidate candidate, int callbackIndex) {
-            this.candidate = candidate;
-            this.callbackIndex = callbackIndex;
-        }
-    }
-
     private static Source providerSource(ProviderLinkCandidate candidate, int index,
             List<Subtitle> providerSubtitles, String providerName) {
         URI uri = providerHttpUri(candidate.uri);
         if (uri == null) return null;
-        String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
         String type = candidate.type == null ? "" : candidate.type.trim().toUpperCase(Locale.ROOT);
-        String mimeType;
-        String format;
-        if ("M3U8".equals(type) && path.endsWith(".m3u8")) {
-            mimeType = "application/x-mpegurl";
-            format = "HLS";
-        } else if ("DASH".equals(type) && path.endsWith(".mpd")) {
-            mimeType = "application/dash+xml";
-            format = "DASH";
-        } else if ("VIDEO".equals(type)) {
-            if (path.endsWith(".mp4") || path.endsWith(".m4v")) {
-                mimeType = "video/mp4";
-                format = path.endsWith(".m4v") ? "M4V" : "MP4";
-            } else if (path.endsWith(".mkv")) {
-                mimeType = "video/x-matroska";
-                format = "Matroska";
-            } else if (path.endsWith(".webm")) {
-                mimeType = "video/webm";
-                format = "WebM";
-            } else if (path.endsWith(".ts")) {
-                mimeType = "video/mp2t";
-                format = "MPEG-TS";
-            } else if (path.endsWith(".mpg") || path.endsWith(".mpeg")) {
-                mimeType = "video/mpeg";
-                format = "MPEG";
-            } else {
-                return null;
-            }
-        } else {
-            return null;
-        }
+        if ("EXTERNAL".equals(type) || "UNSUPPORTED".equals(type)
+                || "TORRENT".equals(type) || "MAGNET".equals(type)) return null;
+        String mimeType = ProviderMediaTypeMapper.mimeType(type, candidate.mimeType);
+        String format = "M3U8".equals(type) ? "HLS"
+                : "DASH".equals(type) ? "DASH"
+                : "VIDEO".equals(type) ? ("video/mp4".equals(mimeType) ? "MP4" : mimeType)
+                : mimeType.isEmpty() ? "Media" : mimeType;
 
         Map<String, String> sourceHeaders = providerHeaders(candidate.headers, candidate.referer);
-        if ("http".equalsIgnoreCase(uri.getScheme())
-                && (!sourceHeaders.isEmpty() || uri.getRawQuery() != null)) return null;
         List<Subtitle> subtitles = providerSubtitles(providerSubtitles);
         List<AudioTrack> audioTracks = providerAudioTracks(candidate.audioTracks);
         String label = providerSourceLabel(providerName, candidate.name, candidate.source,
@@ -681,7 +632,7 @@ public final class PlaybackRequest {
     }
 
     private static List<Source> parseSources(JSONArray array) throws JSONException {
-        if (array == null || array.length() < 1 || array.length() > MAX_SOURCES) {
+        if (array == null || array.length() < 1) {
             throw new IllegalArgumentException("Invalid source list.");
         }
         List<Source> result = new ArrayList<>();
@@ -725,9 +676,9 @@ public final class PlaybackRequest {
     private static List<Source> immutableSources(List<Source> input) {
         if (input == null) return Collections.emptyList();
         int count = input.size();
-        if (count < 0 || count > MAX_SOURCES) throw new IllegalArgumentException("sources is too large.");
+        if (count < 0) throw new IllegalArgumentException("sources has an invalid count.");
         if (count == 0) return Collections.emptyList();
-        ArrayList<Source> copy = new ArrayList<>(count);
+        ArrayList<Source> copy = new ArrayList<>();
         for (int index = 0; index < count; index++) {
             Source source = input.get(index);
             if (source == null) throw new IllegalArgumentException("sources contains an empty entry.");
@@ -738,14 +689,15 @@ public final class PlaybackRequest {
         return Collections.unmodifiableList(copy);
     }
 
-    /** Bounded immutable list copy that deliberately preserves published Source identities. */
+    /** Immutable snapshot that deliberately preserves published Source identities. */
     private static List<Source> immutableSourceSnapshot(List<Source> input) {
         if (input == null) return Collections.emptyList();
         int count = input.size();
-        if (count > MAX_SOURCES) throw new IllegalArgumentException("sources is too large.");
+        if (count < 0) throw new IllegalArgumentException("sources has an invalid count.");
         if (count == 0) return Collections.emptyList();
-        ArrayList<Source> copy = new ArrayList<>(count);
-        for (Source source : input) {
+        ArrayList<Source> copy = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            Source source = input.get(index);
             if (source == null) throw new IllegalArgumentException("sources contains an empty entry.");
             copy.add(source);
         }
@@ -866,7 +818,7 @@ public final class PlaybackRequest {
     }
 
     private static Uri safeUri(String value) {
-        String source = required(value, "uri", 4096);
+        String source = required(value, "uri", MAX_PROVIDER_URI_CHARS);
         if (source.contains("\\") || source.chars().anyMatch(Character::isWhitespace)) {
             throw new IllegalArgumentException("Invalid media URI.");
         }
@@ -1236,7 +1188,7 @@ public final class PlaybackRequest {
             this.id = identity(id, "queue item id", 160);
             if (media == null) throw new IllegalArgumentException("Media metadata is required.");
             this.media = media; this.episode = episode == null ? EpisodeMetadata.EMPTY : episode;
-            this.sources = immutableList(sources, MAX_SOURCES, "sources");
+            this.sources = immutableSources(sources);
             if (this.sources.isEmpty()) throw new IllegalArgumentException("A queued episode needs a source.");
             this.defaultSourceId = identity(defaultSourceId, "defaultSourceId", 160);
             if (!containsSource(this.sources, this.defaultSourceId)) throw new IllegalArgumentException("Invalid default source.");

@@ -48,6 +48,14 @@ public final class ProviderResultBudget {
         return Collections.unmodifiableList(result);
     }
 
+    public static AttributedHomePage homePage(ProviderDescriptor provider,
+            int sourceOrder, HomePage page) {
+        if (page == null) throw new IllegalArgumentException("Home page is required");
+        return new AttributedHomePage(provider, sourceOrder,
+                home(provider, sourceOrder, page.sections), page.nextProviderCursor,
+                page.continuationError, page.hasMoreProviderSections, page.retryAvailable);
+    }
+
     private static boolean matches(SearchType type, MediaKind kind) {
         if (type == SearchType.ALL) return true;
         return type == SearchType.MOVIES ? kind == MediaKind.MOVIE : kind == MediaKind.SERIES;

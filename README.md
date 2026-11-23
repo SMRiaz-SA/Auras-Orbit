@@ -6,15 +6,14 @@ Auras Orbit brings the providers you choose into a personal discovery and watch 
 
 Auras Orbit is an independent client. It does not host media or curate provider catalogs. You choose which extensions and add-ons to use, and their catalogs, links, and availability determine what you can find.
 
-**Desktop and Android workspace version:** **1.0.0.10**, configured as a local coordinated candidate; unpublished<br>
+**Desktop and Android workspace candidate:** **1.0.0.10** (2026-11-22; unpublished)<br>
 **Legacy Android updater reference:** **1.0.0.06**<br>
-**Latest published GitHub release (checked 2026-11-18):** [v1.0.0.06](https://github.com/SMRiaz-SA/Auras-Orbit/releases/tag/v1.0.0.06)<br>
-**Workspace highlights:** Better Android TV focus, watchlist and actor controls, correctly shaped poster art, reliable provider retries, and safer desktop playback and downloads.<br>
+**Latest published GitHub release:** [v1.0.0.06](https://github.com/SMRiaz-SA/Auras-Orbit/releases/tag/v1.0.0.06)<br>
+**Candidate changes:** Android episode details and provider results, clearer subtitle and playback handling, and more reliable desktop plugin updates and playback controls.<br>
 **Platform:** Windows 10 or 11, 64-bit; Android phones and TVs<br>
-**Downloads:** Windows installer and portable ZIP plus Android APK on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases)<br>
+**Downloads:** Published packages are listed on the [GitHub Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases). The current workspace candidate is not published there.<br>
 **Changelog:** [Release history](CHANGELOG.md)<br>
-**Local release status:** [Current Orbit status and release evidence](PROJECT_STATUS_REPORT_2026-11-21.md) stays in workspace-only records and is not included in the source archive.<br>
-**Optional integrations:** Jellyfin and FCast remain in development. Live-server and receiver acceptance is unfinished; this work does not block the current release.<br>
+**Optional integrations:** Jellyfin and FCast remain in development. Live-server and receiver acceptance is unfinished and does not block the workspace candidate.<br>
 
 ## Navigate this guide
 
@@ -42,6 +41,15 @@ What appears in Orbit depends on the extensions and add-ons you choose. Provider
 ![Auras Orbit profile selector with the active profile and profile management options](assets/auras-orbit-profile-picker.jpg)
 
 ![Auras Orbit Explore dashboard with Catalogs, Torrent Search, Genres, and Providers](assets/auras-orbit-explore.jpg)
+
+### Android phone
+
+These screens are from a clean installation with no repositories or providers installed.
+
+<p align="center">
+  <img src="assets/auras-orbit-phone-home-clean.png" width="260" alt="Auras Orbit Android home screen on a clean installation" />
+  <img src="assets/auras-orbit-phone-extensions-empty.png" width="260" alt="Auras Orbit Android extensions screen with no repositories or providers installed" />
+</p>
 
 ## Quick start
 

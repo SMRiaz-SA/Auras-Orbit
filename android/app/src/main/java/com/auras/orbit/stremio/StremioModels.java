@@ -242,10 +242,13 @@ public final class StremioModels {
         public final List<String> sources;
         public final BehaviorHints behaviorHints;
         public final List<Subtitle> subtitles;
+        public final String unavailableReason;
+        public final boolean inlineSubtitleMetadataIncomplete;
 
         Stream(String name, String title, String description, String url, String externalUrl,
                String ytId, String infoHash, Integer fileIdx, List<String> sources,
-               BehaviorHints behaviorHints, List<Subtitle> subtitles) {
+               BehaviorHints behaviorHints, List<Subtitle> subtitles, String unavailableReason,
+               boolean inlineSubtitleMetadataIncomplete) {
             this.name = name;
             this.title = title;
             this.description = description;
@@ -257,6 +260,8 @@ public final class StremioModels {
             this.sources = immutable(sources);
             this.behaviorHints = behaviorHints;
             this.subtitles = immutable(subtitles);
+            this.unavailableReason = unavailableReason == null ? "" : unavailableReason;
+            this.inlineSubtitleMetadataIncomplete = inlineSubtitleMetadataIncomplete;
         }
     }
 

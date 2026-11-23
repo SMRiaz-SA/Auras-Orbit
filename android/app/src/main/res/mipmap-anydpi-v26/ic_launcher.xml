@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/orbit_banner_start" />
-    <foreground android:drawable="@drawable/auras_orbit_mark" />
-    <monochrome android:drawable="@drawable/auras_orbit_mark" />
+    <foreground android:drawable="@drawable/auras_orbit_safe_mark" />
+    <monochrome android:drawable="@drawable/auras_orbit_safe_mark" />
 </adaptive-icon>

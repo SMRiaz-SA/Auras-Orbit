@@ -50,6 +50,8 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.core.view.WindowCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.media3.common.C;
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory;
 import androidx.media3.common.Format;
@@ -79,7 +81,6 @@ import com.auras.orbit.OrbitApplication;
 import com.auras.orbit.R;
 import com.auras.orbit.library.LocalLibraryStore;
 import com.auras.orbit.library.LocalLibraryStore.SavedTitle;
-import com.auras.orbit.ui.PageWindow;
 import com.auras.orbit.providers.Cs3PlaybackHooks;
 import com.auras.orbit.providers.MediaProvider;
 import com.auras.orbit.providers.ProviderBatch;
@@ -142,7 +143,6 @@ public final class OrbitPlayerActivity extends Activity {
     private static final int MAX_PENDING_REQUESTS = 64;
     private static final int MAX_OBSERVERS = 64;
     private static final int MAX_ONLINE_SUBTITLE_RESOURCES = 30;
-    private static final int PROVIDER_SOURCE_PAGE_SIZE = 40;
     private static final String PROVIDER_SOURCE_ROW_FOCUS_PREFIX = "provider_source_row:";
     private static final int TORRENT_STREAM_READ_TIMEOUT_SECONDS = 120;
     private static final int REQUEST_OPEN_SUBTITLE_DOCUMENT = 7314;
@@ -210,12 +210,18 @@ public final class OrbitPlayerActivity extends Activity {
     private Dialog sourcesDialog;
     private Dialog audioTracksDialog;
     private Dialog settingsDialog;
-    private LinearLayout providerSourceRows;
-    private LinearLayout providerSourcePager;
+    private RecyclerView providerSourceRows;
+    private ProviderSourceAdapter providerSourceAdapter;
+    private LinearLayoutManager providerSourceLayoutManager;
     private LinearLayout providerSubtitleRows;
     private TextView providerSelectionCaption;
     private TextView providerSourceHeading;
-    private int providerSourcePage;
+    private int providerSourceRefreshGeneration;
+    private String providerSubtitleRowsSourceId = "";
+    private String providerSubtitleRowsActiveSourceId = "";
+    private String providerSubtitleRowsSelectionId = "";
+    private List<PlaybackRequest.Subtitle> providerSubtitleRowsSnapshot = Collections.emptyList();
+    private int providerSubtitleRowsUnsupportedCount = -1;
     private Button settingsSpeedButton;
     private Button settingsFitButton;
     private Button settingsSubtitleDelayButton;
@@ -757,101 +763,110 @@ public final class OrbitPlayerActivity extends Activity {
 
     private void updateProviderDialogRows() {
         if (request == null || sourcesDialog == null || !sourcesDialog.isShowing()
-                || providerSourceRows == null || providerSubtitleRows == null
-                || providerSelectionCaption == null || providerSourcePager == null) return;
+                || providerSourceRows == null || providerSourceAdapter == null
+                || providerSourceLayoutManager == null || providerSubtitleRows == null
+                || providerSelectionCaption == null) return;
+        final int refreshGeneration = ++providerSourceRefreshGeneration;
         View focused = getCurrentFocus();
         Object focusedTagValue = focused == null ? null : focused.getTag();
         String focusedTag = focusedTagValue instanceof String ? (String) focusedTagValue : null;
         String focusedSourceId = sourceIdFromProviderSourceRowFocusTag(focusedTag);
-        providerSourcePage = sourcePageForFocusedSource(request.sources, providerSourcePage,
-                focusedSourceId);
+        int firstVisible = providerSourceLayoutManager.findFirstVisibleItemPosition();
+        View firstVisibleRow = firstVisible < 0 ? null
+                : providerSourceLayoutManager.findViewByPosition(firstVisible);
+        int firstVisibleOffset = firstVisibleRow == null ? 0 : firstVisibleRow.getTop();
+        int focusedSourcePosition = sourceIndexForId(request.sources, focusedSourceId);
+        int focusedSourceOffset = focused == null ? 0 : focused.getTop();
         if (providerSourceHeading != null) {
             providerSourceHeading.setText("VIDEO LINKS · " + request.sources.size() + " AVAILABLE");
         }
-        PageWindow.Window sourceWindow = PageWindow.of(request.sources.size(), providerSourcePage,
-                PROVIDER_SOURCE_PAGE_SIZE);
-        providerSourcePage = sourceWindow.page;
-        providerSourcePager.removeAllViews();
-        TextView range = text("Showing " + (sourceWindow.start + 1) + "–"
-                + sourceWindow.end + " of " + sourceWindow.total, 10, MUTED, false);
-        providerSourcePager.addView(range, new LinearLayout.LayoutParams(0, dp(36), 1f));
-        if (sourceWindow.lastPage > 0) {
-            Button previous = button("Previous", view -> {
-                providerSourcePage = Math.max(0, sourceWindow.page - 1);
-                updateProviderDialogRows();
-            });
-            previous.setTag("provider_source_page_previous");
-            previous.setEnabled(sourceWindow.hasPrevious());
-            providerSourcePager.addView(previous);
-            TextView pageLabel = text(" " + (sourceWindow.page + 1) + " / "
-                    + (sourceWindow.lastPage + 1) + " ", 10, MUTED, false);
-            providerSourcePager.addView(pageLabel);
-            Button next = button("Next", view -> {
-                providerSourcePage = Math.min(sourceWindow.lastPage, sourceWindow.page + 1);
-                updateProviderDialogRows();
-            });
-            next.setTag("provider_source_page_next");
-            next.setEnabled(sourceWindow.hasNext());
-            providerSourcePager.addView(next);
-        }
-        providerSourceRows.removeAllViews();
-        for (int index = sourceWindow.start; index < sourceWindow.end; index++) {
-            PlaybackRequest.Source source = request.sources.get(index);
-            Button row = button((source == dialogSource ? "●  " : "○  ")
-                    + safeLabel(source.label), view -> {
-                dialogSource = source;
-                dialogSubtitleId = source == currentSource && subtitlesEnabled
-                        ? selectedSubtitleId : "";
-                fillSourceRows(providerSourceRows, dialogSource, currentSource);
-                fillSubtitleRows(providerSubtitleRows, dialogSource, providerSelectionCaption);
-                providerSelectionCaption.setText(sourceCaption(dialogSource)
-                        + subtitleCaption(dialogSubtitleId));
-            });
-            row.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            row.setTag(providerSourceRowFocusTag(source.id));
-            providerSourceRows.addView(row, new LinearLayout.LayoutParams(-1, dp(50)));
-        }
-        fillSourceRows(providerSourceRows, dialogSource, currentSource);
+        providerSourceAdapter.notifyDataSetChanged();
         if (dialogSource != null && dialogSubtitleId.startsWith("external:")
                 && !hasSubtitleId(dialogSource,
                         dialogSubtitleId.substring("external:".length()))) {
             dialogSubtitleId = "";
         }
-        fillSubtitleRows(providerSubtitleRows, dialogSource, providerSelectionCaption);
+        refreshProviderSubtitleRowsIfNeeded();
         providerSelectionCaption.setText(sourceCaption(dialogSource)
                 + subtitleCaption(dialogSubtitleId));
-        View restore = null;
-        if (focusedSourceId != null) {
-            restore = providerSourceRows.findViewWithTag(
-                    providerSourceRowFocusTag(focusedSourceId));
+        if (focusedSourcePosition >= 0) {
+            providerSourceLayoutManager.scrollToPositionWithOffset(focusedSourcePosition,
+                    focusedSourceOffset);
+            String sourceId = focusedSourceId;
+            providerSourceRows.post(() -> {
+                if (refreshGeneration != providerSourceRefreshGeneration
+                        || providerSourceRows == null || providerSourceLayoutManager == null
+                        || !isProviderSourceRowFocused(sourceId)) return;
+                int sourcePosition = sourceIndexForId(request.sources, sourceId);
+                if (sourcePosition < 0) return;
+                providerSourceLayoutManager.scrollToPositionWithOffset(sourcePosition,
+                        focusedSourceOffset);
+                providerSourceRows.post(() -> {
+                    if (refreshGeneration != providerSourceRefreshGeneration
+                            || providerSourceRows == null || providerSourceLayoutManager == null
+                            || !isProviderSourceRowFocused(sourceId)) return;
+                    int restoredPosition = sourceIndexForId(request.sources, sourceId);
+                    View restored = restoredPosition < 0 ? null
+                            : providerSourceLayoutManager.findViewByPosition(restoredPosition);
+                    if (restored != null) restored.requestFocus();
+                });
+            });
+        } else if (firstVisible >= 0) {
+            providerSourceLayoutManager.scrollToPositionWithOffset(firstVisible,
+                    firstVisibleOffset);
         }
-        boolean focusedPager = "provider_source_page_previous".equals(focusedTag)
-                || "provider_source_page_next".equals(focusedTag);
-        if (restore == null && focusedTag != null) {
-            restore = providerSourcePager.findViewWithTag(focusedTag);
-            if (restore == null) restore = providerSourceRows.findViewWithTag(focusedTag);
-            if (restore != null && !restore.isEnabled()) restore = null;
+    }
+
+    private boolean isProviderSourceRowFocused(String sourceId) {
+        View focused = getCurrentFocus();
+        Object tag = focused == null ? null : focused.getTag();
+        return sourceId != null && sourceId.equals(sourceIdFromProviderSourceRowFocusTag(
+                tag instanceof String ? (String) tag : null));
+    }
+
+    private void refreshProviderSubtitleRowsIfNeeded() {
+        PlaybackRequest.Source source = dialogSource;
+        if (providerSubtitleRows == null || providerSelectionCaption == null || source == null) return;
+        String sourceId = source.id;
+        String activeSourceId = currentSource == null ? "" : currentSource.id;
+        boolean unchanged = sourceId.equals(providerSubtitleRowsSourceId)
+                && activeSourceId.equals(providerSubtitleRowsActiveSourceId)
+                && TextUtils.equals(dialogSubtitleId, providerSubtitleRowsSelectionId)
+                && source.unsupportedSubtitleCount == providerSubtitleRowsUnsupportedCount
+                && sameSubtitleMenuData(providerSubtitleRowsSnapshot, source.subtitles);
+        if (unchanged) return;
+        refillSubtitleRowsPreservingFocus(providerSubtitleRows, source, providerSelectionCaption);
+        providerSelectionCaption.setText(sourceCaption(source) + subtitleCaption(dialogSubtitleId));
+    }
+
+    private static boolean sameSubtitleMenuData(List<PlaybackRequest.Subtitle> first,
+            List<PlaybackRequest.Subtitle> second) {
+        if (first == second) return true;
+        if (first == null || second == null || first.size() != second.size()) return false;
+        for (int index = 0; index < first.size(); index++) {
+            PlaybackRequest.Subtitle left = first.get(index);
+            PlaybackRequest.Subtitle right = second.get(index);
+            if (left == null || right == null || !left.id.equals(right.id)
+                    || !left.label.equals(right.label) || !left.language.equals(right.language)
+                    || !left.uri.equals(right.uri) || !left.mimeType.equals(right.mimeType)
+                    || left.selectionFlags != right.selectionFlags
+                    || !left.headers.equals(right.headers)) return false;
         }
-        if ((restore == null || !restore.isEnabled()) && focusedPager) {
-            if ("provider_source_page_previous".equals(focusedTag) && sourceWindow.hasNext()) {
-                restore = providerSourcePager.findViewWithTag("provider_source_page_next");
-            } else if (sourceWindow.hasPrevious()) {
-                restore = providerSourcePager.findViewWithTag("provider_source_page_previous");
-            } else if (sourceWindow.hasNext()) {
-                restore = providerSourcePager.findViewWithTag("provider_source_page_next");
-            }
+        return true;
+    }
+
+    private void rememberProviderSubtitleRows(PlaybackRequest.Source source) {
+        if (source == null) {
+            providerSubtitleRowsSourceId = "";
+            providerSubtitleRowsSnapshot = Collections.emptyList();
+            providerSubtitleRowsUnsupportedCount = 0;
+        } else {
+            providerSubtitleRowsSourceId = source.id;
+            providerSubtitleRowsSnapshot = new ArrayList<>(source.subtitles);
+            providerSubtitleRowsUnsupportedCount = source.unsupportedSubtitleCount;
         }
-        if ((restore == null || !restore.isEnabled()) && focusedSourceId != null) {
-            PlaybackRequest.Source preferred = dialogSource == null ? currentSource : dialogSource;
-            if (preferred != null) {
-                restore = providerSourceRows.findViewWithTag(
-                        providerSourceRowFocusTag(preferred.id));
-            }
-            if (restore == null && providerSourceRows.getChildCount() > 0) {
-                restore = providerSourceRows.getChildAt(0);
-            }
-        }
-        if (restore != null && restore.isEnabled()) restore.requestFocus();
+        providerSubtitleRowsActiveSourceId = currentSource == null ? "" : currentSource.id;
+        providerSubtitleRowsSelectionId = dialogSubtitleId;
     }
 
     private void buildPlayerSurface() {
@@ -1197,6 +1212,7 @@ public final class OrbitPlayerActivity extends Activity {
                 if (!pendingSubtitleId.isEmpty() && player.getPlaybackState() == Player.STATE_READY) {
                     selectSubtitleAfterLoad(pendingSubtitleId);
                 } else if (player.getPlaybackState() == Player.STATE_READY) applySubtitleDefaultsIfNeeded();
+                if (currentSource != null) refreshSubtitleRows(currentSource);
             }
         });
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon()
@@ -1402,13 +1418,12 @@ public final class OrbitPlayerActivity extends Activity {
 
     private PlaybackRequest.Source nextUnattemptedSourceAfterCurrent() {
         if (request == null || currentSource == null) return null;
-        for (PlaybackRequest.Source source : request.sources) {
-            if (source.id.equals(currentSource.id)) continue;
-            if (!attemptedSourceIds.contains(source.id) && !failedSourceIds.contains(source.id)) {
-                return source;
-            }
-        }
-        return null;
+        List<PlaybackRequest.Source> sources = request.sources;
+        ArrayList<String> sourceIds = new ArrayList<>(sources.size());
+        for (PlaybackRequest.Source source : sources) sourceIds.add(source.id);
+        int nextIndex = SourceFailoverPolicy.nextUnattemptedIndexAfterCurrent(sourceIds,
+                currentSource.id, attemptedSourceIds, failedSourceIds);
+        return nextIndex < 0 ? null : sources.get(nextIndex);
     }
 
     /** Advances once per failed source, preserving the current in-episode position when possible. */
@@ -1509,9 +1524,6 @@ public final class OrbitPlayerActivity extends Activity {
         sourcesDialog = dialog;
         dialogSource = currentSource;
         dialogSubtitleId = subtitlesEnabled ? selectedSubtitleId : "";
-        int activeSourceIndex = request.sources.indexOf(currentSource);
-        providerSourcePage = activeSourceIndex < 0 ? 0
-                : activeSourceIndex / PROVIDER_SOURCE_PAGE_SIZE;
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(0, 0, 0, 0);
@@ -1545,21 +1557,20 @@ public final class OrbitPlayerActivity extends Activity {
         providerSourceHeading = text("VIDEO LINKS · " + request.sources.size() + " AVAILABLE",
                 13, TEAL, true);
         sourcePane.addView(providerSourceHeading);
-        providerSourcePager = new LinearLayout(this);
-        providerSourcePager.setGravity(Gravity.CENTER_VERTICAL);
-        sourcePane.addView(providerSourcePager, new LinearLayout.LayoutParams(-1, dp(36)));
         subtitlePane.addView(text("SUBTITLES · THIS LINK", 13, TEAL, true));
-        ScrollView sourceScroll = new ScrollView(this);
-        LinearLayout sourceRows = new LinearLayout(this);
-        sourceRows.setOrientation(LinearLayout.VERTICAL);
+        RecyclerView sourceRows = new RecyclerView(this);
+        sourceRows.setLayoutManager(new LinearLayoutManager(this, RecyclerView.VERTICAL, false));
+        sourceRows.setItemAnimator(null);
         providerSourceRows = sourceRows;
-        sourceScroll.addView(sourceRows);
+        providerSourceLayoutManager = (LinearLayoutManager) sourceRows.getLayoutManager();
+        providerSourceAdapter = new ProviderSourceAdapter();
+        sourceRows.setAdapter(providerSourceAdapter);
         ScrollView subtitleScroll = new ScrollView(this);
         LinearLayout subtitleRows = new LinearLayout(this);
         subtitleRows.setOrientation(LinearLayout.VERTICAL);
         providerSubtitleRows = subtitleRows;
         subtitleScroll.addView(subtitleRows);
-        sourcePane.addView(sourceScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        sourcePane.addView(sourceRows, new LinearLayout.LayoutParams(-1, 0, 1f));
         subtitlePane.addView(subtitleScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
         LinearLayout.LayoutParams paneParams = new LinearLayout.LayoutParams(0, -1, 1f);
         panes.addView(sourcePane, paneParams);
@@ -1611,19 +1622,26 @@ public final class OrbitPlayerActivity extends Activity {
         dialog.setCancelable(true);
         dialog.setOnDismissListener(d -> {
             if (sourcesDialog == dialog) {
+                providerSourceRefreshGeneration++;
                 sourcesDialog = null;
                 providerSourceRows = null;
-                providerSourcePager = null;
+                providerSourceAdapter = null;
+                providerSourceLayoutManager = null;
                 providerSubtitleRows = null;
                 providerSelectionCaption = null;
                 providerSourceHeading = null;
+                rememberProviderSubtitleRows(null);
             }
             scheduleControlsHide();
         });
         dialog.show();
         updateProviderDialogRows();
         if (focusSubtitles) focusSubtitleChoices(subtitleRows);
-        else if (sourceRows.getChildCount() > 0) sourceRows.getChildAt(0).requestFocus();
+        else sourceRows.post(() -> {
+            View firstRow = sourceRows.getLayoutManager() == null ? null
+                    : sourceRows.getLayoutManager().findViewByPosition(0);
+            if (firstRow != null) firstRow.requestFocus();
+        });
         Window window = dialog.getWindow();
         if (window != null) {
             applyImmersiveSystemBars(window);
@@ -1637,33 +1655,6 @@ public final class OrbitPlayerActivity extends Activity {
         setControlsVisible(true);
     }
 
-    private void fillSourceRows(LinearLayout rows, PlaybackRequest.Source selected, PlaybackRequest.Source active) {
-        PageWindow.Window sourceWindow = PageWindow.of(request.sources.size(), providerSourcePage,
-                PROVIDER_SOURCE_PAGE_SIZE);
-        for (int i = 0; i < rows.getChildCount(); i++) {
-            View view = rows.getChildAt(i);
-            if (!(view instanceof Button)) continue;
-            PlaybackRequest.Source source = request.sources.get(sourceWindow.start + i);
-            ((Button) view).setText((source == selected ? "●  " : "○  ") + safeLabel(source.label)
-                    + (source == active ? "   · Playing" : "   · Ready"));
-            view.setBackground(roundRect(source == selected ? 0x55242E33 : SURFACE, dp(5)));
-        }
-    }
-
-    static int sourcePageForFocusedSource(List<PlaybackRequest.Source> sources,
-            int requestedPage, String focusedSourceId) {
-        if (sources == null || sources.isEmpty()) return 0;
-        if (focusedSourceId != null && !focusedSourceId.isEmpty()) {
-            for (int index = 0; index < sources.size(); index++) {
-                PlaybackRequest.Source source = sources.get(index);
-                if (source != null && focusedSourceId.equals(source.id)) {
-                    return index / PROVIDER_SOURCE_PAGE_SIZE;
-                }
-            }
-        }
-        return PageWindow.of(sources.size(), requestedPage, PROVIDER_SOURCE_PAGE_SIZE).page;
-    }
-
     static String providerSourceRowFocusTag(String sourceId) {
         return PROVIDER_SOURCE_ROW_FOCUS_PREFIX + (sourceId == null ? "" : sourceId);
     }
@@ -1673,19 +1664,80 @@ public final class OrbitPlayerActivity extends Activity {
                 ? tag.substring(PROVIDER_SOURCE_ROW_FOCUS_PREFIX.length()) : null;
     }
 
+    private static int sourceIndexForId(List<PlaybackRequest.Source> sources, String sourceId) {
+        if (sources == null || TextUtils.isEmpty(sourceId)) return -1;
+        for (int index = 0; index < sources.size(); index++) {
+            PlaybackRequest.Source source = sources.get(index);
+            if (source != null && sourceId.equals(source.id)) return index;
+        }
+        return -1;
+    }
+
+    private final class ProviderSourceAdapter extends RecyclerView.Adapter<ProviderSourceViewHolder> {
+        @Override public ProviderSourceViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            Button row = button("", null);
+            row.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            row.setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+            return new ProviderSourceViewHolder(row);
+        }
+
+        @Override public void onBindViewHolder(ProviderSourceViewHolder holder, int position) {
+            if (request == null || position < 0 || position >= request.sources.size()) return;
+            PlaybackRequest.Source source = request.sources.get(position);
+            Button row = holder.row;
+            row.setText((source == dialogSource ? "●  " : "○  ") + safeLabel(source.label)
+                    + (source == currentSource ? "   · Playing" : "   · Ready"));
+            row.setTag(providerSourceRowFocusTag(source.id));
+            row.setBackground(roundRect(source == dialogSource ? 0x55242E33 : SURFACE, dp(5)));
+            row.setOnClickListener(view -> {
+                String sourceId = sourceIdFromProviderSourceRowFocusTag(
+                        view.getTag() instanceof String ? (String) view.getTag() : null);
+                selectProviderSource(sourceId);
+            });
+        }
+
+        @Override public int getItemCount() {
+            return request == null ? 0 : request.sources.size();
+        }
+    }
+
+    private static final class ProviderSourceViewHolder extends RecyclerView.ViewHolder {
+        final Button row;
+
+        ProviderSourceViewHolder(Button row) {
+            super(row);
+            this.row = row;
+        }
+    }
+
+    private void selectProviderSource(String sourceId) {
+        if (request == null || providerSourceAdapter == null) return;
+        int sourceIndex = sourceIndexForId(request.sources, sourceId);
+        if (sourceIndex < 0) return;
+        PlaybackRequest.Source source = request.sources.get(sourceIndex);
+        dialogSource = source;
+        dialogSubtitleId = source == currentSource && subtitlesEnabled ? selectedSubtitleId : "";
+        providerSourceAdapter.notifyDataSetChanged();
+        refillSubtitleRowsPreservingFocus(providerSubtitleRows, dialogSource,
+                providerSelectionCaption);
+        providerSelectionCaption.setText(sourceCaption(dialogSource)
+                + subtitleCaption(dialogSubtitleId));
+    }
+
     private void fillSubtitleRows(LinearLayout rows, PlaybackRequest.Source source, TextView caption) {
         rows.removeAllViews();
         Button searchOnline = button("⌕  Search online", v -> openOnlineSubtitleSearch(source));
-        searchOnline.setTag("subtitle-action");
+        searchOnline.setTag("subtitle-action:search");
         searchOnline.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
         rows.addView(searchOnline, new LinearLayout.LayoutParams(-1, dp(48)));
         Button loadLocal = button("▣  Load subtitle file", v -> openSubtitleDocumentPicker());
-        loadLocal.setTag("subtitle-action");
+        loadLocal.setTag("subtitle-action:file");
         loadLocal.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
         rows.addView(loadLocal, new LinearLayout.LayoutParams(-1, dp(48)));
         Button off = button((dialogSubtitleId.isEmpty() ? "●  " : "○  ") + "Off", v -> {
             dialogSubtitleId = "";
-            fillSubtitleRows(rows, source, caption);
+            refillSubtitleRowsPreservingFocus(rows, source, caption, "subtitle-off");
             caption.setText(sourceCaption(dialogSource) + subtitleCaption(dialogSubtitleId));
         });
         off.setTag("subtitle-off");
@@ -1700,6 +1752,7 @@ public final class OrbitPlayerActivity extends Activity {
         for (PlaybackRequest.Subtitle subtitle : source.subtitles) {
             hasOptions = true;
             String id = "external:" + subtitle.id;
+            String choiceTag = "subtitle-choice:" + id;
             String detail = SubtitleFormat.UNKNOWN_MIME_TYPE.equals(subtitle.mimeType)
                     ? "Pending content detection"
                     : "Format hint · " + subtitle.mimeType;
@@ -1707,10 +1760,11 @@ public final class OrbitPlayerActivity extends Activity {
             Button option = button((id.equals(dialogSubtitleId) ? "●  " : "○  ") + safeLabel(subtitle.label)
                     + "   · " + detail, v -> {
                 dialogSubtitleId = id;
-                fillSubtitleRows(rows, source, caption);
+                refillSubtitleRowsPreservingFocus(rows, source, caption, choiceTag);
                 caption.setText(sourceCaption(dialogSource) + subtitleCaption(dialogSubtitleId));
             });
             option.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            option.setTag(choiceTag);
             rows.addView(option, new LinearLayout.LayoutParams(-1, dp(48)));
         }
         if (source == currentSource && player != null) {
@@ -1727,15 +1781,17 @@ public final class OrbitPlayerActivity extends Activity {
                     marginParams(-1, -2, 2, dp(8), 0, dp(2)));
             for (TrackChoice track : embedded) {
                 String id = track.choiceId;
+                String choiceTag = "subtitle-choice:" + id;
                 if (id.startsWith("external:") && hasSubtitleId(source, id.substring("external:".length()))) continue;
                 hasOptions = true;
                 Button option = button((id.equals(dialogSubtitleId) ? "●  " : "○  ") + track.name
                         + (track.detail.isEmpty() ? "" : "   · " + track.detail), v -> {
                     dialogSubtitleId = id;
-                    fillSubtitleRows(rows, source, caption);
+                    refillSubtitleRowsPreservingFocus(rows, source, caption, choiceTag);
                     caption.setText(sourceCaption(dialogSource) + subtitleCaption(dialogSubtitleId));
                 });
                 option.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+                option.setTag(choiceTag);
                 rows.addView(option, new LinearLayout.LayoutParams(-1, dp(48)));
             }
         }
@@ -1749,6 +1805,67 @@ public final class OrbitPlayerActivity extends Activity {
             rows.addView(text("No other subtitles are available for this link.", 12, MUTED, false),
                     marginParams(-1, -2, 0, dp(8), 0, 0));
         }
+        if (rows == providerSubtitleRows) rememberProviderSubtitleRows(source);
+    }
+
+    private void refillSubtitleRowsPreservingFocus(LinearLayout rows,
+            PlaybackRequest.Source source, TextView caption) {
+        View focused = getCurrentFocus();
+        Object tag = focused != null && focused.getParent() == rows ? focused.getTag() : null;
+        refillSubtitleRowsPreservingFocus(rows, source, caption,
+                tag instanceof String ? (String) tag : null);
+    }
+
+    private void refillSubtitleRowsPreservingFocus(LinearLayout rows,
+            PlaybackRequest.Source source, TextView caption, String focusTag) {
+        ScrollView scrollView = rows.getParent() instanceof ScrollView
+                ? (ScrollView) rows.getParent() : null;
+        int scrollY = scrollView == null ? 0 : scrollView.getScrollY();
+        int focusChoiceIndex = subtitleChoiceIndexForTag(rows, focusTag);
+        fillSubtitleRows(rows, source, caption);
+        View restored = focusTag == null ? null : rows.findViewWithTag(focusTag);
+        if (restored == null && focusChoiceIndex >= 0) {
+            restored = subtitleChoiceAtOrNearest(rows, focusChoiceIndex);
+        }
+        if (restored != null) {
+            restored.requestFocus();
+        } else if (scrollView != null && scrollY > 0) {
+            scrollView.post(() -> {
+                if (rows.getParent() == scrollView) scrollView.scrollTo(0, scrollY);
+            });
+        }
+    }
+
+    private static int subtitleChoiceIndexForTag(LinearLayout rows, String focusTag) {
+        if (rows == null || TextUtils.isEmpty(focusTag)) return -1;
+        int choiceIndex = 0;
+        for (int index = 0; index < rows.getChildCount(); index++) {
+            View child = rows.getChildAt(index);
+            if (!isSubtitleChoiceRow(child)) continue;
+            if (focusTag.equals(child.getTag())) return choiceIndex;
+            choiceIndex++;
+        }
+        return -1;
+    }
+
+    private static View subtitleChoiceAtOrNearest(LinearLayout rows, int requestedIndex) {
+        View nearest = null;
+        int choiceIndex = 0;
+        for (int index = 0; index < rows.getChildCount(); index++) {
+            View child = rows.getChildAt(index);
+            if (!isSubtitleChoiceRow(child)) continue;
+            if (choiceIndex >= requestedIndex) return child;
+            nearest = child;
+            choiceIndex++;
+        }
+        return nearest;
+    }
+
+    private static boolean isSubtitleChoiceRow(View view) {
+        if (!(view instanceof Button)) return false;
+        Object tag = view.getTag();
+        return "subtitle-off".equals(tag)
+                || (tag instanceof String && ((String) tag).startsWith("subtitle-choice:"));
     }
 
     private void openSubtitleDocumentPicker() {
@@ -2070,7 +2187,8 @@ public final class OrbitPlayerActivity extends Activity {
 
     private void refreshSubtitleRows(PlaybackRequest.Source source) {
         if (providerSubtitleRows != null && source == dialogSource) {
-            fillSubtitleRows(providerSubtitleRows, source, providerSelectionCaption);
+            refillSubtitleRowsPreservingFocus(providerSubtitleRows, source,
+                    providerSelectionCaption);
             if (providerSelectionCaption != null) {
                 providerSelectionCaption.setText(sourceCaption(source) + subtitleCaption(dialogSubtitleId));
             }
@@ -2108,7 +2226,8 @@ public final class OrbitPlayerActivity extends Activity {
                 offChoice = child;
                 continue;
             }
-            if (!"subtitle-action".equals(child.getTag())) {
+            Object tag = child.getTag();
+            if (!(tag instanceof String) || !((String) tag).startsWith("subtitle-action")) {
                 child.requestFocus();
                 return;
             }
@@ -3010,12 +3129,15 @@ public final class OrbitPlayerActivity extends Activity {
     private void dismissSourcesDialog() {
         if (sourcesDialog != null) {
             Dialog dialog = sourcesDialog;
+            providerSourceRefreshGeneration++;
             sourcesDialog = null;
             providerSourceRows = null;
-            providerSourcePager = null;
+            providerSourceAdapter = null;
+            providerSourceLayoutManager = null;
             providerSubtitleRows = null;
             providerSelectionCaption = null;
             providerSourceHeading = null;
+            rememberProviderSubtitleRows(null);
             if (dialog.isShowing()) dialog.dismiss();
         }
         if (audioTracksDialog != null) {

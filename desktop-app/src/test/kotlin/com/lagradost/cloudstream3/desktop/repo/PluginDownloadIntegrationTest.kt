@@ -146,7 +146,7 @@ class PluginDownloadIntegrationTest {
     }
 
     @Test
-    fun `remote HTTP precompiled sidecar is rejected and existing sidecar is preserved`() = runBlocking {
+    fun `remote HTTP precompiled sidecar is rejected and stale cache artifacts are removed`() = runBlocking {
         val pluginBytes = testPluginArchive()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/fixture.jar") { exchange ->
@@ -164,6 +164,12 @@ class PluginDownloadIntegrationTest {
         try {
             val pluginFile = File(directory, "Fixture.jar")
             val sidecar = File(directory, "Fixture-jvm.jar").apply { writeText("installed JVM sidecar") }
+            val sidecarIdentity = File(sidecar.path + ".identity").apply { writeText("old source identity") }
+            val sourceIdentity = File(pluginFile.path + ".identity").apply { writeText("obsolete marker") }
+            val secureCache = File(directory, "Fixture-secure.jar").apply { writeText("old secure cache") }
+            val secureIdentity = File(secureCache.path + ".identity").apply { writeText("old source identity") }
+            val oldDexPackage = File(directory, "Fixture.cs3").apply { writeText("old source archive") }
+            val oldExtractedDex = File(directory, "Fixture.dex").apply { writeText("old extracted dex") }
             val plugin = SitePlugin(
                 name = "Fixture",
                 internalName = "Fixture",
@@ -178,8 +184,75 @@ class PluginDownloadIntegrationTest {
 
             assertEquals(pluginFile.canonicalFile, assertNotNull(downloaded).canonicalFile)
             assertContentEquals(pluginBytes, pluginFile.readBytes())
-            assertEquals("installed JVM sidecar", sidecar.readText())
+            assertFalse(sidecar.exists())
+            assertFalse(sidecarIdentity.exists())
+            assertFalse(sourceIdentity.exists())
+            assertFalse(secureCache.exists())
+            assertFalse(secureIdentity.exists())
+            assertFalse(oldDexPackage.exists())
+            assertFalse(oldExtractedDex.exists())
+            assertEquals(
+                listOf("Fixture.jar"),
+                directory.listFiles().orEmpty()
+                    .filter { it.extension.lowercase() in setOf("jar", "cs3", "dex") }
+                    .map { it.name }
+                    .sorted(),
+            )
             assertFalse(directory.listFiles().orEmpty().any { it.name.endsWith(".tmp") })
+        } finally {
+            client.dispatcher.executorService.shutdownNow()
+            client.connectionPool.evictAll()
+            server.stop(0)
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `precompiled sidecar and identity are committed against the replacement package`() = runBlocking {
+        val pluginBytes = testPluginArchive()
+        val jvmBytes = testPluginArchive()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/fixture.jar") { exchange ->
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, pluginBytes.size.toLong())
+            exchange.responseBody.use { it.write(pluginBytes) }
+        }
+        server.createContext("/fixture-jvm.jar") { exchange ->
+            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, jvmBytes.size.toLong())
+            exchange.responseBody.use { it.write(jvmBytes) }
+        }
+        server.start()
+
+        val directory = Files.createTempDirectory("plugin-download-precompiled-cache-test").toFile()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .callTimeout(5, TimeUnit.SECONDS)
+            .build()
+        try {
+            val baseUrl = "http://127.0.0.1:${server.address.port}"
+            val pluginFile = File(directory, "Fixture.jar")
+            val plugin = SitePlugin(
+                name = "Fixture",
+                internalName = "Fixture",
+                url = "$baseUrl/fixture.jar",
+                jarUrl = "$baseUrl/fixture-jvm.jar",
+                version = 1,
+                fileHash = hash(pluginBytes),
+                jarHash = hash(jvmBytes),
+            )
+
+            val downloaded = PluginFileUtils.downloadPlugin(plugin, pluginFile, listOf(plugin.url), client)
+
+            val sidecar = File(directory, "Fixture-jvm.jar")
+            val identity = File(sidecar.path + ".identity")
+            assertEquals(pluginFile.canonicalFile, assertNotNull(downloaded).canonicalFile)
+            assertContentEquals(pluginBytes, pluginFile.readBytes())
+            assertTrue(sidecar.isFile)
+            assertTrue(identity.isFile)
+            val identityParts = identity.readText().split(':')
+            assertEquals(3, identityParts.size)
+            assertEquals(hash(pluginFile.readBytes()).removePrefix("sha256-"), identityParts[1])
+            assertEquals(hash(sidecar.readBytes()).removePrefix("sha256-"), identityParts[2])
         } finally {
             client.dispatcher.executorService.shutdownNow()
             client.connectionPool.evictAll()

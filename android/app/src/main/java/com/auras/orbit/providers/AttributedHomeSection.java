@@ -13,4 +13,8 @@ public final class AttributedHomeSection {
         this.sourceOrder = sourceOrder;
         this.section = section;
     }
+
+    public AttributedHomeSection withSourceOrder(int sourceOrder) {
+        return new AttributedHomeSection(provider, sourceOrder, section);
+    }
 }

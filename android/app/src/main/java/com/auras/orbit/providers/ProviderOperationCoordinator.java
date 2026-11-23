@@ -84,6 +84,27 @@ public final class ProviderOperationCoordinator implements AutoCloseable {
         return registerAndStart(batch);
     }
 
+    /** Home page-aware path; the legacy loadHome() API remains available to existing callers. */
+    public ProviderBatch<AttributedHomePage> loadHomePages(
+            List<MediaProvider> orderedProviders, HomeRequest request, long timeoutMs,
+            ProviderBatch.Listener<AttributedHomePage> listener) {
+        if (request == null) throw new IllegalArgumentException("home request is required");
+        ensureOpen();
+        final List<MediaProvider> providerOrder = copyProviderOrder(orderedProviders);
+        ProviderBatch<AttributedHomePage> batch = new ProviderBatch<>(providerOrder,
+                workers, timer, timeoutMs, provider -> {
+                    if (!provider.descriptor().homeFeed) {
+                        throw new UnsupportedOperationException("Provider does not offer a Home feed");
+                    }
+                    HomePage page = invokeProvider(provider.owningPluginId(),
+                            () -> provider.loadHomePage(request));
+                    if (page == null) throw new IllegalStateException("Provider returned no Home response");
+                    return ProviderResultBudget.homePage(provider.descriptor(),
+                            sourceOrderOf(providerOrder, provider), page);
+                }, listener, this::removeBatch);
+        return registerAndStart(batch);
+    }
+
     public ProviderBatch<List<AttributedSearchHit>> search(
             List<MediaProvider> orderedProviders, SearchRequest request, long timeoutMs,
             ProviderBatch.Listener<List<AttributedSearchHit>> listener) {

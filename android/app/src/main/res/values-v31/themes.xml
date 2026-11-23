@@ -11,7 +11,7 @@
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowSplashScreenBackground">@color/orbit_base</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/auras_orbit_mark</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/auras_orbit_safe_mark</item>
         <item name="android:windowSplashScreenAnimationDuration">500</item>
     </style>
 </resources>

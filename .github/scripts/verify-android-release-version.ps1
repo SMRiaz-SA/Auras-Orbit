@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $ExpectedVersion,
 
-    [string] $Repository = 'SMRiaz-SA/Auras-Orbit'
+    [string] $Repository = 'SMRiaz-SA/Auras-Orbit',
+
+    [switch] $AllowPublishedStableRerun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +30,20 @@ function ConvertTo-LegacyAndroidVersionCode([string] $Version) {
 }
 
 $candidateCode = ConvertTo-LegacyAndroidVersionCode $ExpectedVersion
+$isAuthorizedStableReleaseRerun = $false
+if ($AllowPublishedStableRerun) {
+    $runAttempt = 0
+    $isAuthorizedStableReleaseRerun =
+        $env:GITHUB_ACTIONS -ceq 'true' -and
+        $env:GITHUB_REF_TYPE -ceq 'tag' -and
+        $env:GITHUB_REF_NAME -ceq "v$ExpectedVersion" -and
+        [int]::TryParse($env:GITHUB_RUN_ATTEMPT, [ref]$runAttempt) -and
+        $runAttempt -gt 1
+    if (-not $isAuthorizedStableReleaseRerun) {
+        throw 'Published-version equality is allowed only after the release workflow verified the exact stable tag on an authorized GitHub Actions rerun.'
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $desktopPropertiesPath = Join-Path $repoRoot 'gradle.properties'
 if (-not (Test-Path -LiteralPath $desktopPropertiesPath -PathType Leaf)) {
@@ -80,6 +96,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
 $releaseUri = "https://api.github.com/repos/$Repository/releases?per_page=100"
 $highestPublishedCode = -1L
 $highestPublishedVersion = $null
+$hasExactPublishedStableRelease = $false
 $pageCount = 0
 while (-not [string]::IsNullOrWhiteSpace($releaseUri)) {
     $pageCount++
@@ -89,6 +106,9 @@ while (-not [string]::IsNullOrWhiteSpace($releaseUri)) {
     $releases = @($response.Content | ConvertFrom-Json)
     foreach ($release in $releases) {
         if ($release.prerelease -or $release.draft) { continue }
+        if ($release.tag_name -ceq "v$ExpectedVersion") {
+            $hasExactPublishedStableRelease = $true
+        }
 
         $publishedVersions = [System.Collections.Generic.List[string]]::new()
         if ($release.tag_name -match '^v?(\d+\.\d+\.\d+(?:\.\d+)?)$') {
@@ -123,8 +143,15 @@ while (-not [string]::IsNullOrWhiteSpace($releaseUri)) {
 if ($highestPublishedCode -lt 0) {
     throw "Could not find a published stable version in https://github.com/$Repository/releases."
 }
-if ($candidateCode -le $highestPublishedCode) {
+if ($candidateCode -lt $highestPublishedCode) {
     throw "Android release '$ExpectedVersion' (versionCode $candidateCode) must be greater than the highest published stable release '$highestPublishedVersion' (versionCode $highestPublishedCode)."
 }
 
-Write-Host "Android release version gate passed: $ExpectedVersion ($candidateCode) matches desktop APP_VERSION and ORBIT_RELEASE_VERSION_NAME, is higher than legacy Android reference $legacyVersion ($legacyCode), and is higher than published stable $highestPublishedVersion ($highestPublishedCode)."
+if ($candidateCode -eq $highestPublishedCode) {
+    if (-not $isAuthorizedStableReleaseRerun -or -not $hasExactPublishedStableRelease) {
+        throw "Android release '$ExpectedVersion' (versionCode $candidateCode) must be greater than the highest published stable release '$highestPublishedVersion' (versionCode $highestPublishedCode), unless this is the already-published exact stable release on its authorized GitHub Actions rerun."
+    }
+    Write-Host "Android release version gate passed for authorized rerun: $ExpectedVersion ($candidateCode) matches the exact published stable release and is higher than legacy Android reference $legacyVersion ($legacyCode)."
+} else {
+    Write-Host "Android release version gate passed: $ExpectedVersion ($candidateCode) matches desktop APP_VERSION and ORBIT_RELEASE_VERSION_NAME, is higher than legacy Android reference $legacyVersion ($legacyCode), and is higher than published stable $highestPublishedVersion ($highestPublishedCode)."
+}

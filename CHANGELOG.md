@@ -1,15 +1,16 @@
 # Changelog
 
-> This file records workspace version changes as well as published releases. The GitHub [Releases page](https://github.com/SMRiaz-SA/Auras-Orbit/releases) identifies [`v1.0.0.06`](https://github.com/SMRiaz-SA/Auras-Orbit/releases/tag/v1.0.0.06) as the latest published release as of 2026-11-18. Desktop `APP_VERSION` and canonical Android `ORBIT_RELEASE_VERSION_NAME` are both configured as the local coordinated candidate `1.0.0.10`. It is unpublished. The Android reference app remains at legacy `1.0.0.06` for same-package update compatibility. The desktop `.07` validation used a one-run command-line override and remains historical evidence.
+## 1.0.0.10 — 2026-11-22 (local workspace candidate; unpublished)
 
-## Local coordinated candidate — 1.0.0.10 (unpublished)
+### Candidate changes
 
-- Desktop and canonical Android version inputs are aligned at `.10`; the legacy Android reference is explicitly pinned at `.06`. The local Android Release APK is signed with the established `.06` certificate. Nothing has been published.
-- Android `:app:testDebugUnitTest` passes all 90 tests, including formatter coverage for settings screen-reader descriptions that prevents duplicated sentence punctuation. The focused phone synthetic Jellyfin player test passes 1/1; it is not live-server acceptance.
-- A disposable phone AVD accepted a direct signed `.06` reference APK to `.10` install. Its legacy `rebuild_preference.xml` remained in app-private storage. Orbit's own profile list opened as first-run because legacy profile data is intentionally not imported. The detailed phone and migration records stay in workspace-only evidence and are not included in the source archive.
-- The old updater's live GitHub feed and numeric asset path cannot be accepted while `.10` remains unpublished. TV testing is deferred at the user's direction. This candidate does not certify every provider or conditional live integration. See the [current Orbit status report](PROJECT_STATUS_REPORT_2026-11-21.md), the [local deliverables record](artifacts/release-evidence/LOCAL_DELIVERABLES_2026-11-18.md), and the [subtitle audit](artifacts/release-evidence/SUBTITLE_COMPATIBILITY_AUDIT_2026-11-20.md); these records remain outside the source archive.
-
-The `.10` value is a local coordinated candidate, not publication authorization. Keep the historical `.07` validation and `.08` Android acceptance evidence tied to their original runs. Their detailed records remain outside the source archive.
+- Add episode artwork, synopsis, and teal separators to the Android episode long-press sheet. Keep the existing episode title and actions, and use nested scrolling so sheet gestures and page swipes do not compete.
+- Add safe-area padding to the Android launcher and splash marks so device icon masks do not crop the logo.
+- Preserve provider-returned results without an arbitrary link-count ceiling. Keep chooser pagination as a presentation detail and isolate malformed add-on entries so one bad item does not discard valid siblings.
+- Improve playback request handling for declared media types, provider headers, subtitle metadata, and cross-origin redirects.
+- Refresh desktop playback progress and seeking state reliably while retaining the current player controls.
+- Keep plugins with the same manifest identity aligned across loader, installed list, uninstall, and automatic update flows. Preserve the existing rollback path when a replacement fails.
+- Update release packaging checks and workflows for the Windows installer, portable package, Android Release APK, and source archive from the coordinated source tree.
 
 ## 1.0.0.06 — 2026-10-29
 

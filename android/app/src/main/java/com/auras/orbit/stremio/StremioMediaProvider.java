@@ -5,6 +5,7 @@ import android.util.Base64;
 import com.auras.orbit.player.PlaybackRequest;
 import com.auras.orbit.player.SubtitleFormat;
 import com.auras.orbit.providers.HomeRequest;
+import com.auras.orbit.providers.HomePage;
 import com.auras.orbit.providers.HomeSection;
 import com.auras.orbit.providers.MediaItem;
 import com.auras.orbit.providers.MediaKind;
@@ -45,7 +46,6 @@ public final class StremioMediaProvider implements MediaProvider {
     private static final int MAX_ITEMS_PER_SECTION = 100;
     private static final int MAX_SEARCH_RESULTS = 100;
     // Provider admission and playback retain the same explicit source ceiling.
-    private static final int MAX_STREAMS = ProviderLinkResult.MAX_LINKS;
     private static final int MAX_EPISODES = MediaItem.MAX_EPISODES;
     private static final int MAX_STREMIO_ID_CHARS = 512;
     private static final int MAX_TYPE_CHARS = 128;
@@ -53,6 +53,8 @@ public final class StremioMediaProvider implements MediaProvider {
     private static final int MAX_CATALOG_CALLS_PER_OPERATION = 8;
     private static final long MAX_CATALOG_FANOUT_MS = StremioAddonClient.CALL_TIMEOUT_MS + 5_000L;
     private static final String PARTIAL_HOME_TITLE_SUFFIX = " · partial results";
+    private static final String PARTIAL_HOME_FAILURE_MESSAGE =
+            "Could not load a Stremio catalog. Retry to continue.";
     private static final String PARTIAL_SEARCH_ID_PREFIX = "stremio-partial-search-";
     public static final String PARTIAL_SEARCH_MESSAGE =
             "Partial Stremio results: Orbit reached its catalog request budget or 100-result limit; more catalogs or matches may be available.";
@@ -94,49 +96,100 @@ public final class StremioMediaProvider implements MediaProvider {
     @Override public ProviderDescriptor descriptor() { return descriptor; }
 
     @Override public List<HomeSection> loadHome(HomeRequest request) throws IOException {
-        if (request == null) throw new IllegalArgumentException("A Home request is required.");
-        if (!descriptor.homeFeed) return Collections.emptyList();
-        int page = resolveHomePage(request);
-        int skip = pageSkip(page);
-        if (skip < 0) throw new IOException("The requested Stremio catalog page is outside the supported range.");
+        return loadHomePage(request).sections;
+    }
 
-        ArrayList<HomeSection> sections = new ArrayList<>();
-        IOException lastFailure = null;
-        boolean queriedAnyCatalog = false;
-        boolean omittedCatalogsByBudget = false;
-        CatalogCallBudget budget = new CatalogCallBudget();
+    @Override public HomePage loadHomePage(HomeRequest request) throws IOException {
+        if (request == null) throw new IllegalArgumentException("A Home request is required.");
+        if (!descriptor.homeFeed) return new HomePage(Collections.emptyList(), "");
+        long skip = resolveHomeSkip(request);
+
+        ArrayList<StremioModels.CatalogDefinition> eligibleCatalogs = new ArrayList<>();
+        boolean matchedRequestedSection = false;
         for (StremioModels.CatalogDefinition catalog : manifest.catalogs) {
+            if (!homeRequestTargetsCatalog(request, catalog)) continue;
+            if (request.isSectionRequest()) matchedRequestedSection = true;
             MediaKind kind = mediaKind(catalog.type);
             if (kind == MediaKind.UNKNOWN || !requestedKind(request, kind)
-                    || !manifest.supports("catalog", catalog.type, catalog.id)) continue;
-            Map<String, String> args = catalogArguments(catalog, null, skip, false);
-            if (args == null) continue;
-            if (!budget.tryStartCall()) {
-                omittedCatalogsByBudget = true;
-                break;
+                    || !manifest.supports("catalog", catalog.type, catalog.id)
+                    || catalogArguments(catalog, null, skip, false) == null) continue;
+            eligibleCatalogs.add(catalog);
+        }
+        if (request.isSectionRequest() && !matchedRequestedSection) {
+            throw new IOException("The requested Stremio catalog section is no longer available.");
+        }
+        ArrayList<HomeSection> sections = new ArrayList<>();
+        CatalogCallBudget budget = new CatalogCallBudget();
+        StremioHomeCatalogCursor cursorState = request.isProviderContinuationRequest()
+                ? StremioHomeCatalogCursor.parse(request.providerCursor, eligibleCatalogs.size())
+                : StremioHomeCatalogCursor.parse("", eligibleCatalogs.size());
+        int nextFreshIndex = cursorState.nextFreshIndex;
+        ArrayList<Integer> failedCatalogIndices = new ArrayList<>(cursorState.failedCatalogIndices);
+        boolean retryOnly = !request.isSectionRequest()
+                && cursorState.isRetryOnly(eligibleCatalogs.size());
+
+        if (retryOnly) {
+            ArrayList<Integer> attempted = new ArrayList<>();
+            ArrayList<Integer> stillFailed = new ArrayList<>();
+            for (Integer failedIndex : cursorState.failedCatalogIndices) {
+                if (!budget.tryStartCall()) break;
+                attempted.add(failedIndex);
+                try {
+                    sections.add(loadHomeSection(eligibleCatalogs.get(failedIndex), skip));
+                } catch (IOException error) {
+                    stillFailed.add(failedIndex);
+                }
             }
-            queriedAnyCatalog = true;
-            try {
-                StremioModels.CatalogResponse response = service.getCatalog(addon, manifest, catalog, args);
-                List<MediaItem> items = mapPreviews(response.metas, MAX_ITEMS_PER_SECTION);
-                String title = safeDisplay(catalog.name, fallbackTypeTitle(kind), 160);
-                sections.add(new HomeSection(catalogSectionId(catalog), title, items,
-                        declaresExtra(catalog, "skip")
-                                && response.metas.size() >= MAX_ITEMS_PER_SECTION && page < 1_001
-                                ? "stremio-page:" + (page + 1) : ""));
-            } catch (IOException error) {
-                lastFailure = error;
+            failedCatalogIndices = new ArrayList<>(StremioHomeCatalogCursor.remainingFailures(
+                    cursorState.failedCatalogIndices, attempted, stillFailed));
+        } else {
+            while (nextFreshIndex < eligibleCatalogs.size()) {
+                int catalogIndex = nextFreshIndex;
+                StremioModels.CatalogDefinition catalog = eligibleCatalogs.get(catalogIndex);
+                if (!budget.tryStartCall()) break;
+                boolean failed = false;
+                try {
+                    sections.add(loadHomeSection(catalog, skip));
+                } catch (IOException error) {
+                    if (request.isSectionRequest()) throw error;
+                    failed = true;
+                }
+                cursorState = cursorState.afterFreshAttempt(
+                        catalogIndex, failed, eligibleCatalogs.size());
+                nextFreshIndex = cursorState.nextFreshIndex;
+                failedCatalogIndices = new ArrayList<>(cursorState.failedCatalogIndices);
             }
         }
-        if (omittedCatalogsByBudget) {
+        boolean hasMoreProviderSections = !request.isSectionRequest()
+                && nextFreshIndex < eligibleCatalogs.size();
+        boolean retryAvailable = !request.isSectionRequest() && !hasMoreProviderSections
+                && !failedCatalogIndices.isEmpty();
+        String nextProviderCursor = request.isSectionRequest() ? ""
+                : StremioHomeCatalogCursor.create(nextFreshIndex, failedCatalogIndices,
+                        eligibleCatalogs.size()).encode(eligibleCatalogs.size());
+        if (!nextProviderCursor.isEmpty()) {
             for (int index = 0; index < sections.size(); index++) {
                 HomeSection section = sections.get(index);
                 sections.set(index, new HomeSection(section.id,
                         section.title + PARTIAL_HOME_TITLE_SUFFIX, section.items, section.nextCursor));
             }
         }
-        if (sections.isEmpty() && queriedAnyCatalog && lastFailure != null) throw lastFailure;
-        return Collections.unmodifiableList(sections);
+        String continuationError = failedCatalogIndices.isEmpty() ? ""
+                : PARTIAL_HOME_FAILURE_MESSAGE;
+        return new HomePage(sections, nextProviderCursor, continuationError,
+                hasMoreProviderSections, retryAvailable);
+    }
+
+    private HomeSection loadHomeSection(StremioModels.CatalogDefinition catalog, long skip)
+            throws IOException {
+        Map<String, String> args = catalogArguments(catalog, null, skip, false);
+        if (args == null) throw new IOException("The Stremio catalog is not available for Home.");
+        StremioModels.CatalogResponse response = service.getHomeCatalog(addon, manifest, catalog, args);
+        List<MediaItem> items = mapPreviews(response.metas, MAX_ITEMS_PER_SECTION);
+        MediaKind kind = mediaKind(catalog.type);
+        String title = safeDisplay(catalog.name, fallbackTypeTitle(kind), 160);
+        return new HomeSection(catalogSectionId(catalog), title, items,
+                nextHomeCursor(catalog, response, skip));
     }
 
     @Override public List<MediaItem> search(SearchRequest request) throws IOException {
@@ -234,31 +287,45 @@ public final class StremioMediaProvider implements MediaProvider {
             throw new IOException("This Stremio add-on does not declare streams for this item.");
         }
         StremioModels.StreamResponse response = service.getStreams(addon, manifest, token.type, token.id);
-        if (response.streams.size() > MAX_STREAMS) {
-            throw new IOException("The Stremio add-on returned more streams than Orbit can admit.");
-        }
         ArrayList<ProviderLinkCandidate> links = new ArrayList<>();
         ArrayList<ProviderSubtitleCandidate> subtitles = new ArrayList<>();
         Set<String> subtitleIds = new HashSet<>();
         StremioModels.Stream subtitleContext = null;
+        boolean inlineSubtitleMetadataIncomplete = false;
+        int streamIndex = 0;
         for (StremioModels.Stream stream : response.streams) {
-            if (stream.url == null) continue; // externalUrl, ytId, and infoHash have no Orbit mapping.
+            int currentIndex = streamIndex++;
+            inlineSubtitleMetadataIncomplete |= stream.inlineSubtitleMetadataIncomplete;
+            if (stream.url == null) {
+                // Keep provider metadata visible even when Orbit cannot hand the result to Media3.
+                links.add(unavailableResultCandidate(addon.name, currentIndex, stream));
+                continue;
+            }
             try {
                 PlaybackRequest.Source source = StremioPlaybackMapper.toDirectSource(addon, stream);
-                if (source == null) continue;
-                String directType = supportedProviderLinkType(source.uri);
-                if (directType == null || !mimeMatchesPath(source.mimeType, source.uri)) {
-                    continue; // Respect the current player adapter's file-path and MIME contract.
+                if (source == null) {
+                    links.add(new ProviderLinkCandidate("stremio-result-" + currentIndex,
+                            safeDisplay(firstNonBlank(stream.title, stream.name, stream.description),
+                                    "Provider stream", 180), addon.name, "", "", 0,
+                            "UNSUPPORTED", "", Collections.emptyMap(), Collections.emptyList(), null, ""));
+                    continue;
                 }
+                String directType = providerLinkType(source.mimeType, source.uri);
                 String linkName = firstNonBlank(stream.title, stream.name, stream.description);
                 links.add(new ProviderLinkCandidate(source.id,
                         safeDisplay(linkName, "Direct stream", 180), addon.name, source.uri,
-                        "", quality(stream), directType, "", source.headers));
+                        "", quality(stream), directType, "", source.headers,
+                        Collections.emptyList(), null, source.mimeType));
                 appendSubtitles(subtitles, subtitleIds, stream.subtitles, token.id);
                 if (subtitleContext == null || (!hasSubtitleHints(subtitleContext)
                         && hasSubtitleHints(stream))) subtitleContext = stream;
             } catch (IOException | IllegalArgumentException ignored) {
-                // A malformed or unsupported direct candidate must not hide other valid streams.
+                String linkName = firstNonBlank(stream.title, stream.name, stream.description);
+                links.add(new ProviderLinkCandidate("stremio-result-" + currentIndex,
+                        safeDisplay(linkName, "Provider stream", 180), addon.name,
+                        stream.url == null ? "" : stream.url, "", quality(stream),
+                        "UNSUPPORTED", "", Collections.emptyMap(), Collections.emptyList(), null, "",
+                        "The provider result could not be represented safely for playback."));
             }
         }
 
@@ -280,8 +347,25 @@ public final class StremioMediaProvider implements MediaProvider {
 
         List<ProviderSubtitleCandidate> subtitleResult = subtitles.isEmpty()
                 ? Collections.emptyList() : Collections.unmodifiableList(subtitles);
+        String diagnostic = links.isEmpty()
+                ? "This Stremio add-on returned no direct HTTP(S) stream Orbit can play."
+                : inlineSubtitleMetadataIncomplete
+                        ? ProviderLinkResult.STREMIO_SUBTITLE_METADATA_DIAGNOSTIC : "";
         return new ProviderLinkResult(!links.isEmpty(), links, subtitleResult,
-                links.isEmpty() ? "This Stremio add-on returned no direct HTTP(S) stream Orbit can play." : "");
+                diagnostic);
+    }
+
+    static ProviderLinkCandidate unavailableResultCandidate(String addonName, int index,
+            StremioModels.Stream stream) {
+        String externalUri = stream.externalUrl == null ? "" : stream.externalUrl;
+        return new ProviderLinkCandidate("stremio-result-" + index,
+                safeDisplay(firstNonBlank(stream.title, stream.name, stream.description),
+                        "Provider stream", 180), addonName, externalUri, "", 0,
+                stream.externalUrl == null ? "UNSUPPORTED" : "EXTERNAL", "",
+                Collections.emptyMap(), Collections.emptyList(), null, "",
+                stream.unavailableReason.isEmpty()
+                        ? "Orbit Player can open direct streams only; this result is unavailable."
+                        : stream.unavailableReason);
     }
 
     private MediaItem mapMeta(StremioModels.Meta meta) throws IOException {
@@ -366,7 +450,7 @@ public final class StremioMediaProvider implements MediaProvider {
     }
 
     private Map<String, String> catalogArguments(StremioModels.CatalogDefinition catalog,
-                                                  String search, int skip, boolean searchRequest) {
+                                                  String search, long skip, boolean searchRequest) {
         LinkedHashMap<String, String> args = new LinkedHashMap<>();
         boolean searchDeclared = false;
         boolean skipDeclared = false;
@@ -377,12 +461,12 @@ public final class StremioMediaProvider implements MediaProvider {
                 else if (option.required) return null;
             } else if ("skip".equals(option.name)) {
                 skipDeclared = true;
-                String requestedSkip = Integer.toString(skip);
+                String requestedSkip = Long.toString(skip);
                 if (skip > 0 && !option.options.isEmpty()
                         && !option.options.contains(requestedSkip)) return null;
                 if (option.required && skip == 0 && !option.options.isEmpty()
                         && !option.options.contains(requestedSkip)) return null;
-                if (skip > 0 || option.required) args.put("skip", Integer.toString(skip));
+                if (skip > 0 || option.required) args.put("skip", Long.toString(skip));
             } else if (option.required) {
                 if (option.options.size() == 1) {
                     args.put(option.name, option.options.get(0));
@@ -443,17 +527,66 @@ public final class StremioMediaProvider implements MediaProvider {
                 || requested == SearchType.SERIES && kind == MediaKind.SERIES;
     }
 
-    private int resolveHomePage(HomeRequest request) throws IOException {
-        if (request.cursor == null || request.cursor.isEmpty()) return request.page;
-        if (!request.cursor.matches("stremio-page:[1-9][0-9]{0,3}")) {
-            throw new IOException("This Stremio catalog cursor is invalid.");
+    static long resolveHomeSkip(HomeRequest request) throws IOException {
+        if (request == null) throw new IOException("A Stremio Home request is required.");
+        long pageSkip = homeSkipForPage(request.page);
+        String cursor = request.cursor == null ? "" : request.cursor;
+        if (cursor.isEmpty()) return pageSkip;
+        if (cursor.matches("stremio-skip:[0-9]+")) {
+            try {
+                long cursorSkip = Long.parseLong(cursor.substring("stremio-skip:".length()));
+                if (cursorSkip != pageSkip) {
+                    throw new IOException("The Stremio Home skip cursor does not match its page.");
+                }
+                return cursorSkip;
+            } catch (NumberFormatException error) {
+                throw new IOException("This Stremio Home skip cursor is outside the supported numeric range.");
+            }
         }
+        // Accept cursors produced by an earlier in-memory adapter while preserving page checks.
+        if (cursor.matches("stremio-page:[1-9][0-9]*")) {
+            try {
+                int cursorPage = Integer.parseInt(cursor.substring("stremio-page:".length()));
+                if (cursorPage != request.page) {
+                    throw new IOException("The Stremio catalog cursor does not match its page.");
+                }
+                return pageSkip;
+            } catch (NumberFormatException error) {
+                throw new IOException("This Stremio catalog cursor is invalid.");
+            }
+        }
+        throw new IOException("This Stremio Home cursor is invalid.");
+    }
+
+    static int resolveHomeCatalogStartIndex(HomeRequest request, int eligibleCatalogCount)
+            throws IOException {
+        if (request == null || eligibleCatalogCount < 0) {
+            throw new IOException("The Stremio Home continuation request is invalid.");
+        }
+        if (!request.isProviderContinuationRequest()) return 0;
+        if (request.isSectionRequest()) {
+            throw new IOException("This Stremio Home catalog cursor is invalid.");
+        }
+        return StremioHomeCatalogCursor.parse(request.providerCursor,
+                eligibleCatalogCount).nextFreshIndex;
+    }
+
+    static String nextHomeCatalogCursor(int nextEligibleIndex, int eligibleCatalogCount) {
         try {
-            int cursorPage = Integer.parseInt(request.cursor.substring("stremio-page:".length()));
-            if (cursorPage != request.page) throw new IOException("The Stremio catalog cursor does not match its page.");
-            return cursorPage;
-        } catch (NumberFormatException error) {
-            throw new IOException("This Stremio catalog cursor is invalid.");
+            return StremioHomeCatalogCursor.create(nextEligibleIndex,
+                    Collections.<Integer>emptyList(), eligibleCatalogCount)
+                    .encode(eligibleCatalogCount);
+        } catch (IllegalArgumentException invalid) {
+            return "";
+        }
+    }
+
+    private static long homeSkipForPage(int page) throws IOException {
+        if (page < 1) throw new IOException("The requested Stremio Home page is invalid.");
+        try {
+            return Math.multiplyExact((long) page - 1L, (long) MAX_ITEMS_PER_SECTION);
+        } catch (ArithmeticException error) {
+            throw new IOException("The requested Stremio Home skip is outside the supported numeric range.");
         }
     }
 
@@ -477,20 +610,44 @@ public final class StremioMediaProvider implements MediaProvider {
         return number == null || number < 0 || number > maximum ? -1 : number;
     }
 
-    private static String catalogSectionId(StremioModels.CatalogDefinition catalog) {
+    static boolean homeRequestTargetsCatalog(HomeRequest request,
+            StremioModels.CatalogDefinition catalog) {
+        return request != null && catalog != null
+                && (!request.isSectionRequest()
+                || request.sectionId.equals(catalogSectionId(catalog)));
+    }
+
+    static String nextHomeCursor(StremioModels.CatalogDefinition catalog,
+            StremioModels.CatalogResponse response, long skip) {
+        if (catalog == null || response == null || skip < 0
+                || !declaresExtra(catalog, "skip")
+                || response.metas.size() < MAX_ITEMS_PER_SECTION) return "";
+        try {
+            return "stremio-skip:" + Math.addExact(skip, (long) MAX_ITEMS_PER_SECTION);
+        } catch (ArithmeticException error) {
+            return "";
+        }
+    }
+
+    static String catalogSectionId(StremioModels.CatalogDefinition catalog) {
         return "stremio-catalog-" + digest(catalog.type + "\n" + catalog.id);
     }
 
-    private static String supportedProviderLinkType(String rawUrl) {
+    private static String providerLinkType(String mimeType, String rawUrl) {
+        String mime = mimeType == null ? "" : mimeType.trim().toLowerCase(Locale.ROOT);
+        if ("application/vnd.apple.mpegurl".equals(mime)
+                || "application/x-mpegurl".equals(mime)) return "M3U8";
+        if ("application/dash+xml".equals(mime)) return "DASH";
+        if (mime.startsWith("video/")) return "VIDEO";
         String path = httpPath(rawUrl);
-        if (path == null) return null;
+        if (path == null) return "UNKNOWN";
         String lower = path.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".m3u8")) return "M3U8";
         if (lower.endsWith(".mpd")) return "DASH";
         if (lower.endsWith(".mp4") || lower.endsWith(".m4v") || lower.endsWith(".mkv")
                 || lower.endsWith(".webm") || lower.endsWith(".ts")
                 || lower.endsWith(".mpg") || lower.endsWith(".mpeg")) return "VIDEO";
-        return null;
+        return "UNKNOWN";
     }
 
     private static String supportedSubtitleExtension(String rawUrl) {
@@ -531,23 +688,8 @@ public final class StremioMediaProvider implements MediaProvider {
                 || "application/ttml+xml".equals(normalized);
     }
 
-    private static boolean mimeMatchesPath(String mimeType, String rawUrl) {
-        String path = httpPath(rawUrl);
-        if (path == null) return false;
-        String lower = path.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".m3u8")) return "application/vnd.apple.mpegurl".equals(mimeType);
-        if (lower.endsWith(".mpd")) return "application/dash+xml".equals(mimeType);
-        if (lower.endsWith(".mp4")) return "video/mp4".equals(mimeType);
-        if (lower.endsWith(".mkv")) return "video/x-matroska".equals(mimeType);
-        if (lower.endsWith(".webm")) return "video/webm".equals(mimeType);
-        if (lower.endsWith(".ts")) return "video/mp2t".equals(mimeType);
-        // Orbit's current provider handoff accepts these extensions with an empty MIME hint.
-        return (lower.endsWith(".m4v") || lower.endsWith(".mpg") || lower.endsWith(".mpeg"))
-                && (mimeType == null || mimeType.isEmpty());
-    }
-
     private static String httpPath(String rawUrl) {
-        if (rawUrl == null || rawUrl.length() > StremioAddonClient.MAX_MANIFEST_URL_CHARS) return null;
+        if (rawUrl == null || rawUrl.length() > StremioAddonClient.MAX_STREAM_URL_CHARS) return null;
         try {
             URI uri = new URI(rawUrl);
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);

@@ -208,8 +208,7 @@ foreach ($requiredSource in $requiredPackageSources) {
     }
 }
 
-# Keep private workspace records linked from the local Markdown while removing those links from
-# the distributable copy, whose source filter deliberately excludes local status/evidence files.
+# Replace private workspace links when present; public documentation may already omit them.
 function Get-SourceArchiveText([object] $SourceItem) {
     $repoRootWithSeparator = $script:repoRoot.TrimEnd('\') + '\'
     $relativePath = $SourceItem.FullPath.Substring($repoRootWithSeparator.Length).Replace('\', '/')
@@ -245,10 +244,9 @@ function Get-SourceArchiveText([object] $SourceItem) {
     }
 
     foreach ($replacement in @($replacements)) {
-        if (-not $content.Contains($replacement.Find)) {
-            throw "Expected workspace-only link was not found in packaged Markdown: $relativePath"
+        if ($content.Contains($replacement.Find)) {
+            $content = $content.Replace($replacement.Find, $replacement.Replace)
         }
-        $content = $content.Replace($replacement.Find, $replacement.Replace)
     }
     return $content
 }
@@ -372,7 +370,7 @@ try {
     }
     Push-Location $androidProject
     try {
-        & .\gradlew.bat ':app:assembleRelease' "-PORBIT_RELEASE_VERSION_NAME=$version" '--no-daemon' '--no-configuration-cache' '--console=plain' '--stacktrace' '--max-workers=2'
+        & .\gradlew.bat ':app:assembleRelease' "-PORBIT_RELEASE_VERSION_NAME=$version" '--rerun-tasks' '--no-build-cache' '--no-daemon' '--no-configuration-cache' '--console=plain' '--stacktrace' '--max-workers=2'
         if ($LASTEXITCODE -ne 0) { throw "Orbit Android APK build failed with exit code $LASTEXITCODE." }
     } finally {
         Pop-Location

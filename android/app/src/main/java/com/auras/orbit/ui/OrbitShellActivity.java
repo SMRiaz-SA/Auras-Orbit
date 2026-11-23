@@ -37,6 +37,7 @@ import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.text.InputFilter;
+import android.text.Html;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -67,9 +68,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.widget.NestedScrollView;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import com.auras.orbit.OrbitApplication;
@@ -115,6 +118,8 @@ import com.auras.orbit.stremio.StremioMediaProvider;
 import com.auras.orbit.stremio.StremioModels;
 import com.auras.orbit.update.OrbitAppUpdater;
 import com.auras.orbit.providers.AttributedHomeSection;
+import com.auras.orbit.providers.AttributedHomePage;
+import com.auras.orbit.providers.HomeContinuationTriggerPolicy;
 import com.auras.orbit.providers.AttributedSearchHit;
 import com.auras.orbit.providers.HomeRequest;
 import com.auras.orbit.providers.HomeSection;
@@ -167,6 +172,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -495,10 +501,27 @@ public final class OrbitShellActivity extends Activity implements
     /** Invalidates pending library callbacks when another library is selected. */
     private int jellyfinLibraryRequestEpoch;
     private final Handler providerUiHandler = new Handler(Looper.getMainLooper());
-    private ProviderBatch<List<AttributedHomeSection>> homeProviderBatch;
-    private List<ProviderOutcome<List<AttributedHomeSection>>> homeProviderOutcomes = Collections.emptyList();
+    private ProviderBatch<AttributedHomePage> homeProviderBatch;
+    private List<ProviderOutcome<AttributedHomePage>> homeProviderOutcomes = Collections.emptyList();
     private String homeProviderBatchKey;
     private int homeProviderBatchGeneration;
+    private final Map<String, HomeCatalogContinuationState> homeCatalogContinuationStates = new LinkedHashMap<>();
+    private final Map<String, ProviderBatch<AttributedHomePage>> homeCatalogContinuationBatches = new HashMap<>();
+    private long homeScrollGestureId;
+    private long homeScrollActiveGestureId = -1L;
+    private boolean homeScrollTouchActive;
+    private boolean homeScrollMovePending;
+    private boolean homeScrollGestureScrolledDown;
+    private float homeScrollTouchStartY;
+    private float homeScrollTouchStartX;
+    private Runnable homeScrollGestureIdleReset;
+    private final Map<String, HomeRailState> homeRailStates = new LinkedHashMap<>();
+    private final Map<String, ProviderBatch<List<AttributedHomeSection>>> homeRailBatches = new HashMap<>();
+    private final Map<String, ProviderMediaRailAdapter> homeRailAdapters = new HashMap<>();
+    private AlertDialog expandedHomeRailDialog;
+    private HomeRailState expandedHomeRailState;
+    private ProviderExpandedHomeAdapter expandedHomeRailAdapter;
+    private RecyclerView expandedHomeRailList;
     private int homeFeaturedIndex;
     private String homeFeaturedSelectionKey;
     private ProviderBatch<List<AttributedSearchHit>> homeQuickSearchBatch;
@@ -1786,10 +1809,13 @@ public final class OrbitShellActivity extends Activity implements
             root.addView(librarySummary, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, dp(30)));
         }
-        ScrollView scroll = new ScrollView(this);
+        ScrollView scroll = shellState.getRoute() == ShellRoute.HOME
+                ? new HomeContinuationScrollView() : new ScrollView(this);
         scroll.setTag("route_page_scroll");
         scroll.setFillViewport(false);
         scroll.addView(createRoutePage(profile, false));
+        scroll.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                onHomeContinuationScrollChanged(scroll, scrollY, oldScrollY));
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         root.addView(createPhoneNavigation(), new LinearLayout.LayoutParams(
@@ -1821,10 +1847,13 @@ public final class OrbitShellActivity extends Activity implements
             searchPanelParams.rightMargin = -dp(horizontalPadding);
             main.addView(createHomeQuickSearchPanel(profile, true), searchPanelParams);
         }
-        ScrollView scroll = new ScrollView(this);
+        ScrollView scroll = shellState.getRoute() == ShellRoute.HOME
+                ? new HomeContinuationScrollView() : new ScrollView(this);
         scroll.setTag("route_page_scroll");
         scroll.setFillViewport(false);
         scroll.addView(createRoutePage(profile, true));
+        scroll.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                onHomeContinuationScrollChanged(scroll, scrollY, oldScrollY));
         main.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         root.addView(main, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
@@ -1843,6 +1872,18 @@ public final class OrbitShellActivity extends Activity implements
             if (focusTarget != null) focusTarget.requestFocus();
             pendingFocusTag = null;
         });
+    }
+
+    /** Captures ACTION_DOWN before a clickable child can become the touch target. */
+    private final class HomeContinuationScrollView extends ScrollView {
+        HomeContinuationScrollView() {
+            super(OrbitShellActivity.this);
+        }
+
+        @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+            observeHomeContinuationTouch(this, event);
+            return super.dispatchTouchEvent(event);
+        }
     }
 
     private LinearLayout createPhoneHeader(Profile profile) {
@@ -2583,22 +2624,25 @@ public final class OrbitShellActivity extends Activity implements
         if (TextUtils.isEmpty(profileId) || !TextUtils.equals(selectionKey, homeProviderBatchKey)
                 || homeProviderOutcomes == null
                 || homeProviderOutcomes.isEmpty()) return featured;
-        ArrayList<ProviderOutcome<List<AttributedHomeSection>>> orderedOutcomes =
+        ArrayList<ProviderOutcome<AttributedHomePage>> orderedOutcomes =
                 new ArrayList<>(homeProviderOutcomes);
         Collections.sort(orderedOutcomes,
                 (first, second) -> Integer.compare(first == null ? Integer.MAX_VALUE : first.sourceOrder,
                         second == null ? Integer.MAX_VALUE : second.sourceOrder));
         HashSet<String> seenTitles = new HashSet<>();
-        for (ProviderOutcome<List<AttributedHomeSection>> outcome : orderedOutcomes) {
+        for (ProviderOutcome<AttributedHomePage> outcome : orderedOutcomes) {
             if (outcome == null || outcome.status != ProviderOutcome.Status.SUCCESS
                     || outcome.provider == null || TextUtils.isEmpty(outcome.provider.id)) continue;
             MediaProvider owner = findProvider(profileId, outcome.provider.id);
             if (owner == null || owner.descriptor() == null || !owner.descriptor().homeFeed
                     || !isProviderAvailableForProfile(profileId, owner)) continue;
             ArrayList<AttributedHomeSection> sections = new ArrayList<>();
-            if (outcome.value != null) for (AttributedHomeSection section : outcome.value) {
+            if (outcome.value != null) for (AttributedHomeSection section : outcome.value.sections) {
                 if (section != null) sections.add(section);
             }
+            HomeCatalogContinuationState continuation = homeCatalogContinuationState(
+                    profileId, owner, outcome.value);
+            if (continuation != null) sections.addAll(continuation.additionalSections);
             Collections.sort(sections, (first, second) -> Integer.compare(
                     first.sourceOrder, second.sourceOrder));
             for (AttributedHomeSection attributed : sections) {
@@ -3233,11 +3277,27 @@ public final class OrbitShellActivity extends Activity implements
 
     private void clearHomeProviderBatch() {
         homeProviderBatchGeneration++;
-        ProviderBatch<List<AttributedHomeSection>> previousBatch = homeProviderBatch;
+        resetHomeScrollGestureTracking();
+        ProviderBatch<AttributedHomePage> previousBatch = homeProviderBatch;
         homeProviderBatch = null;
         homeProviderOutcomes = Collections.emptyList();
         homeProviderBatchKey = null;
         if (previousBatch != null) previousBatch.close();
+        for (ProviderBatch<AttributedHomePage> batch : homeCatalogContinuationBatches.values()) {
+            if (batch != null) batch.close();
+        }
+        homeCatalogContinuationBatches.clear();
+        homeCatalogContinuationStates.clear();
+        for (ProviderBatch<List<AttributedHomeSection>> batch : homeRailBatches.values()) {
+            if (batch != null) batch.close();
+        }
+        homeRailBatches.clear();
+        homeRailStates.clear();
+        homeRailAdapters.clear();
+        if (expandedHomeRailDialog != null) expandedHomeRailDialog.dismiss();
+        expandedHomeRailDialog = null;
+        expandedHomeRailState = null;
+        expandedHomeRailAdapter = null;
     }
 
     private void addHomeProviderFeeds(LinearLayout page, boolean television, String profileId,
@@ -3264,9 +3324,11 @@ public final class OrbitShellActivity extends Activity implements
                     "Titles from your selected sources will appear here.");
             return;
         }
+        homeRailAdapters.clear();
         boolean hasAuthoredSection = false;
         boolean hasProviderStatus = false;
-        for (ProviderOutcome<List<AttributedHomeSection>> outcome : homeProviderOutcomes) {
+        ArrayList<HomeCatalogContinuationState> continuationStates = new ArrayList<>();
+        for (ProviderOutcome<AttributedHomePage> outcome : homeProviderOutcomes) {
             if (outcome == null || outcome.provider == null) continue;
             if (outcome.status != ProviderOutcome.Status.SUCCESS) {
                 hasProviderStatus = true;
@@ -3274,12 +3336,20 @@ public final class OrbitShellActivity extends Activity implements
                         () -> { if (homeProviderBatch != null) homeProviderBatch.retry(outcome.provider.id); });
                 continue;
             }
-            List<AttributedHomeSection> sections = outcome.value == null
-                    ? Collections.emptyList() : outcome.value;
             MediaProvider owner = findProvider(profileId, outcome.provider.id);
             if (owner == null || owner.descriptor() == null) continue;
+            HomeCatalogContinuationState continuation = homeCatalogContinuationState(
+                    profileId, owner, outcome.value);
+            if (continuation != null) continuationStates.add(continuation);
             ArrayList<AttributedHomeSection> orderedSections = new ArrayList<>();
+            List<AttributedHomeSection> sections = outcome.value == null
+                    ? Collections.emptyList() : outcome.value.sections;
             for (AttributedHomeSection attributed : sections) {
+                if (attributed != null && attributed.section != null
+                        && attributed.section.items != null) orderedSections.add(attributed);
+            }
+            if (continuation != null) for (AttributedHomeSection attributed
+                    : continuation.additionalSections) {
                 if (attributed != null && attributed.section != null
                         && attributed.section.items != null) orderedSections.add(attributed);
             }
@@ -3293,26 +3363,41 @@ public final class OrbitShellActivity extends Activity implements
                 String sectionId = attributed.section.id;
                 if (TextUtils.isEmpty(sectionId) || sectionId.trim().isEmpty()) continue;
                 hasAuthoredSection = true;
-                sectionHeading(page, attributed.section.title,
-                        "From " + safeProviderDisplayName(owner.descriptor().name), true);
                 String sectionTag = "home_" + safeExtensionTag(providerId) + "_"
                         + Integer.toHexString(providerId.hashCode()) + "_"
                         + safeExtensionTag(sectionId) + "_" + Integer.toHexString(sectionId.hashCode());
-                ArrayList<ProviderRailItem> sectionItems = new ArrayList<>();
-                for (com.auras.orbit.providers.MediaItem item : attributed.section.items) {
-                    if (item != null) sectionItems.add(new ProviderRailItem(owner, item, sectionTag));
-                }
+                HomeRailState railState = homeRailState(profileId, owner, attributed, sectionTag);
+                addProviderHomeSectionHeading(page, railState, television);
+                ArrayList<ProviderRailItem> sectionItems = railState.items;
                 if (sectionItems.isEmpty()) {
-                    addProviderEmptyCard(page, television, "No titles in this section",
-                            "This section has no titles available.");
+                    boolean waitingForPage = railState.loading
+                            || (!railState.failed && !railState.exhausted
+                            && !TextUtils.isEmpty(railState.nextCursor));
+                    addProviderEmptyCard(page, television,
+                            railState.failed ? "Could not load this section"
+                                    : waitingForPage ? "Loading titles" : "No titles in this section",
+                            railState.failed ? railState.error
+                                    : waitingForPage ? "More titles from this section are loading."
+                                    : "This section has no titles available.");
+                    if (railState.failed) addHomeRailLoadingOrRetry(page, television, railState);
+                    if (!railState.failed && !TextUtils.isEmpty(railState.nextCursor)
+                            && !railState.exhausted) {
+                        providerUiHandler.post(() -> requestNextHomeRailPage(railState));
+                    }
                 } else {
-                    addProviderMediaRailItems(page, sectionItems, television, true);
+                    addProviderMediaRailItems(page, sectionItems, television, true, railState);
+                    addHomeRailLoadingOrRetry(page, television, railState);
                 }
             }
         }
         if (!hasAuthoredSection && !hasProviderStatus) {
             addProviderEmptyCard(page, television, "No titles yet",
                     "Your selected sources have not returned any Home titles.");
+        }
+        for (HomeCatalogContinuationState state : continuationStates) {
+            if (state.loading || state.failed || !TextUtils.isEmpty(state.nextCursor)) {
+                addHomeCatalogContinuationStatus(page, television, state);
+            }
         }
     }
 
@@ -3322,7 +3407,7 @@ public final class OrbitShellActivity extends Activity implements
         clearHomeProviderBatch();
         homeProviderBatchKey = key;
         final int generation = homeProviderBatchGeneration;
-        homeProviderBatch = providerOperationCoordinator.loadHome(providers,
+        homeProviderBatch = providerOperationCoordinator.loadHomePages(providers,
                 new HomeRequest(1, null, Collections.<MediaKind>emptyList()), 30000L,
                 outcomes -> providerUiHandler.post(() -> {
                     if (!isCurrentHomeProviderBatch(generation, profileId, key)) return;
@@ -3330,10 +3415,723 @@ public final class OrbitShellActivity extends Activity implements
                             ? Collections.emptyList() : outcomes;
                     if (profileConfirmed && shellState.getRoute() == ShellRoute.HOME
                             && !providerTitleDetailsOpen) {
+                        resetHomeScrollGestureTracking();
                         renderProviderResultsPreservingViewport();
                     }
                 }));
         homeProviderOutcomes = homeProviderBatch.snapshot();
+    }
+
+    private HomeCatalogContinuationState homeCatalogContinuationState(String profileId,
+            MediaProvider provider, AttributedHomePage page) {
+        if (provider == null || provider.descriptor() == null || page == null) return null;
+        String providerId = provider.descriptor().id;
+        String key = homeCatalogContinuationKey(profileId, providerId);
+        HomeCatalogContinuationState state = homeCatalogContinuationStates.get(key);
+        if (state == null) {
+            state = new HomeCatalogContinuationState(key, profileId, provider);
+            homeCatalogContinuationStates.put(key, state);
+        }
+        if (!state.seeded) {
+            state.seeded = true;
+            state.sourceOrder = page.sourceOrder;
+            state.nextCursor = page.nextProviderCursor;
+            state.hasMoreProviderSections = page.hasMoreProviderSections;
+            state.retryAvailable = page.retryAvailable;
+            state.failed = page.retryAvailable;
+            state.error = page.continuationError;
+            for (AttributedHomeSection section : page.sections) {
+                if (section != null && section.section != null) {
+                    state.sectionIds.add(section.section.id);
+                }
+            }
+            if (TextUtils.isEmpty(state.nextCursor)) state.exhausted = true;
+        }
+        return state;
+    }
+
+    private static String homeCatalogContinuationKey(String profileId, String providerId) {
+        String profile = profileId == null ? "" : profileId;
+        String provider = providerId == null ? "" : providerId;
+        return profile.length() + ":" + profile + provider.length() + ":" + provider;
+    }
+
+    private void addHomeCatalogContinuationStatus(LinearLayout parent, boolean television,
+            HomeCatalogContinuationState state) {
+        if (state.loading) {
+            TextView loading = text("Loading more catalogs from "
+                            + safeProviderDisplayName(state.provider.descriptor().name) + "…",
+                    television ? 7 : 11, secondaryTextColor, false);
+            loading.setPadding(dp(3), dp(8), dp(3), dp(8));
+            parent.addView(loading, fullWidth());
+        } else if (state.failed || state.retryAvailable) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView message = text(TextUtils.isEmpty(state.error)
+                            ? "Could not load more catalogs." : state.error,
+                    television ? 7 : 10, secondaryTextColor, false);
+            message.setMaxLines(2);
+            message.setEllipsize(TextUtils.TruncateAt.END);
+            row.addView(message, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            Button retry = actionButton("Retry", false,
+                    () -> requestHomeCatalogContinuation(state, homeScrollGestureId));
+            retry.setContentDescription("Retry loading more catalogs from "
+                    + safeProviderDisplayName(state.provider.descriptor().name));
+            retry.setTextSize(TypedValue.COMPLEX_UNIT_SP, television ? 7 : 11);
+            row.addView(retry, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(television ? 30 : 34)));
+            parent.addView(row, fullWidth());
+        } else if (state.hasMoreProviderSections && !TextUtils.isEmpty(state.error)) {
+            TextView hint = text("Some catalogs could not load. More catalogs from "
+                            + safeProviderDisplayName(state.provider.descriptor().name)
+                            + " will appear as you scroll.",
+                    television ? 7 : 10, secondaryTextColor, false);
+            hint.setPadding(dp(3), dp(8), dp(3), dp(10));
+            hint.setMinHeight(dp(television ? 48 : 56));
+            parent.addView(hint, fullWidth());
+        } else if (!state.exhausted && !TextUtils.isEmpty(state.nextCursor)) {
+            TextView hint = text("More catalogs from "
+                            + safeProviderDisplayName(state.provider.descriptor().name)
+                            + " are available as you scroll.",
+                    television ? 7 : 10, secondaryTextColor, false);
+            hint.setPadding(dp(3), dp(8), dp(3), dp(10));
+            hint.setMinHeight(dp(television ? 48 : 56));
+            parent.addView(hint, fullWidth());
+        }
+    }
+
+    private void maybeLoadHomeCatalogContinuations(ScrollView scroll, long gestureId,
+            boolean verticalRelease, float deltaX, float deltaY) {
+        if (scroll == null || gestureId != homeScrollActiveGestureId || shellState == null
+                || !HomeContinuationTriggerPolicy.isHomeContinuationContent(
+                        shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen)
+                || gestureId < 0L) return;
+        int childHeight = scroll.getChildCount() == 0 ? 0 : scroll.getChildAt(0).getHeight();
+        boolean nearBottom = !scroll.canScrollVertically(1)
+                || scroll.getScrollY() + scroll.getHeight() >= childHeight - dp(240);
+        boolean userScroll = HomeContinuationTriggerPolicy.shouldTriggerForHomeGesture(
+                true, nearBottom, homeScrollGestureScrolledDown, verticalRelease,
+                deltaX, deltaY, homeTouchSlop());
+        if (!userScroll) return;
+        Profile active = profileStore == null ? null : profileStore.getActiveProfile();
+        if (active == null) return;
+        for (HomeCatalogContinuationState state : homeCatalogContinuationStates.values()) {
+            if (!active.id.equals(state.profileId)) continue;
+            boolean shouldRequest = HomeContinuationTriggerPolicy.shouldRequest(
+                    !state.exhausted && !TextUtils.isEmpty(state.nextCursor),
+                    state.loading, state.failed, nearBottom, userScroll,
+                    gestureId, state.lastTriggeredGestureId);
+            if (!shouldRequest || !isCurrentHomeCatalogContinuation(state)) continue;
+            state.lastTriggeredGestureId = gestureId;
+            requestHomeCatalogContinuation(state, gestureId);
+        }
+    }
+
+    private boolean observeHomeContinuationTouch(ScrollView scroll, android.view.MotionEvent event) {
+        if (scroll == null || event == null) return false;
+        if (shellState == null || !HomeContinuationTriggerPolicy.isHomeContinuationContent(
+                shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen)) {
+            if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN
+                    || event.getActionMasked() == android.view.MotionEvent.ACTION_CANCEL
+                    || event.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                resetHomeScrollGestureTracking();
+            }
+            return false;
+        }
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                if (!HomeContinuationTriggerPolicy.shouldBeginGestureTracking(true,
+                        event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN)) break;
+                cancelHomeScrollGestureIdleReset();
+                homeScrollGestureId++;
+                homeScrollActiveGestureId = homeScrollGestureId;
+                homeScrollTouchActive = true;
+                homeScrollGestureScrolledDown = false;
+                homeScrollTouchStartX = event.getX();
+                homeScrollTouchStartY = event.getY();
+                homeScrollMovePending = false;
+                break;
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (HomeContinuationTriggerPolicy.isVerticalHomeDrag(true,
+                        event.getX() - homeScrollTouchStartX,
+                        event.getY() - homeScrollTouchStartY, homeTouchSlop())) {
+                    homeScrollMovePending = true;
+                }
+                break;
+            case android.view.MotionEvent.ACTION_UP:
+                final long gestureId = homeScrollGestureId;
+                final float deltaX = event.getX() - homeScrollTouchStartX;
+                final float deltaY = event.getY() - homeScrollTouchStartY;
+                final boolean draggedUp = HomeContinuationTriggerPolicy.isVerticalHomeDrag(
+                        shellState.getRoute() == ShellRoute.HOME, deltaX, deltaY, homeTouchSlop());
+                homeScrollTouchActive = false;
+                homeScrollMovePending = HomeContinuationTriggerPolicy
+                        .keepDownwardGestureActiveAfterRelease(
+                                shellState.getRoute() == ShellRoute.HOME,
+                                draggedUp || homeScrollMovePending);
+                if (draggedUp) scroll.post(() -> maybeLoadHomeCatalogContinuations(
+                        scroll, gestureId, true, deltaX, deltaY));
+                if (homeScrollMovePending) scheduleHomeScrollGestureIdleReset(gestureId);
+                break;
+            case android.view.MotionEvent.ACTION_CANCEL:
+                resetHomeScrollGestureTracking();
+                break;
+            default:
+                break;
+        }
+        return false;
+    }
+
+    private void onHomeContinuationScrollChanged(ScrollView scroll, int scrollY, int oldScrollY) {
+        long gestureId = homeScrollGestureId;
+        boolean homeRoute = shellState != null
+                && HomeContinuationTriggerPolicy.isHomeContinuationContent(
+                        shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen);
+        if (!HomeContinuationTriggerPolicy.isCapturedDownwardScroll(homeRoute,
+                homeScrollMovePending, gestureId, homeScrollActiveGestureId,
+                scrollY, oldScrollY)) return;
+        homeScrollGestureScrolledDown = true;
+        maybeLoadHomeCatalogContinuations(scroll, gestureId, false, 0f, 0f);
+        scheduleHomeScrollGestureIdleReset(gestureId);
+    }
+
+    private float homeTouchSlop() {
+        return android.view.ViewConfiguration.get(this).getScaledTouchSlop();
+    }
+
+    private void scheduleHomeScrollGestureIdleReset(long gestureId) {
+        cancelHomeScrollGestureIdleReset();
+        Runnable reset = () -> {
+            if (gestureId != homeScrollGestureId) return;
+            homeScrollGestureIdleReset = null;
+            if (homeScrollTouchActive) return;
+            homeScrollMovePending = false;
+            homeScrollGestureScrolledDown = false;
+            homeScrollActiveGestureId = -1L;
+        };
+        homeScrollGestureIdleReset = reset;
+        providerUiHandler.postDelayed(reset, 250L);
+    }
+
+    private void cancelHomeScrollGestureIdleReset() {
+        if (homeScrollGestureIdleReset != null) {
+            providerUiHandler.removeCallbacks(homeScrollGestureIdleReset);
+            homeScrollGestureIdleReset = null;
+        }
+    }
+
+    private void resetHomeScrollGestureTracking() {
+        homeScrollTouchActive = false;
+        homeScrollMovePending = false;
+        homeScrollGestureScrolledDown = false;
+        homeScrollActiveGestureId = -1L;
+        cancelHomeScrollGestureIdleReset();
+    }
+
+    private void requestHomeCatalogContinuation(HomeCatalogContinuationState state,
+            long gestureId) {
+        if (!isCurrentHomeCatalogContinuation(state) || state.loading || state.exhausted
+                || TextUtils.isEmpty(state.nextCursor)) return;
+        MediaProvider provider = findProvider(state.profileId, state.provider.descriptor().id);
+        if (provider == null || !provider.descriptor().homeFeed
+                || !isProviderAvailableForProfile(state.profileId, state.provider)) return;
+        final int generation = homeProviderBatchGeneration;
+        final String batchKey = homeProviderBatchKey;
+        final int requestGeneration = ++state.requestGeneration;
+        final String cursor = state.nextCursor;
+        state.loading = true;
+        state.failed = false;
+        state.retryAvailable = false;
+        state.error = "";
+        providerUiHandler.post(() -> {
+            if (state.requestGeneration != requestGeneration || !state.loading
+                    || homeCatalogContinuationStates.get(state.key) != state) return;
+            if (profileConfirmed && shellState != null && shellState.getRoute() == ShellRoute.HOME
+                    && !providerTitleDetailsOpen) {
+                resetHomeScrollGestureTracking();
+                renderProviderResultsPreservingViewport();
+            }
+        });
+
+        ProviderBatch<AttributedHomePage> batch;
+        try {
+            batch = providerOperationCoordinator.loadHomePages(Collections.singletonList(provider),
+                    HomeRequest.forProviderContinuation(cursor,
+                            Collections.<MediaKind>emptyList()), 30000L,
+                    outcomes -> providerUiHandler.post(() -> {
+                        if (state.requestGeneration != requestGeneration
+                                || homeCatalogContinuationStates.get(state.key) != state
+                                || !homeCatalogContinuationBatches.containsKey(state.key)) return;
+                        ProviderOutcome<AttributedHomePage> outcome = outcomes == null
+                                || outcomes.isEmpty() ? null : outcomes.get(0);
+                        if (outcome != null && outcome.status == ProviderOutcome.Status.LOADING) return;
+                        homeCatalogContinuationBatches.remove(state.key);
+                        if (!isHomeCatalogContinuationOwnedByActiveProvider(state)
+                                || !isCurrentHomeProviderBatch(generation, state.profileId, batchKey)) {
+                            state.loading = false;
+                            return;
+                        }
+                        state.loading = false;
+                        if (outcome == null || outcome.status != ProviderOutcome.Status.SUCCESS) {
+                            state.failed = true;
+                            state.retryAvailable = true;
+                            state.error = outcome == null || TextUtils.isEmpty(outcome.message)
+                                    ? "Could not load more catalogs." : outcome.message;
+                            renderHomeContinuationStatusIfVisible();
+                            return;
+                        }
+                        AttributedHomePage nextPage = outcome.value;
+                        if (nextPage == null) {
+                            state.failed = true;
+                            state.retryAvailable = true;
+                            state.error = "Could not load more catalogs.";
+                            renderHomeContinuationStatusIfVisible();
+                            return;
+                        }
+                        int added = 0;
+                        for (AttributedHomeSection section : nextPage.sections) {
+                            if (section == null || section.section == null
+                                    || !state.sectionIds.add(section.section.id)) continue;
+                            state.additionalSections.add(section.withSourceOrder(state.sourceOrder));
+                            added++;
+                        }
+                        String returnedCursor = nextPage.nextProviderCursor;
+                        state.hasMoreProviderSections = nextPage.hasMoreProviderSections;
+                        state.retryAvailable = nextPage.retryAvailable;
+                        if (!TextUtils.isEmpty(nextPage.continuationError)
+                                || nextPage.retryAvailable) {
+                            state.error = TextUtils.isEmpty(nextPage.continuationError)
+                                    ? "Some catalogs still need to be retried."
+                                    : nextPage.continuationError;
+                            if (nextPage.hasMoreProviderSections) {
+                                state.consumedCursors.add(cursor);
+                                if (TextUtils.isEmpty(returnedCursor)
+                                        || cursor.equals(returnedCursor)
+                                        || state.consumedCursors.contains(returnedCursor)) {
+                                    state.nextCursor = TextUtils.isEmpty(returnedCursor)
+                                            ? cursor : returnedCursor;
+                                    state.hasMoreProviderSections = false;
+                                    state.retryAvailable = true;
+                                    state.failed = true;
+                                } else {
+                                    state.nextCursor = returnedCursor;
+                                    state.failed = false;
+                                    state.retryAvailable = false;
+                                }
+                            } else if (nextPage.retryAvailable) {
+                                state.nextCursor = TextUtils.isEmpty(returnedCursor)
+                                        ? cursor : returnedCursor;
+                                state.failed = true;
+                            } else {
+                                state.nextCursor = TextUtils.isEmpty(returnedCursor)
+                                        ? cursor : returnedCursor;
+                                state.retryAvailable = true;
+                                state.failed = true;
+                            }
+                            state.exhausted = false;
+                            if (profileConfirmed && shellState != null
+                                    && shellState.getRoute() == ShellRoute.HOME
+                                    && !providerTitleDetailsOpen) {
+                                resetHomeScrollGestureTracking();
+                                renderProviderResultsPreservingViewport();
+                            }
+                            return;
+                        }
+                        String nextCursor = returnedCursor;
+                        state.consumedCursors.add(cursor);
+                        if (!HomeContinuationTriggerPolicy.shouldContinueAfterPage(
+                                added, cursor, nextCursor, state.consumedCursors)) {
+                            state.nextCursor = "";
+                            state.exhausted = true;
+                        } else {
+                            state.nextCursor = nextCursor;
+                        }
+                        state.failed = false;
+                        state.retryAvailable = false;
+                        state.error = "";
+                        state.hasMoreProviderSections = nextPage.hasMoreProviderSections;
+                        if (profileConfirmed && shellState != null
+                                && shellState.getRoute() == ShellRoute.HOME
+                                && !providerTitleDetailsOpen) {
+                            resetHomeScrollGestureTracking();
+                            renderProviderResultsPreservingViewport();
+                        }
+                    }));
+        } catch (RuntimeException error) {
+            state.loading = false;
+            state.failed = true;
+            state.retryAvailable = true;
+            state.error = error.getMessage() == null
+                    ? "Could not load more catalogs." : error.getMessage();
+            renderHomeContinuationStatusIfVisible();
+            return;
+        }
+        homeCatalogContinuationBatches.put(state.key, batch);
+    }
+
+    private void renderHomeContinuationStatusIfVisible() {
+        if (profileConfirmed && shellState != null && shellState.getRoute() == ShellRoute.HOME
+                && !providerTitleDetailsOpen) {
+            resetHomeScrollGestureTracking();
+            renderProviderResultsPreservingViewport();
+        }
+    }
+
+    private boolean isCurrentHomeCatalogContinuation(HomeCatalogContinuationState state) {
+        return shellState != null && HomeContinuationTriggerPolicy.isHomeContinuationContent(
+                shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen)
+                && isHomeCatalogContinuationOwnedByActiveProvider(state);
+    }
+
+    private boolean isHomeCatalogContinuationOwnedByActiveProvider(
+            HomeCatalogContinuationState state) {
+        if (state == null || homeCatalogContinuationStates.get(state.key) != state
+                || isFinishing() || isDestroyed() || shellState == null
+                || !HomeContinuationTriggerPolicy.isHomeContinuationContent(
+                        shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen)) return false;
+        Profile active = profileStore == null ? null : profileStore.getActiveProfile();
+        return active != null && active.id.equals(state.profileId)
+                && isProviderAvailableForProfile(state.profileId, state.provider);
+    }
+
+    private HomeRailState homeRailState(String profileId, MediaProvider provider,
+            AttributedHomeSection attributed, String tagPrefix) {
+        String sectionId = attributed.section.id;
+        String key = homeRailStateKey(profileId, provider.descriptor().id, sectionId);
+        HomeRailState state = homeRailStates.get(key);
+        if (state == null) {
+            state = new HomeRailState(key, profileId, provider, sectionId,
+                    attributed.section.title, tagPrefix, attributed.sourceOrder);
+            homeRailStates.put(key, state);
+        }
+        if (!state.seeded) {
+            state.seeded = true;
+            appendHomeRailItems(state, attributed.section.items);
+            state.nextCursor = attributed.section.nextCursor;
+            state.exhausted = TextUtils.isEmpty(state.nextCursor);
+        }
+        return state;
+    }
+
+    private static String homeRailStateKey(String profileId, String providerId, String sectionId) {
+        String profile = profileId == null ? "" : profileId;
+        String provider = providerId == null ? "" : providerId;
+        String section = sectionId == null ? "" : sectionId;
+        return profile.length() + ":" + profile + provider.length() + ":" + provider
+                + section.length() + ":" + section;
+    }
+
+    private int appendHomeRailItems(HomeRailState state,
+            List<com.auras.orbit.providers.MediaItem> items) {
+        if (state == null || items == null) return 0;
+        int added = 0;
+        for (com.auras.orbit.providers.MediaItem item : items) {
+            if (item == null) continue;
+            String identity = homeRailItemIdentity(item);
+            if (!state.itemIdentities.add(identity)) continue;
+            state.items.add(new ProviderRailItem(state.provider, item, state.tagPrefix));
+            added++;
+        }
+        return added;
+    }
+
+    private static String homeRailItemIdentity(com.auras.orbit.providers.MediaItem item) {
+        String stableId = item.stableId == null ? "" : item.stableId.trim();
+        if (!stableId.isEmpty()) return item.kind.name() + ":" + stableId;
+        String detailUrl = item.detailUrl == null ? "" : item.detailUrl.trim();
+        String title = item.title == null ? "" : item.title.trim();
+        return item.kind.name() + ":" + detailUrl.length() + ":" + detailUrl
+                + title.length() + ":" + title;
+    }
+
+    private void requestNextHomeRailPage(HomeRailState state) {
+        if (!isCurrentHomeRailState(state) || state.loading || state.exhausted
+                || TextUtils.isEmpty(state.nextCursor)) return;
+        MediaProvider currentProvider = findProvider(state.profileId, state.provider.descriptor().id);
+        if (!isProviderAvailableForProfile(state.profileId, state.provider)
+                || currentProvider == null || !currentProvider.descriptor().homeFeed) return;
+
+        final String cursor = state.nextCursor;
+        final int requestedPage = state.page + 1;
+        final int generation = homeProviderBatchGeneration;
+        final String homeBatchKey = homeProviderBatchKey;
+        final String profileId = state.profileId;
+        final int requestGeneration = ++state.requestGeneration;
+        state.loading = true;
+        state.failed = false;
+        state.error = "";
+        providerUiHandler.post(() -> {
+            if (state.requestGeneration != requestGeneration || !state.loading
+                    || homeRailStates.get(state.key) != state) return;
+            if (expandedHomeRailState == state && expandedHomeRailAdapter != null) {
+                expandedHomeRailAdapter.notifyDataSetChanged();
+            } else if (profileConfirmed && shellState.getRoute() == ShellRoute.HOME
+                    && !providerTitleDetailsOpen) {
+                renderProviderResultsPreservingViewport();
+            }
+        });
+        ProviderBatch<List<AttributedHomeSection>> batch;
+        try {
+            batch = providerOperationCoordinator.loadHome(
+                Collections.singletonList(currentProvider),
+                HomeRequest.forSection(state.sectionId, requestedPage, cursor,
+                        Collections.<MediaKind>emptyList()),
+                30000L,
+                outcomes -> providerUiHandler.post(() -> {
+                    if (state.requestGeneration != requestGeneration
+                            || homeRailStates.get(state.key) != state
+                            || !homeRailBatches.containsKey(state.key)) return;
+                    ProviderOutcome<List<AttributedHomeSection>> outcome = outcomes == null
+                            || outcomes.isEmpty() ? null : outcomes.get(0);
+                    if (outcome != null && outcome.status == ProviderOutcome.Status.LOADING) return;
+                    homeRailBatches.remove(state.key);
+                    if (!isHomeRailStateOwnedByActiveProvider(state)
+                            || !isCurrentHomeProviderBatch(generation, profileId, homeBatchKey)) {
+                        state.loading = false;
+                        return;
+                    }
+                    state.loading = false;
+                    if (outcome == null || outcome.status != ProviderOutcome.Status.SUCCESS) {
+                        state.failed = true;
+                        state.error = outcome == null || TextUtils.isEmpty(outcome.message)
+                                ? "This section could not be loaded." : outcome.message;
+                        notifyHomeRailChanged(state);
+                        if (profileConfirmed && shellState.getRoute() == ShellRoute.HOME
+                                && !providerTitleDetailsOpen) {
+                            renderProviderResultsPreservingViewport();
+                        }
+                        return;
+                    }
+                    HomeSection nextSection = null;
+                    if (outcome.value != null) for (AttributedHomeSection value : outcome.value) {
+                        if (value != null && value.section != null
+                                && state.sectionId.equals(value.section.id)) {
+                            nextSection = value.section;
+                            break;
+                        }
+                    }
+                    int added = nextSection == null ? 0
+                            : appendHomeRailItems(state, nextSection.items);
+                    String nextCursor = nextSection == null ? "" : nextSection.nextCursor;
+                    if (added == 0) {
+                        state.nextCursor = "";
+                        state.exhausted = true;
+                    } else {
+                        state.page = requestedPage;
+                        if (nextCursor.isEmpty() || cursor.equals(nextCursor)) {
+                            state.nextCursor = "";
+                            state.exhausted = true;
+                        } else {
+                            state.nextCursor = nextCursor;
+                        }
+                    }
+                    state.failed = false;
+                    notifyHomeRailChanged(state);
+                    if (profileConfirmed && shellState.getRoute() == ShellRoute.HOME
+                            && !providerTitleDetailsOpen) {
+                        renderProviderResultsPreservingViewport();
+                    }
+                    if (added > 0 && expandedHomeRailState == state
+                            && expandedHomeRailList != null) {
+                        expandedHomeRailList.post(() -> maybeLoadExpandedHomeRail(state));
+                    }
+                }));
+        } catch (RuntimeException error) {
+            state.loading = false;
+            state.failed = true;
+            state.error = error.getMessage() == null
+                    ? "This section could not be loaded." : error.getMessage();
+            providerUiHandler.post(() -> {
+                if (homeRailStates.get(state.key) != state) return;
+                notifyHomeRailChanged(state);
+                if (profileConfirmed && shellState.getRoute() == ShellRoute.HOME
+                        && !providerTitleDetailsOpen) {
+                    renderProviderResultsPreservingViewport();
+                }
+            });
+            return;
+        }
+        homeRailBatches.put(state.key, batch);
+    }
+
+    private boolean isCurrentHomeRailState(HomeRailState state) {
+        if (state == null || homeRailStates.get(state.key) != state
+                || shellState == null || shellState.getRoute() != ShellRoute.HOME
+                || isFinishing() || isDestroyed()) return false;
+        return isHomeRailStateOwnedByActiveProvider(state);
+    }
+
+    private boolean isHomeRailStateOwnedByActiveProvider(HomeRailState state) {
+        if (state == null || homeRailStates.get(state.key) != state
+                || isFinishing() || isDestroyed()) return false;
+        Profile active = profileStore == null ? null : profileStore.getActiveProfile();
+        return active != null && active.id.equals(state.profileId)
+                && isProviderAvailableForProfile(state.profileId, state.provider);
+    }
+
+    private void notifyHomeRailChanged(HomeRailState state) {
+        ProviderMediaRailAdapter horizontal = state == null ? null : homeRailAdapters.get(state.key);
+        if (horizontal != null) horizontal.notifyDataSetChanged();
+        if (expandedHomeRailState == state && expandedHomeRailAdapter != null) {
+            expandedHomeRailAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void maybeLoadHorizontalHomeRail(RecyclerView recyclerView,
+            LinearLayoutManager layoutManager, ProviderMediaRailAdapter adapter,
+            HomeRailState state) {
+        if (recyclerView == null || adapter == null || state == null || state.loading || state.failed
+                || state.exhausted || TextUtils.isEmpty(state.nextCursor)
+                || !isCurrentHomeRailState(state)) return;
+        int count = adapter.getItemCount();
+        int lastVisible = layoutManager.findLastCompletelyVisibleItemPosition();
+        if (!recyclerView.canScrollHorizontally(1) || (lastVisible >= 0 && lastVisible >= count - 7)) {
+            requestNextHomeRailPage(state);
+        }
+    }
+
+    private void maybeLoadExpandedHomeRail(HomeRailState state) {
+        RecyclerView list = expandedHomeRailList;
+        ProviderExpandedHomeAdapter adapter = expandedHomeRailAdapter;
+        if (list == null || adapter == null || expandedHomeRailState != state
+                || state == null || state.loading || state.failed || state.exhausted
+                || TextUtils.isEmpty(state.nextCursor) || !isCurrentHomeRailState(state)) return;
+        LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
+        if (layoutManager == null) return;
+        int count = adapter.getItemCount();
+        int lastVisible = layoutManager.findLastCompletelyVisibleItemPosition();
+        if (!list.canScrollVertically(1) || (lastVisible >= 0 && lastVisible >= count - 7)) {
+            requestNextHomeRailPage(state);
+        }
+    }
+
+    private void addProviderHomeSectionHeading(LinearLayout parent, HomeRailState state,
+            boolean television) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, dp(television ? 5 : 8));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        TextView title = text(state.title, television ? 9 : 17, textColor, true);
+        title.setMaxLines(1);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(title, fullWidth());
+        TextView caption = text("From " + safeProviderDisplayName(state.provider.descriptor().name),
+                television ? 7 : 11, secondaryTextColor, false);
+        caption.setMaxLines(1);
+        caption.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(caption, fullWidth());
+        row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button viewAll = actionButton("View all", false,
+                () -> showExpandedHomeRail(state, television, viewAllFocusTag(state)));
+        String focusTag = viewAllFocusTag(state);
+        viewAll.setTag(focusTag);
+        viewAll.setContentDescription("View all " + state.title + " from "
+                + safeProviderDisplayName(state.provider.descriptor().name));
+        viewAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, television ? 7 : 11);
+        row.addView(viewAll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(television ? 32 : 36)));
+        parent.addView(row, fullWidth());
+    }
+
+    private void addHomeRailLoadingOrRetry(LinearLayout parent, boolean television,
+            HomeRailState state) {
+        if (state.loading) {
+            TextView loading = text("Loading more titles…", television ? 7 : 11,
+                    secondaryTextColor, false);
+            loading.setPadding(dp(2), dp(3), dp(2), dp(5));
+            parent.addView(loading, fullWidth());
+        } else if (state.failed) {
+            LinearLayout retryRow = new LinearLayout(this);
+            retryRow.setGravity(Gravity.CENTER_VERTICAL);
+            TextView message = text(TextUtils.isEmpty(state.error)
+                            ? "Could not load more titles." : state.error,
+                    television ? 7 : 10, secondaryTextColor, false);
+            message.setMaxLines(2);
+            message.setEllipsize(TextUtils.TruncateAt.END);
+            retryRow.addView(message, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            Button retry = actionButton("Retry", false, () -> requestNextHomeRailPage(state));
+            retry.setContentDescription("Retry loading " + state.title);
+            retry.setTextSize(TypedValue.COMPLEX_UNIT_SP, television ? 7 : 11);
+            retryRow.addView(retry, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(television ? 30 : 34)));
+            parent.addView(retryRow, fullWidth());
+        }
+    }
+
+    private String viewAllFocusTag(HomeRailState state) {
+        return "home_view_all_" + Integer.toHexString(state.key.hashCode());
+    }
+
+    private void showExpandedHomeRail(HomeRailState state, boolean television, String returnFocusTag) {
+        if (!isCurrentHomeRailState(state)) return;
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(12), dp(16), dp(8));
+        TextView heading = text(state.title, television ? 12 : 18, textColor, true);
+        heading.setMaxLines(1);
+        heading.setEllipsize(TextUtils.TruncateAt.END);
+        content.addView(heading, fullWidth());
+        TextView caption = text("From " + safeProviderDisplayName(state.provider.descriptor().name),
+                television ? 8 : 12, secondaryTextColor, false);
+        caption.setMaxLines(1);
+        content.addView(caption, fullWidth());
+        RecyclerView list = new RecyclerView(this);
+        list.setClipToPadding(false);
+        list.setPadding(dp(3), dp(8), dp(3), dp(8));
+        list.setItemAnimator(null);
+        list.setItemViewCacheSize(4);
+        list.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        int columns = television ? 6 : 3;
+        GridLayoutManager layout = new GridLayoutManager(this, columns);
+        list.setLayoutManager(layout);
+        ProviderExpandedHomeAdapter adapter = new ProviderExpandedHomeAdapter(state, television);
+        layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return adapter.getItemViewType(position)
+                        == ProviderExpandedHomeAdapter.VIEW_TYPE_STATUS ? columns : 1;
+            }
+        });
+        list.setAdapter(adapter);
+        int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels
+                / getResources().getDisplayMetrics().density);
+        content.addView(list, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(Math.max(220, screenHeightDp - 150))));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(content)
+                .setNegativeButton("Close", null)
+                .create();
+        expandedHomeRailDialog = dialog;
+        expandedHomeRailState = state;
+        expandedHomeRailAdapter = adapter;
+        expandedHomeRailList = list;
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                maybeLoadExpandedHomeRail(state);
+            }
+        });
+        dialog.setOnDismissListener(ignored -> {
+            if (expandedHomeRailDialog == dialog) {
+                expandedHomeRailDialog = null;
+                expandedHomeRailState = null;
+                expandedHomeRailAdapter = null;
+                expandedHomeRailList = null;
+            }
+            View returnView = findTaggedView(getWindow().getDecorView(), returnFocusTag);
+            if (returnView != null) returnView.post(returnView::requestFocus);
+        });
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+        }
+        list.post(() -> maybeLoadExpandedHomeRail(state));
+        if (!TextUtils.isEmpty(state.nextCursor) && state.items.isEmpty()) {
+            requestNextHomeRailPage(state);
+        }
     }
 
     private void addProviderEmptyCard(LinearLayout parent, boolean television,
@@ -3391,6 +4189,64 @@ public final class OrbitShellActivity extends Activity implements
         }
     }
 
+    /** Per profile/provider catalog cursor shared by Home rendering and continuation requests. */
+    private static final class HomeCatalogContinuationState {
+        final String key;
+        final String profileId;
+        final MediaProvider provider;
+        final ArrayList<AttributedHomeSection> additionalSections = new ArrayList<>();
+        final Set<String> sectionIds = new LinkedHashSet<>();
+        final Set<String> consumedCursors = new HashSet<>();
+        int sourceOrder;
+        String nextCursor = "";
+        String error = "";
+        boolean hasMoreProviderSections;
+        boolean retryAvailable;
+        boolean seeded;
+        boolean loading;
+        boolean failed;
+        boolean exhausted;
+        long lastTriggeredGestureId = -1L;
+        int requestGeneration;
+
+        HomeCatalogContinuationState(String key, String profileId, MediaProvider provider) {
+            this.key = key;
+            this.profileId = profileId;
+            this.provider = provider;
+        }
+    }
+
+    private static final class HomeRailState {
+        final String key;
+        final String profileId;
+        final MediaProvider provider;
+        final String sectionId;
+        final String title;
+        final String tagPrefix;
+        final int sourceOrder;
+        final ArrayList<ProviderRailItem> items = new ArrayList<>();
+        final Set<String> itemIdentities = new LinkedHashSet<>();
+        int page = 1;
+        int requestGeneration;
+        String nextCursor = "";
+        String error = "";
+        boolean seeded;
+        boolean loading;
+        boolean failed;
+        boolean exhausted;
+
+        HomeRailState(String key, String profileId, MediaProvider provider, String sectionId,
+                String title, String tagPrefix, int sourceOrder) {
+            this.key = key;
+            this.profileId = profileId;
+            this.provider = provider;
+            this.sectionId = sectionId;
+            this.title = title;
+            this.tagPrefix = tagPrefix;
+            this.sourceOrder = sourceOrder;
+        }
+    }
+
     private void addProviderMediaRail(LinearLayout parent,
                                       List<com.auras.orbit.providers.MediaItem> items,
                                       MediaProvider provider, boolean television, String tagPrefix) {
@@ -3403,6 +4259,11 @@ public final class OrbitShellActivity extends Activity implements
 
     private void addProviderMediaRailItems(LinearLayout parent, List<ProviderRailItem> items,
                                            boolean television, boolean showSourceAttribution) {
+        addProviderMediaRailItems(parent, items, television, showSourceAttribution, null);
+    }
+
+    private void addProviderMediaRailItems(LinearLayout parent, List<ProviderRailItem> items,
+            boolean television, boolean showSourceAttribution, HomeRailState homeRailState) {
         int width = television ? 94
                 : shellState.getRoute() == ShellRoute.HOME ? 114 : 93;
         String railOrigin = items.isEmpty() || items.get(0) == null
@@ -3433,8 +4294,10 @@ public final class OrbitShellActivity extends Activity implements
         layoutManager.setRecycleChildrenOnDetach(true);
         scroll.setLayoutManager(layoutManager);
         ProviderMediaRailAdapter adapter = new ProviderMediaRailAdapter(items,
-                railWindow.start, railWindow.end, television, showSourceAttribution, width);
+                railWindow.start, railWindow.end, television, showSourceAttribution, width,
+                homeRailState);
         scroll.setAdapter(adapter);
+        if (homeRailState != null) homeRailAdapters.put(homeRailState.key, adapter);
         int savedFirstPosition = providerRailFirstVisiblePositions.getOrDefault(railKey, 0);
         if (savedFirstPosition > 0 && savedFirstPosition < adapter.getItemCount()) {
             layoutManager.scrollToPosition(savedFirstPosition);
@@ -3443,9 +4306,13 @@ public final class OrbitShellActivity extends Activity implements
             @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 int firstVisible = layoutManager.findFirstVisibleItemPosition();
                 if (firstVisible >= 0) providerRailFirstVisiblePositions.put(railKey, firstVisible);
+                maybeLoadHorizontalHomeRail(recyclerView, layoutManager, adapter, homeRailState);
             }
         });
         parent.addView(scroll, fullWidth());
+        if (homeRailState != null) {
+            scroll.post(() -> maybeLoadHorizontalHomeRail(scroll, layoutManager, adapter, homeRailState));
+        }
         if (railWindow.hasPager()) {
             LinearLayout pager = new LinearLayout(this);
             pager.setGravity(Gravity.CENTER_VERTICAL);
@@ -3553,15 +4420,18 @@ public final class OrbitShellActivity extends Activity implements
         private final boolean television;
         private final boolean showSourceAttribution;
         private final int width;
+        private final HomeRailState homeRailState;
 
         ProviderMediaRailAdapter(List<ProviderRailItem> items, int start, int end,
-                boolean television, boolean showSourceAttribution, int width) {
+                boolean television, boolean showSourceAttribution, int width,
+                HomeRailState homeRailState) {
             this.items = items;
             this.start = start;
             this.end = end;
             this.television = television;
             this.showSourceAttribution = showSourceAttribution;
             this.width = width;
+            this.homeRailState = homeRailState;
         }
 
         @Override public ProviderMediaRailViewHolder onCreateViewHolder(
@@ -3591,7 +4461,74 @@ public final class OrbitShellActivity extends Activity implements
             super.onViewRecycled(holder);
         }
 
-        @Override public int getItemCount() { return Math.max(0, end - start); }
+        @Override public int getItemCount() {
+            return homeRailState == null ? Math.max(0, end - start) : items.size();
+        }
+    }
+
+    private final class ProviderExpandedHomeAdapter
+            extends RecyclerView.Adapter<ProviderMediaRailViewHolder> {
+        private static final int VIEW_TYPE_ITEM = 0;
+        private static final int VIEW_TYPE_STATUS = 1;
+        private final HomeRailState state;
+        private final boolean television;
+
+        ProviderExpandedHomeAdapter(HomeRailState state, boolean television) {
+            this.state = state;
+            this.television = television;
+        }
+
+        @Override public int getItemViewType(int position) {
+            return position < state.items.size() ? VIEW_TYPE_ITEM : VIEW_TYPE_STATUS;
+        }
+
+        @Override public ProviderMediaRailViewHolder onCreateViewHolder(
+                ViewGroup parent, int viewType) {
+            FrameLayout content = new FrameLayout(OrbitShellActivity.this);
+            content.setFocusable(false);
+            content.setClipChildren(false);
+            content.setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            return new ProviderMediaRailViewHolder(content);
+        }
+
+        @Override public void onBindViewHolder(ProviderMediaRailViewHolder holder, int position) {
+            holder.content.removeAllViews();
+            if (position < state.items.size()) {
+                LinearLayout tile = createProviderMediaRailTile(
+                        state.items.get(position), television, true);
+                holder.content.addView(tile, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                return;
+            }
+            LinearLayout footer = new LinearLayout(OrbitShellActivity.this);
+            footer.setOrientation(LinearLayout.VERTICAL);
+            footer.setGravity(Gravity.CENTER);
+            footer.setPadding(dp(8), dp(14), dp(8), dp(14));
+            if (state.loading) {
+                footer.addView(text("Loading more titles…", television ? 7 : 11,
+                        secondaryTextColor, false));
+            } else if (state.failed) {
+                TextView error = text(TextUtils.isEmpty(state.error)
+                                ? "Could not load more titles." : state.error,
+                        television ? 7 : 10, secondaryTextColor, false);
+                error.setGravity(Gravity.CENTER);
+                error.setMaxLines(3);
+                footer.addView(error, fullWidth());
+                addSpace(footer, 4);
+                Button retry = actionButton("Retry", false,
+                        () -> requestNextHomeRailPage(state));
+                retry.setContentDescription("Retry loading " + state.title);
+                footer.addView(retry, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, dp(television ? 30 : 34)));
+            }
+            holder.content.addView(footer, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        @Override public int getItemCount() {
+            return state.items.size() + (state.loading || state.failed ? 1 : 0);
+        }
     }
 
     private static final class ProviderMediaRailViewHolder extends RecyclerView.ViewHolder {
@@ -4501,7 +5438,9 @@ public final class OrbitShellActivity extends Activity implements
 
     private static final class ProviderPlaybackCandidate {
         final com.auras.orbit.player.PlaybackRequest.Source source;
+        final com.auras.orbit.providers.ProviderLinkCandidate providerCandidate;
         final String displayLabel;
+        final String unavailableReason;
         final String downloadExtension;
         final String downloadDisplayLabel;
         final boolean directDownload;
@@ -4509,13 +5448,24 @@ public final class OrbitShellActivity extends Activity implements
         ProviderPlaybackCandidate(com.auras.orbit.player.PlaybackRequest.Source source,
                                   String displayLabel, String downloadExtension,
                                   boolean directDownload) {
+            this(source, null, displayLabel, "", downloadExtension, directDownload);
+        }
+
+        ProviderPlaybackCandidate(com.auras.orbit.player.PlaybackRequest.Source source,
+                                  com.auras.orbit.providers.ProviderLinkCandidate providerCandidate,
+                                  String displayLabel, String unavailableReason,
+                                  String downloadExtension, boolean directDownload) {
             this.source = source;
-            this.displayLabel = displayLabel;
+            this.providerCandidate = providerCandidate;
+            this.displayLabel = displayLabel == null ? "Provider result" : displayLabel;
+            this.unavailableReason = unavailableReason == null ? "" : unavailableReason;
             this.downloadExtension = downloadExtension == null ? "" : downloadExtension;
             this.directDownload = directDownload && !this.downloadExtension.isEmpty();
             this.downloadDisplayLabel = this.directDownload
-                    ? displayLabel.replaceFirst("^Play", "Download") : "";
+                    ? this.displayLabel.replaceFirst("^Play", "Download") : "";
         }
+
+        boolean isPlayable() { return source != null; }
     }
 
     /** A direct download owns an independent verifier job and is revoked with its plugin/profile. */
@@ -4603,6 +5553,7 @@ public final class OrbitShellActivity extends Activity implements
         providerDetailsProfileId = profileId;
         providerDetailsRoute = returnRoute;
         providerDetailsReturnFocusTag = returnFocusTag;
+        resetHomeScrollGestureTracking();
         providerTitleDetailsOpen = true;
         providerActorFilmographyIndex = -1;
         providerActorCreditPage = 0;
@@ -5678,7 +6629,10 @@ public final class OrbitShellActivity extends Activity implements
                     result.rejectedSubtitleCount);
             if (resolved == null) {
                 unsupportedCount++;
-            } else if (playable.size() < com.auras.orbit.providers.ProviderLinkResult.MAX_LINKS) {
+            } else if (!resolved.isPlayable()) {
+                unsupportedCount++;
+                playable.add(resolved);
+            } else {
                 URI sourceUri = parseProviderHttpUri(resolved.source.uri);
                 boolean payloadFreeDownload = sourceUri != null
                         && sourceUri.getRawQuery() == null && sourceUri.getRawFragment() == null;
@@ -5698,10 +6652,11 @@ public final class OrbitShellActivity extends Activity implements
         if (playable.isEmpty()) {
             providerDetailsStatus = hasProviderVideoActions() ? "Choose a provider action to open this episode."
                     : isStremioProvider(provider)
-                    ? "No Orbit-compatible direct Stremio stream was returned. External links, YouTube IDs, and torrent hashes are unsupported."
-                    : "No direct MP4, HLS, or DASH stream was returned for this episode. Unsupported extractor pages and formats are hidden.";
-            providerDetailsStatus = appendRejectedSubtitleCallbackDiagnostic(
-                    providerDetailsStatus, result.rejectedSubtitleCount);
+                    ? "No direct playable Stremio stream was returned. Results Orbit cannot open remain listed as unavailable when the add-on returns them."
+                    : "No player-compatible stream was returned for this episode. Results Orbit cannot open remain listed as unavailable when the provider returns them.";
+            providerDetailsStatus = appendProviderLinkMetadataDiagnostic(
+                    appendRejectedSubtitleCallbackDiagnostic(providerDetailsStatus,
+                            result.rejectedSubtitleCount), result.diagnostic);
             return;
         }
         String status = provider.descriptor().playback
@@ -5713,11 +6668,13 @@ public final class OrbitShellActivity extends Activity implements
                     : " Downloads are unavailable from this provider.";
         }
         if (unsupportedCount > 0) {
-            status += " " + unsupportedCount + " unsupported link"
-                    + (unsupportedCount == 1 ? " was" : "s were") + " hidden.";
+            status += " " + unsupportedCount + " provider result"
+                    + (unsupportedCount == 1 ? " is" : "s are")
+                    + " shown as unavailable.";
         }
-        providerDetailsStatus = appendRejectedSubtitleCallbackDiagnostic(
-                status, result.rejectedSubtitleCount);
+        providerDetailsStatus = appendProviderLinkMetadataDiagnostic(
+                appendRejectedSubtitleCallbackDiagnostic(status, result.rejectedSubtitleCount),
+                result.diagnostic);
     }
 
     private void showProviderPlayableLinks(MediaProvider provider,
@@ -5734,7 +6691,10 @@ public final class OrbitShellActivity extends Activity implements
                     provider, candidate, sourceIndex, result.subtitles,
                     result.rejectedSubtitleCount);
             if (resolved == null) unsupportedCount++;
-            else if (playable.size() < com.auras.orbit.providers.ProviderLinkResult.MAX_LINKS) {
+            else if (!resolved.isPlayable()) {
+                unsupportedCount++;
+                playable.add(resolved);
+            } else {
                 URI sourceUri = parseProviderHttpUri(resolved.source.uri);
                 boolean queueSafeUri = sourceUri != null
                         && sourceUri.getRawQuery() == null && sourceUri.getRawFragment() == null;
@@ -5757,10 +6717,11 @@ public final class OrbitShellActivity extends Activity implements
                     ? "No direct stream was returned for this live stream."
                     : hasProviderVideoActions() ? "Choose a provider action to open this title."
                     : isStremioProvider(provider)
-                    ? "No Orbit-compatible direct Stremio stream was returned. External links, YouTube IDs, and torrent hashes are unsupported."
-                    : "No direct MP4, HLS, or DASH stream was returned. Extractor pages, magnets, torrents, and unknown formats are unsupported.";
-            providerDetailsStatus = appendRejectedSubtitleCallbackDiagnostic(
-                    providerDetailsStatus, result.rejectedSubtitleCount);
+                    ? "No direct playable Stremio stream was returned. Results Orbit cannot open remain listed as unavailable when the add-on returns them."
+                    : "No player-compatible stream was returned. Results Orbit cannot open remain listed as unavailable when the provider returns them.";
+            providerDetailsStatus = appendProviderLinkMetadataDiagnostic(
+                    appendRejectedSubtitleCallbackDiagnostic(providerDetailsStatus,
+                            result.rejectedSubtitleCount), result.diagnostic);
             return;
         }
         String status = "Choose a direct stream to open Orbit Player.";
@@ -5770,19 +6731,21 @@ public final class OrbitShellActivity extends Activity implements
                     : " Downloads are unavailable from this provider.";
         }
         if (unsupportedCount > 0) {
-            status += " " + unsupportedCount + " unsupported link"
-                    + (unsupportedCount == 1 ? " was" : "s were") + " hidden.";
+            status += " " + unsupportedCount + " provider result"
+                    + (unsupportedCount == 1 ? " is" : "s are")
+                    + " shown as unavailable.";
         }
-        providerDetailsStatus = appendRejectedSubtitleCallbackDiagnostic(
-                status, result.rejectedSubtitleCount);
+        providerDetailsStatus = appendProviderLinkMetadataDiagnostic(
+                appendRejectedSubtitleCallbackDiagnostic(status, result.rejectedSubtitleCount),
+                result.diagnostic);
     }
 
     private String providerLinkFailureStatus(MediaProvider provider, boolean timedOut, boolean episode) {
         if (isStremioProvider(provider)) {
             String item = episode ? "episode" : "title";
             return timedOut
-                    ? "The Stremio add-on took too long to return " + item + " streams. Orbit supports direct HTTP(S) video streams; external links, YouTube IDs, and torrent hashes are unsupported."
-                    : "Stremio " + item + " stream lookup failed. Orbit supports direct HTTP(S) video streams; external links, YouTube IDs, and torrent hashes are unsupported.";
+                    ? "The Stremio add-on took too long to return " + item + " streams. When results arrive, Orbit lists entries it cannot open as unavailable."
+                    : "Stremio " + item + " stream lookup failed. When results arrive, Orbit lists entries it cannot open as unavailable.";
         }
         return timedOut
                 ? episode ? "The provider took too long to find episode links." : "The provider took too long to find links."
@@ -6321,6 +7284,13 @@ public final class OrbitShellActivity extends Activity implements
             for (int index = sourceWindow.start; index < sourceWindow.end; index++) {
                 ProviderPlaybackCandidate candidate = providerPlayableCandidates.get(index);
                 Button source = actionButton(candidate.displayLabel, false, () -> {
+                    if (!candidate.isPlayable()) {
+                        providerDetailsStatus = TextUtils.isEmpty(candidate.unavailableReason)
+                                ? "This provider result is available, but Orbit Player cannot open it."
+                                : candidate.unavailableReason;
+                        renderProviderResultsPreservingViewport();
+                        return;
+                    }
                     if (providerDetailsItem != null
                             && providerDetailsItem.kind == MediaKind.SERIES) {
                         launchProviderEpisodePlayback(providerDetailsProvider, providerDetailsItem,
@@ -6906,7 +7876,7 @@ public final class OrbitShellActivity extends Activity implements
         addProviderEpisodeWatchActions(actions, episode, returnFocusTag);
         actions.add(new ProviderContextAction("Save & organize", this::showProviderMyListDialog));
         showProviderContextActions(providerEpisodeDisplayTitle(series.title, episode),
-                actions, returnFocusTag);
+                actions, returnFocusTag, episode);
         return true;
     }
 
@@ -6963,6 +7933,12 @@ public final class OrbitShellActivity extends Activity implements
 
     private void showProviderContextActions(String title, List<ProviderContextAction> actions,
             String returnFocusTag) {
+        showProviderContextActions(title, actions, returnFocusTag, null);
+    }
+
+    private void showProviderContextActions(String title, List<ProviderContextAction> actions,
+            String returnFocusTag,
+            com.auras.orbit.providers.MediaItem.EpisodeItem episodeMetadata) {
         if (actions == null || actions.isEmpty()) return;
         String heading = TextUtils.isEmpty(title) ? "Actions" : title;
         if (isTelevision) {
@@ -6991,9 +7967,43 @@ public final class OrbitShellActivity extends Activity implements
         content.setClipToOutline(Build.VERSION.SDK_INT >= 21);
         content.setPadding(dp(18), dp(16), dp(18), dp(18));
         content.addView(text(heading, 17, textColor, true), fullWidth());
-        addSpace(content, 9);
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout rows = column();
+        if (episodeMetadata == null) addSpace(content, 9);
+        else addProviderContextDivider(content, 8, 12);
+        NestedScrollView scroll = new NestedScrollView(this) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                if (episodeMetadata == null) {
+                    super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                    return;
+                }
+                int screenHeightDp = getResources().getConfiguration().screenHeightDp;
+                int maximumHeight = dp(Math.max(240, screenHeightDp - 220));
+                int parentMode = View.MeasureSpec.getMode(heightMeasureSpec);
+                if (parentMode != View.MeasureSpec.UNSPECIFIED) {
+                    maximumHeight = Math.min(maximumHeight,
+                            View.MeasureSpec.getSize(heightMeasureSpec));
+                }
+                super.onMeasure(widthMeasureSpec,
+                        View.MeasureSpec.makeMeasureSpec(maximumHeight, View.MeasureSpec.AT_MOST));
+            }
+        };
+        LinearLayout body = column();
+        if (episodeMetadata != null) {
+            addProviderEpisodeContextArtwork(body, episodeMetadata);
+            String synopsis = episodeMetadata.overview == null
+                    ? "" : episodeMetadata.overview.trim();
+            if (!TextUtils.isEmpty(synopsis)) {
+                addSpace(body, 12);
+                body.addView(text("SYNOPSIS", 11, accentColor, true), fullWidth());
+                addSpace(body, 4);
+                TextView description = text("", 14, secondaryTextColor, false);
+                description.setText(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+                        ? Html.fromHtml(synopsis, Html.FROM_HTML_MODE_COMPACT)
+                        : Html.fromHtml(synopsis));
+                body.addView(description, fullWidth());
+            }
+            addProviderContextDivider(body, 14, 14);
+        }
         for (ProviderContextAction action : actions) {
             Button row = actionButton(action.label, false, () -> {
                 sheet.dismiss();
@@ -7003,13 +8013,58 @@ public final class OrbitShellActivity extends Activity implements
             row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
             row.setMinHeight(dp(48));
             row.setContentDescription(action.label);
-            rows.addView(row, fullWidthHeight(52));
+            body.addView(row, fullWidthHeight(52));
         }
-        scroll.addView(rows, new ScrollView.LayoutParams(
+        scroll.addView(body, new NestedScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         content.addView(scroll, fullWidth());
         sheet.setContentView(content);
         sheet.show();
+    }
+
+    private void addProviderEpisodeContextArtwork(LinearLayout parent,
+            com.auras.orbit.providers.MediaItem.EpisodeItem episode) {
+        if (parent == null || episode == null) return;
+        AspectRatioFrameLayout frame = new AspectRatioFrameLayout(this, 16f / 9f);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xff111923);
+        background.setCornerRadius(dp(9));
+        frame.setBackground(background);
+        frame.setClipToOutline(Build.VERSION.SDK_INT >= 21);
+
+        ProviderEpisodeFallbackArtView fallback = new ProviderEpisodeFallbackArtView(this,
+                providerEpisodeIndex(episode));
+        fallback.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        frame.addView(fallback, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageView artwork = new ImageView(this);
+        artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        artwork.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        frame.addView(artwork, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        com.auras.orbit.providers.MediaItem series = providerDetailsItem;
+        MediaProvider provider = providerDetailsProvider;
+        com.auras.orbit.providers.ProviderDescriptor descriptor =
+                provider == null ? null : provider.descriptor();
+        if (series != null && descriptor != null && hasPosterUrl(episode.posterUrl)) {
+            requestProviderArtworkImage(artwork, providerDetailsProfileId, descriptor.id,
+                    episode.posterUrl, series.posterHeaders, episode.posterUrl);
+        }
+        parent.addView(frame, fullWidth());
+    }
+
+    private void addProviderContextDivider(LinearLayout parent, int topMarginDp,
+            int bottomMarginDp) {
+        if (parent == null) return;
+        View divider = new View(this);
+        divider.setBackgroundColor(accentColor);
+        divider.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams params = fullWidthHeight(2);
+        params.topMargin = dp(topMarginDp);
+        params.bottomMargin = dp(bottomMarginDp);
+        parent.addView(divider, params);
     }
 
     private void restoreProviderContextFocus(String returnFocusTag) {
@@ -9442,6 +10497,13 @@ public final class OrbitShellActivity extends Activity implements
             renderProviderResultsPreservingViewport();
             return;
         }
+        if (candidate != null && !candidate.isPlayable()) {
+            providerDetailsStatus = TextUtils.isEmpty(candidate.unavailableReason)
+                    ? "This provider result is available, but Orbit Player cannot open it."
+                    : candidate.unavailableReason;
+            renderProviderResultsPreservingViewport();
+            return;
+        }
         if (candidate == null || !providerPlayableCandidates.contains(candidate)) {
             providerDetailsStatus = "This source is no longer available. Choose a current source.";
             renderProviderResultsPreservingViewport();
@@ -9476,7 +10538,6 @@ public final class OrbitShellActivity extends Activity implements
             ArrayList<com.auras.orbit.player.PlaybackRequest.Source> sources = new ArrayList<>();
             for (ProviderPlaybackCandidate playable : providerPlayableCandidates) {
                 if (playable != null && playable.source != null
-                        && sources.size() < com.auras.orbit.providers.ProviderLinkResult.MAX_LINKS
                         && (!singleMirror || playable == candidate)) {
                     sources.add(playable.source);
                 }
@@ -9532,6 +10593,13 @@ public final class OrbitShellActivity extends Activity implements
             renderProviderResultsPreservingViewport();
             return;
         }
+        if (candidate != null && !candidate.isPlayable()) {
+            providerDetailsStatus = TextUtils.isEmpty(candidate.unavailableReason)
+                    ? "This provider result is available, but Orbit Player cannot open it."
+                    : candidate.unavailableReason;
+            renderProviderResultsPreservingViewport();
+            return;
+        }
         if (candidate == null || !providerPlayableCandidates.contains(candidate)) {
             providerDetailsStatus = "This episode source is no longer available. Choose a current source.";
             renderProviderResultsPreservingViewport();
@@ -9566,7 +10634,6 @@ public final class OrbitShellActivity extends Activity implements
             ArrayList<com.auras.orbit.player.PlaybackRequest.Source> sources = new ArrayList<>();
             for (ProviderPlaybackCandidate playable : providerPlayableCandidates) {
                 if (playable != null && playable.source != null
-                        && sources.size() < com.auras.orbit.providers.ProviderLinkResult.MAX_LINKS
                         && (!singleMirror || playable == candidate)) {
                     sources.add(playable.source);
                 }
@@ -9998,7 +11065,7 @@ public final class OrbitShellActivity extends Activity implements
             List<com.auras.orbit.providers.ProviderSubtitleCandidate> subtitles) {
         ProviderPlaybackCandidate resolved = createProviderPlaybackCandidate(
                 provider, candidate, index, subtitles);
-        if (resolved == null) return null;
+        if (resolved == null || !resolved.isPlayable()) return null;
         URI sourceUri = parseProviderHttpUri(resolved.source.uri);
         boolean queueSafeUri = sourceUri != null && sourceUri.getRawQuery() == null
                 && sourceUri.getRawFragment() == null;
@@ -10096,52 +11163,50 @@ public final class OrbitShellActivity extends Activity implements
             List<com.auras.orbit.providers.ProviderSubtitleCandidate> providerSubtitles,
             int preMaterializationRejectedSubtitleCount) {
         if (candidate == null) return null;
+        if (!TextUtils.isEmpty(candidate.unavailableReason)) {
+            return unavailableProviderCandidate(provider, candidate, candidate.unavailableReason);
+        }
         URI uri = parseProviderHttpUri(candidate.uri);
-        if (uri == null) return null;
+        if (uri == null) {
+            return unavailableProviderCandidate(provider, candidate,
+                    "Orbit Player can only open valid direct HTTP(S) stream addresses.");
+        }
         String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
         String type = candidate.type == null ? "" : candidate.type.trim().toUpperCase(Locale.ROOT);
-        String mimeType;
-        String format;
+        String mimeType = com.auras.orbit.providers.ProviderMediaTypeMapper
+                .mimeType(type, candidate.mimeType);
+        String format = "Media";
         String downloadExtension = "";
-        if ("M3U8".equals(type) && path.endsWith(".m3u8")) {
+        if ("EXTERNAL".equals(type) || "UNSUPPORTED".equals(type)
+                || "TORRENT".equals(type) || "MAGNET".equals(type)) {
+            return unavailableProviderCandidate(provider, candidate,
+                    "This provider result is shown, but its stream type cannot be opened in Orbit Player.");
+        } else if ("M3U8".equals(type)) {
             mimeType = "application/x-mpegurl";
             format = "HLS";
-        } else if ("DASH".equals(type) && path.endsWith(".mpd")) {
+        } else if ("DASH".equals(type)) {
             mimeType = "application/dash+xml";
             format = "DASH";
         } else if ("VIDEO".equals(type)) {
+            format = "video/mp4".equals(mimeType) ? "MP4" : mimeType;
             if (path.endsWith(".mp4")) {
-                mimeType = "video/mp4";
-                format = "MP4";
                 downloadExtension = "mp4";
             } else if (path.endsWith(".m4v")) {
-                mimeType = "video/mp4";
-                format = "M4V";
                 downloadExtension = "m4v";
             } else if (path.endsWith(".mkv")) {
-                mimeType = "video/x-matroska";
-                format = "Matroska";
                 downloadExtension = "mkv";
             } else if (path.endsWith(".webm")) {
-                mimeType = "video/webm";
-                format = "WebM";
                 downloadExtension = "webm";
-            } else if (path.endsWith(".ts")) {
-                mimeType = "video/mp2t";
-                format = "MPEG-TS";
-            } else if (path.endsWith(".mpg") || path.endsWith(".mpeg")) {
-                mimeType = "video/mpeg";
-                format = "MPEG";
-                downloadExtension = path.endsWith(".mpg") ? "mpg" : "mpeg";
-            } else {
-                return null;
+            } else if (path.endsWith(".mpg")) {
+                downloadExtension = "mpg";
+            } else if (path.endsWith(".mpeg")) {
+                downloadExtension = "mpeg";
             }
-        } else {
-            return null;
+        } else if (!mimeType.isEmpty()) {
+            format = mimeType;
         }
 
         Map<String, String> headers = providerPlaybackHeaders(candidate.headers, candidate.referer);
-        if (isUnsafeProviderCleartextMediaUri(uri, headers)) return null;
         List<com.auras.orbit.player.PlaybackRequest.Subtitle> subtitles =
                 providerPlaybackSubtitles(providerSubtitles);
         List<com.auras.orbit.player.PlaybackRequest.AudioTrack> audioTracks =
@@ -10160,11 +11225,22 @@ public final class OrbitShellActivity extends Activity implements
                     + (candidate.quality > 0 ? " · " + candidate.quality + "p" : "");
             boolean directDownload = !downloadExtension.isEmpty()
                     && providerHeadersFitDownloadContract(uri.toASCIIString(), headers);
-            return new ProviderPlaybackCandidate(source, displayLabel, downloadExtension,
-                    directDownload);
+            return new ProviderPlaybackCandidate(source, candidate, displayLabel, "",
+                    downloadExtension, directDownload);
         } catch (RuntimeException ignored) {
-            return null;
+            return unavailableProviderCandidate(provider, candidate,
+                    "Orbit could not safely prepare this provider result for playback.");
         }
+    }
+
+    private ProviderPlaybackCandidate unavailableProviderCandidate(MediaProvider provider,
+            com.auras.orbit.providers.ProviderLinkCandidate candidate, String reason) {
+        String providerName = provider == null || provider.descriptor() == null
+                ? "Provider" : provider.descriptor().name;
+        String label = com.auras.orbit.player.PlaybackRequest.providerSourceLabel(
+                providerName, candidate.name, candidate.source, candidate.quality, "Unavailable");
+        return new ProviderPlaybackCandidate(null, candidate, "Unavailable · " + label,
+                reason, "", false);
     }
 
     private List<com.auras.orbit.player.PlaybackRequest.Subtitle> providerPlaybackSubtitles(
@@ -10189,6 +11265,15 @@ public final class OrbitShellActivity extends Activity implements
         if (count <= 0) return status;
         String diagnostic = count + " provider subtitle callback"
                 + (count == 1 ? " could" : "s could") + " not be materialized.";
+        return TextUtils.isEmpty(status) ? diagnostic : status + " " + diagnostic;
+    }
+
+    private static String appendProviderLinkMetadataDiagnostic(String status, String diagnostic) {
+        boolean knownDiagnostic = com.auras.orbit.providers.ProviderLinkResult
+                .LINK_METADATA_LIMIT_DIAGNOSTIC.equals(diagnostic)
+                || com.auras.orbit.providers.ProviderLinkResult
+                        .STREMIO_SUBTITLE_METADATA_DIAGNOSTIC.equals(diagnostic);
+        if (!knownDiagnostic) return status;
         return TextUtils.isEmpty(status) ? diagnostic : status + " " + diagnostic;
     }
 

@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.desktop.domain.plugins.interactor
 
 import com.lagradost.cloudstream3.desktop.domain.plugins.repository.PluginRepository
+import com.lagradost.cloudstream3.desktop.repo.PluginFileUtils
 import com.lagradost.runtime.loader.ExtensionLoader
 import java.io.File
 
@@ -16,15 +17,7 @@ class UninstallPlugin(
             @Suppress("deprecation")
             System.runFinalization()
 
-            val stem = file.nameWithoutExtension
-            val parentDir = file.parentFile
-            val filesToDelete = listOfNotNull(
-                file,
-                parentDir?.let { File(it, "$stem-jvm.jar") },
-                parentDir?.let { File(it, "$stem.dex") },
-                parentDir?.let { File(it, "$stem-secure.jar") },
-            )
-            for (f in filesToDelete) {
+            for (f in PluginFileUtils.pluginArtifactFiles(file)) {
                 if (f.exists()) {
                     val ok = f.delete()
                     if (!ok) f.deleteOnExit()

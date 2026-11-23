@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.desktop.repo
 import com.lagradost.common.logging.AppLogger
 import com.lagradost.common.platform.PlatformPaths
 import com.lagradost.runtime.loader.ExtensionLoader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -16,7 +17,7 @@ import java.util.Locale
 
 /**
  * Internal file utility for plugin downloads, hashing, and cache directories.
- * Not part of the public API — consumed only by [DesktopRepositoryManager].
+ * Not part of the public API — consumed by the desktop plugin repository and lifecycle UI.
  */
 internal object PluginFileUtils {
 
@@ -30,9 +31,21 @@ internal object PluginFileUtils {
     fun repositoryDirectoryCollisionKey(repoName: String): String =
         safeDirectoryName(repoName).lowercase(Locale.ROOT)
 
+    internal fun hasRepositoryFolderCollision(repositories: List<com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData>, repoName: String): Boolean {
+        val matchingRepositories = repositories.filter { it.name == repoName }
+        if (matchingRepositories.size > 1) return true
+        val folderName = matchingRepositories.singleOrNull()?.storageName ?: repoName
+        val folderKey = repositoryDirectoryCollisionKey(folderName)
+        return repositories.count { repositoryDirectoryCollisionKey(it.storageName) == folderKey } > 1
+    }
+
     fun repositoryDirectory(repoName: String): File {
         val root = getExtensionsDir().canonicalFile
-        val storageName = DesktopRepositoryManager.getSavedRepositories().singleOrNull { it.name == repoName }?.storageName ?: repoName
+        val repositories = DesktopRepositoryManager.getSavedRepositories()
+        require(!hasRepositoryFolderCollision(repositories, repoName)) {
+            "Repository '$repoName' shares a legacy plugin folder; install and update operations are blocked until the folder identity is resolved."
+        }
+        val storageName = repositories.singleOrNull { it.name == repoName }?.storageName ?: repoName
         val directory = File(root, safeDirectoryName(storageName)).canonicalFile
         require(directory.parentFile == root) { "Repository directory must be inside Extensions" }
         return directory
@@ -46,6 +59,40 @@ internal object PluginFileUtils {
     }
 
     /**
+     * Returns a source plugin package and all of its generated cache artifacts, including
+     * identity markers. Callers pass the source path selected by the installed-plugin scan.
+     */
+    internal fun pluginArtifactFiles(pluginFile: File): List<File> {
+        val name = pluginFile.name
+        val sourceSuffix = listOf(".cs3", ".dex", ".jar")
+            .firstOrNull { name.endsWith(it, ignoreCase = true) }
+        val stem = sourceSuffix?.let { name.dropLast(it.length) } ?: pluginFile.nameWithoutExtension
+        val parent = pluginFile.parentFile
+        val archives = listOf(
+            File(parent, "$stem.jar"),
+            File(parent, "$stem-jvm.jar"),
+            File(parent, "$stem-secure.jar"),
+            File(parent, "$stem.cs3"),
+            File(parent, "$stem.dex"),
+        )
+        return withCacheIdentityFiles(archives)
+    }
+
+    /** Manifest internalName is the stable identity across versions and repositories. */
+    internal fun installedPluginIdentity(internalName: String): String = internalName
+
+    /** Adds each JVM archive's cache identity marker to a rollback or cleanup set. */
+    internal fun withCacheIdentityFiles(files: List<File>): List<File> = files
+        .flatMap { file ->
+            if (file.extension.equals("jar", ignoreCase = true)) {
+                listOf(file, File(file.path + ".identity"))
+            } else {
+                listOf(file)
+            }
+        }
+        .distinctBy { it.absoluteFile.normalize().path }
+
+    /**
      * Keep the current plugin files available until a replacement has downloaded and loaded.
      * The callbacks unload a partially loaded replacement before restoring files, then reload
      * the previous plugin after every file has been restored.
@@ -56,7 +103,7 @@ internal object PluginFileUtils {
         onAfterRestore: () -> Unit = {},
         operation: suspend () -> T,
     ): T = withContext(Dispatchers.IO) {
-        val targets = files.map { it.canonicalFile }.distinct()
+        val targets = withCacheIdentityFiles(files).map { it.canonicalFile }.distinct()
         val extensionsDir = getExtensionsDir()
         if (!extensionsDir.exists()) extensionsDir.mkdirs()
         val backupDir = Files.createTempDirectory(extensionsDir.toPath(), ".plugin-rollback-").toFile()
@@ -88,7 +135,7 @@ internal object PluginFileUtils {
                         Files.deleteIfExists(target.toPath())
                     } else {
                         target.parentFile?.mkdirs()
-                        Files.copy(backup.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                        restoreAtomically(backup, target)
                     }
                 } catch (rollbackFailure: Throwable) {
                     restored = false
@@ -105,6 +152,30 @@ internal object PluginFileUtils {
             throw failure
         } finally {
             backupDir.deleteRecursively()
+        }
+    }
+
+    private fun restoreAtomically(backup: File, target: File) {
+        target.parentFile?.mkdirs()
+        val temporary = File.createTempFile(".${target.name}.", ".restore", target.parentFile)
+        try {
+            Files.copy(backup.toPath(), temporary.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            moveReplacing(temporary, target)
+        } finally {
+            temporary.delete()
+        }
+    }
+
+    private fun moveReplacing(source: File, target: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
@@ -199,6 +270,7 @@ internal object PluginFileUtils {
                     downloadSuccess = true
                     break
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     AppLogger.w("Failed to download '${plugin.internalName}' from $candidateUrl: ${e.message}. Trying next mirror if available...")
                 }
             }
@@ -207,27 +279,20 @@ internal object PluginFileUtils {
                 return@withContext null
             }
 
-            try {
-                Files.move(
-                    tempFile.toPath(),
-                    destFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(
-                    tempFile.toPath(),
-                    destFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                )
-            }
-
-            // [PERFORMANCE] If a pre-compiled JVM jar is provided, download it alongside the .cs3 file.
-            // ExtensionLoader will detect this -jvm.jar file and completely skip the slow dex2jar conversion step!
+            // [PERFORMANCE] Stage and transform a pre-compiled JVM jar before committing either
+            // artifact. Its marker is bound to the staged source and remains valid after both
+            // files are moved into place.
+            val jvmDestFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}-jvm.jar")
+            val jvmIdentityFile = File(jvmDestFile.path + ".identity")
+            val secureDestFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}-secure.jar")
+            val secureIdentityFile = File(secureDestFile.path + ".identity")
+            val sourceIdentityFile = File(destFile.path + ".identity")
+            val dexPackageFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}.cs3")
+            val extractedDexFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}.dex")
+            val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", jvmDestFile.parentFile)
+            val jvmTempIdentityFile = File(jvmTempFile.path + ".identity")
+            var preparedJvmSidecar = false
             if (!plugin.jarUrl.isNullOrBlank() && !plugin.jarHash.isNullOrBlank()) {
-                val jvmDestFile = File(destFile.parentFile, "${destFile.nameWithoutExtension}-jvm.jar")
-                val jvmTempFile = File.createTempFile(jvmDestFile.name, ".tmp", jvmDestFile.parentFile)
-                var installedJvmSidecar = false
                 try {
                     require(PluginNetworkClient.isAllowedRepositoryUrl(plugin.jarUrl)) {
                         "Pre-compiled plugin downloads require HTTPS"
@@ -260,37 +325,43 @@ internal object PluginFileUtils {
                                 throw IllegalStateException("JVM Extension hash mismatch when validating '${jvmDestFile.name}'! Expected: '${plugin.jarHash}', got: '$downloadHash'.")
                             }
 
-                            try {
-                                Files.move(
-                                    jvmTempFile.toPath(),
-                                    jvmDestFile.toPath(),
-                                    StandardCopyOption.REPLACE_EXISTING,
-                                    StandardCopyOption.ATOMIC_MOVE,
-                                )
-                            } catch (_: AtomicMoveNotSupportedException) {
-                                Files.move(
-                                    jvmTempFile.toPath(),
-                                    jvmDestFile.toPath(),
-                                    StandardCopyOption.REPLACE_EXISTING,
-                                )
-                            }
-                            installedJvmSidecar = true
-                            ExtensionLoader.preparePrecompiledJvmJar(destFile, jvmDestFile)
-                            AppLogger.i("Successfully pre-seeded JVM bytecode for ${plugin.internalName}!")
+                            ExtensionLoader.preparePrecompiledJvmJar(tempFile, jvmTempFile)
+                            preparedJvmSidecar = true
+                            AppLogger.i("Successfully prepared JVM bytecode for ${plugin.internalName}!")
                         }
                     }
                 } catch (e: Exception) {
-                    if (installedJvmSidecar) {
-                        jvmDestFile.delete()
-                        File(jvmDestFile.path + ".identity").delete()
-                    }
+                    if (e is CancellationException) throw e
                     AppLogger.i("Failed to download pre-compiled JVM jar for ${plugin.internalName}: ${e.message}")
-                } finally {
-                    jvmTempFile.delete()
                 }
             }
 
+            try {
+                withFileRollback(withCacheIdentityFiles(listOf(destFile, jvmDestFile, secureDestFile, dexPackageFile, extractedDexFile))) {
+                    moveReplacing(tempFile, destFile)
+                    Files.deleteIfExists(sourceIdentityFile.toPath())
+                    Files.deleteIfExists(secureDestFile.toPath())
+                    Files.deleteIfExists(secureIdentityFile.toPath())
+                    Files.deleteIfExists(dexPackageFile.toPath())
+                    Files.deleteIfExists(extractedDexFile.toPath())
+                    if (preparedJvmSidecar) {
+                        moveReplacing(jvmTempFile, jvmDestFile)
+                        moveReplacing(jvmTempIdentityFile, jvmIdentityFile)
+                    } else {
+                        // A cache generated from the previous source package cannot be reused
+                        // with this replacement. Remove it and its marker as a single rollback set.
+                        Files.deleteIfExists(jvmDestFile.toPath())
+                        Files.deleteIfExists(jvmIdentityFile.toPath())
+                    }
+                }
+            } finally {
+                jvmTempFile.delete()
+                jvmTempIdentityFile.delete()
+            }
+
             return@withContext destFile
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e("Failed to download or unzip plugin ${plugin.url}", e)
             return@withContext null

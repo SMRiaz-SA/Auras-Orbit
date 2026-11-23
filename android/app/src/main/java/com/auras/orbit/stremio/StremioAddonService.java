@@ -61,6 +61,12 @@ public final class StremioAddonService {
         return client.getCatalog(addon, manifest, catalog, extraArgs);
     }
 
+    StremioModels.CatalogResponse getHomeCatalog(
+            StremioAddonRegistry.InstalledAddon addon, StremioModels.Manifest manifest,
+            StremioModels.CatalogDefinition catalog, Map<String, String> extraArgs) throws IOException {
+        return client.getHomeCatalog(addon, manifest, catalog, extraArgs);
+    }
+
     public StremioModels.MetaResponse getMetadata(
             StremioAddonRegistry.InstalledAddon addon, StremioModels.Manifest manifest,
             String type, String id) throws IOException {

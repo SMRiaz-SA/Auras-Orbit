@@ -133,6 +133,7 @@ object ExtensionLoader {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    @Synchronized
     fun loadJar(
         jarFile: File,
         fallbackPluginClassName: String? = null,
@@ -151,6 +152,7 @@ object ExtensionLoader {
         var internalNameFromManifest: String? = null
         var nameFromManifest: String? = null
         var jarToLoad = jarFile
+        var manifestIdentity: String? = null
 
         ZipFile(jarFile).use { zip ->
             // Try to extract manifest to get actual class name
@@ -165,6 +167,15 @@ object ExtensionLoader {
                     internalNameFromManifest = manifestData["internalName"] as? String
                     nameFromManifest = manifestData["name"] as? String
                 }
+            }
+
+            val resolvedIdentity = internalNameFromManifest
+                ?: nameFromManifest
+                ?: pluginClassName?.split(".")?.lastOrNull()
+                ?: jarFile.nameWithoutExtension.removeSuffix("-jvm")
+            manifestIdentity = resolvedIdentity
+            if (pluginClassName != null) {
+                ensurePluginIdentityAvailable(jarFile, resolvedIdentity)
             }
 
             // Check if archive already contains compiled JVM .class bytecode
@@ -219,7 +230,11 @@ object ExtensionLoader {
             throw IllegalArgumentException("Could not determine pluginClassName from manifest.json and no fallback provided.")
         }
 
-        val finalInternalName = internalNameFromManifest ?: nameFromManifest ?: pluginClassName.split(".").lastOrNull() ?: jarFile.nameWithoutExtension.removeSuffix("-jvm")
+        val finalInternalName = manifestIdentity
+            ?: internalNameFromManifest
+            ?: nameFromManifest
+            ?: pluginClassName.split(".").lastOrNull()
+            ?: jarFile.nameWithoutExtension.removeSuffix("-jvm")
 
         AppLogger.i("[PluginLoader] Initializing class $pluginClassName from ${jarToLoad.name}")
 
@@ -478,6 +493,7 @@ object ExtensionLoader {
         manifestName: String? = null,
     ) = Unit
 
+    @Synchronized
     fun loadAndInit(
         jarFile: File,
         fallbackPluginClassName: String? = null,
@@ -503,6 +519,7 @@ object ExtensionLoader {
         }
     }
 
+    @Synchronized
     fun unloadPlugin(absolutePath: String) {
         runCatching { onPluginUnloaded?.invoke(absolutePath) }
         val normPath = File(absolutePath).absolutePath
@@ -606,6 +623,28 @@ object ExtensionLoader {
         return internalNamesByPluginPath[normalized]
     }
 
+    /** Returns the archive currently loaded for [internalName], if any. */
+    @Synchronized
+    fun getLoadedPluginPath(internalName: String): File? = plugins.keys
+        .asSequence()
+        .filter { getPluginInternalName(it) == internalName }
+        .map(::File)
+        .minByOrNull(::canonicalPath)
+
+    private fun ensurePluginIdentityAvailable(candidate: File, internalName: String) {
+        val candidatePath = canonicalPath(candidate)
+        val loadedCopy = internalNamesByPluginPath.entries.firstOrNull { (path, loadedName) ->
+            loadedName == internalName && canonicalPath(File(path)) != candidatePath
+        } ?: return
+        throw IllegalStateException(
+            "Plugin identity '$internalName' is already loaded from '${loadedCopy.key}'; " +
+                "refusing to load '${candidate.absolutePath}'.",
+        )
+    }
+
+    private fun canonicalPath(file: File): String =
+        runCatching { file.canonicalPath }.getOrElse { file.absolutePath }
+
     /**
      * Loads any extension jars on disk that are not already in memory (e.g. after sync/install).
      */
@@ -615,7 +654,7 @@ object ExtensionLoader {
         var loaded = 0
         extensionsDir.walkTopDown()
             .filter(PluginArchiveFilter::isLoadablePluginArchive)
-            .sortedBy { it.lastModified() }
+            .sortedWith(compareByDescending<File> { it.lastModified() }.thenBy(::canonicalPath))
             .forEach { jar ->
                 if (!isPluginLoaded(jar.absolutePath)) {
                     try {

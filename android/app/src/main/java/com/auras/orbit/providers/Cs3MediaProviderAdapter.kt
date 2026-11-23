@@ -125,8 +125,17 @@ internal class Cs3MediaProviderAdapter(
         if (pages.size > MAX_HOME_PAGES) {
             throw IllegalStateException("CS3 Home page descriptions exceed emergency ceiling; no partial catalogue returned")
         }
+        val selectedPageAndShelf = if (request.isSectionRequest()) {
+            parseCs3HomeSectionId(providerId, request.sectionId)
+                ?: unsupported("CS3 Home section identity")
+        } else null
+        if (selectedPageAndShelf != null && selectedPageAndShelf.first !in pages.indices) {
+            throw IllegalArgumentException("CS3 Home section is no longer available")
+        }
         val results = ArrayList<HomeSection>()
-        for ((index, page) in pages.withIndex()) {
+        val pageIndices = selectedPageAndShelf?.let { listOf(it.first) } ?: pages.indices
+        for (index in pageIndices) {
+            val page = pages[index]
             checkCurrent()
             if (page.name.isBlank()) continue
             val response: HomePageResponse? = awaitSuspend {
@@ -137,6 +146,28 @@ internal class Cs3MediaProviderAdapter(
             }
             if (response == null) continue
             checkCurrent()
+            if (response.items.size > MAX_HOME_SHELVES) {
+                throw IllegalStateException("CS3 Home shelves exceed emergency ceiling; no partial catalogue returned")
+            }
+            if (selectedPageAndShelf != null) {
+                val shelfIndex = selectedPageAndShelf.second
+                val shelf = response.items.getOrNull(shelfIndex)
+                if (shelf == null) {
+                    results.add(HomeSection(request.sectionId, page.name, emptyList(), ""))
+                    continue
+                }
+                if (shelf.list.size > MAX_HOME_ITEMS_PER_SHELF) {
+                    throw IllegalStateException("CS3 Home shelf exceeds emergency item ceiling; paging required")
+                }
+                val items = shelf.list.asSequence()
+                    .mapNotNull { toMediaItem(it) }
+                    .filter { request.mediaKinds.isEmpty() || request.mediaKinds.contains(it.kind) }
+                    .toList()
+                results.add(HomeSection(request.sectionId,
+                    shelf.name.ifBlank { page.name }, items,
+                    if (response.hasNext) (request.page + 1).toString() else ""))
+                continue
+            }
             for ((shelfIndex, shelf) in response.items.asSequence().withIndex()) {
                 if (results.size >= MAX_HOME_SHELVES) {
                     throw IllegalStateException("CS3 Home shelves exceed emergency ceiling; no partial catalogue returned")
@@ -365,7 +396,9 @@ internal class Cs3MediaProviderAdapter(
         val rawLinks = Collections.synchronizedList(ArrayList<ExtractorLink>())
         val rawSubtitles = Collections.synchronizedList(ArrayList<SubtitleData>())
         val linkIds = AtomicInteger()
-        val exceededBudget = AtomicBoolean(false)
+        val retainedLinkMetadata = ProviderLinkMetadataBudget(
+            MAX_PROVIDER_LINK_RETAINED_METADATA_CHARS)
+        val linkMetadataBudgetExceeded = AtomicBoolean(false)
         val rejectedSubtitleCallbacks = AtomicInteger()
         val progressChanges = AtomicInteger()
         val lastProgressPublicationMs = AtomicLong(0L)
@@ -385,7 +418,10 @@ internal class Cs3MediaProviderAdapter(
             val actionContext = metadata?.let { Cs3ActionContext(pluginId, profileId, it.video,
                 LinkLoadingResult(Collections.unmodifiableList(originalLinks),
                     Collections.unmodifiableList(originalSubtitles), HashMap(it.syncData))) }
-            return ProviderLinkResult(false, linkSnapshot, subtitleSnapshot, "", actionContext,
+            val diagnostic = if (linkMetadataBudgetExceeded.get()) {
+                ProviderLinkResult.LINK_METADATA_LIMIT_DIAGNOSTIC
+            } else ""
+            return ProviderLinkResult(false, linkSnapshot, subtitleSnapshot, diagnostic, actionContext,
                 rejectedSubtitleCallbacks.get())
         }
         fun publishProgress(firstValidLink: Boolean = false) {
@@ -420,7 +456,6 @@ internal class Cs3MediaProviderAdapter(
                         null
                     } else synchronized(subtitles) {
                         if (subtitles.size >= ProviderLinkResult.MAX_SUBTITLES) {
-                            exceededBudget.set(true)
                             shouldPublishRejectedCount = countRejectedSubtitleCallback()
                             null
                         } else {
@@ -446,64 +481,63 @@ internal class Cs3MediaProviderAdapter(
                     }
                     if (candidate != null || shouldPublishRejectedCount) publishProgress()
                 },
-                { link: ExtractorLink ->
+                linkCallback@{ link: ExtractorLink ->
                     checkCurrent()
+                    if (!reserveProviderLinkMetadata(link, retainedLinkMetadata)) {
+                        linkMetadataBudgetExceeded.set(true)
+                        publishProgress()
+                        return@linkCallback
+                    }
                     synchronized(rawLinks) {
-                        if (rawLinks.size < ProviderLinkResult.MAX_LINKS) rawLinks.add(link)
-                        else exceededBudget.set(true)
+                        rawLinks.add(link)
                     }
-                    if (link.url.isNotBlank()) {
-                        val index = linkIds.getAndIncrement()
-                        if (index >= ProviderLinkResult.MAX_LINKS) exceededBudget.set(true)
-                        if (link.audioTracks.size > ProviderLinkCandidate.MAX_AUDIO_TRACKS) {
-                            exceededBudget.set(true)
-                        }
-                        val audioTracks = link.audioTracks
-                            .take(ProviderLinkCandidate.MAX_AUDIO_TRACKS)
-                            .mapIndexedNotNull { audioIndex, audio ->
-                                try {
-                                    ProviderLinkCandidate.AudioTrackCandidate(
-                                        "audio-track-$audioIndex", audio.url, audio.headers,
-                                    )
-                                } catch (_: RuntimeException) {
-                                    // A malformed optional audio file must not discard its video link.
-                                    null
-                                }
+                    val index = linkIds.getAndIncrement()
+                    val audioTracks = link.audioTracks
+                        .take(ProviderLinkCandidate.MAX_AUDIO_TRACKS)
+                        .mapIndexedNotNull { audioIndex, audio ->
+                            try {
+                                ProviderLinkCandidate.AudioTrackCandidate(
+                                    "audio-track-$audioIndex", audio.url, audio.headers,
+                                )
+                            } catch (_: RuntimeException) {
+                                // Invalid optional audio metadata does not discard its video link.
+                                null
                             }
-                        val playbackHooks = if (operationCoordinator != null && (videoInterceptorMethod
-                            || (extractorVerifierJobMethod && link.extractorData != null))) {
-                            Cs3PlaybackHooks(pluginId, profileId, providerId, registrationIndex,
-                                name, pluginArchiveSha256, api,
-                                link.takeIf { videoInterceptorMethod },
-                                link.extractorData.takeIf { extractorVerifierJobMethod }, stillCurrent,
-                                operationCoordinator)
-                        } else null
-                        val candidate = try { ProviderLinkCandidate(
+                        }
+                    val playbackHooks = if (operationCoordinator != null && (videoInterceptorMethod
+                        || (extractorVerifierJobMethod && link.extractorData != null))) {
+                        Cs3PlaybackHooks(pluginId, profileId, providerId, registrationIndex,
+                            name, pluginArchiveSha256, api,
+                            link.takeIf { videoInterceptorMethod },
+                            link.extractorData.takeIf { extractorVerifierJobMethod }, stillCurrent,
+                            operationCoordinator)
+                    } else null
+                    val candidate = try { ProviderLinkCandidate(
+                        "$providerId:link:$index", link.name, link.source, link.url,
+                        link.referer, link.quality, linkTypeName(link.type),
+                        link.extractorData, link.headers, audioTracks, playbackHooks,
+                    ) } catch (_: RuntimeException) {
+                        // A provider link remains visible when its optional HTTP metadata is unsafe.
+                        try { ProviderLinkCandidate(
                             "$providerId:link:$index", link.name, link.source, link.url,
-                            link.referer, link.quality, linkTypeName(link.type),
-                            link.extractorData, link.headers, audioTracks, playbackHooks,
+                            link.referer, link.quality, linkTypeName(link.type), "",
+                            Collections.emptyMap(), Collections.emptyList(), null, "",
+                            "Provider request metadata could not be used safely.",
                         ) } catch (_: RuntimeException) { null }
-                        var firstAccepted = false
-                        val accepted = synchronized(links) {
-                            if (candidate != null && links.size < ProviderLinkResult.MAX_LINKS) {
-                                links.add(candidate)
-                                firstAccepted = links.size == 1
-                                true
-                            } else {
-                                if (candidate != null) exceededBudget.set(true)
-                                false
-                            }
-                        }
-                        if (accepted) publishProgress(firstAccepted)
                     }
+                    var firstAccepted = false
+                    val accepted = synchronized(links) {
+                        if (candidate != null) {
+                            links.add(candidate)
+                            firstAccepted = links.size == 1
+                            true
+                        } else false
+                    }
+                    if (accepted) publishProgress(firstAccepted)
                 },
             )
         }
         checkCurrent()
-        if (exceededBudget.get()) {
-            throw IllegalStateException("CS3 links, subtitles or audio tracks exceed the emergency "
-                + "materialization ceiling; refusing to return incomplete callback results")
-        }
         val linkSnapshot = synchronized(links) { ArrayList(links) }
         val subtitleSnapshot = synchronized(subtitles) { ArrayList(subtitles) }
         val originalLinks = synchronized(rawLinks) { ArrayList(rawLinks) }
@@ -513,6 +547,7 @@ internal class Cs3MediaProviderAdapter(
             LinkLoadingResult(Collections.unmodifiableList(originalLinks),
                 Collections.unmodifiableList(originalSubtitles), HashMap(it.syncData))) }
         val diagnostic = when {
+            linkMetadataBudgetExceeded.get() -> ProviderLinkResult.LINK_METADATA_LIMIT_DIAGNOSTIC
             returned != true -> "CS3 loadLinks returned false"
             linkSnapshot.isEmpty() -> "CS3 loadLinks completed without a link callback"
             else -> ""
@@ -912,6 +947,57 @@ internal class Cs3MediaProviderAdapter(
         "$capability is not supported by this CS3 provider bridge",
     )
 
+    /** Reserve before retaining the raw callback object and its converted playback candidate. */
+    private fun reserveProviderLinkMetadata(
+        link: ExtractorLink,
+        retained: ProviderLinkMetadataBudget,
+    ): Boolean {
+        val estimate = estimateProviderLinkMetadataChars(link)
+        return retained.tryReserve(estimate)
+    }
+
+    /** Counts bounded callback strings twice to cover the raw and converted retained copies. */
+    private fun estimateProviderLinkMetadataChars(link: ExtractorLink): Long {
+        val limit = MAX_PROVIDER_LINK_RETAINED_METADATA_CHARS
+        var chars = 256L // IDs, labels, collection slots, and per-source object overhead.
+        fun add(value: String?) {
+            if (value.isNullOrEmpty() || chars > limit) return
+            chars = (chars + value.length.toLong()).coerceAtMost(limit + 1L)
+        }
+        fun addHeaders(headers: Map<String, String>?) {
+            if (headers == null) return
+            if (headers.size > ProviderHeaderBudget.MAX_SCANNED_ENTRIES) {
+                chars = limit + 1L
+                return
+            }
+            var scanned = 0
+            for ((headerName, headerValue) in headers) {
+                if (++scanned > ProviderHeaderBudget.MAX_SCANNED_ENTRIES) {
+                    chars = limit + 1L
+                    return
+                }
+                add(headerName)
+                add(headerValue)
+            }
+        }
+        add(link.name)
+        add(link.source)
+        add(link.url)
+        add(link.referer)
+        add(link.type?.name)
+        add(link.extractorData)
+        addHeaders(link.headers)
+        val audioCount = link.audioTracks.size
+        if (audioCount > 4_096) chars = limit + 1L
+        else for (audio in link.audioTracks) {
+            add(audio.url)
+            addHeaders(audio.headers)
+            if (chars > limit) break
+        }
+        if (chars > limit / 2L) return limit + 1L
+        return chars * 2L
+    }
+
     private fun <T> awaitSuspend(block: suspend () -> T): T = runBlocking { block() }
 
     private companion object {
@@ -925,6 +1011,7 @@ internal class Cs3MediaProviderAdapter(
         const val MAX_CANARY_SEARCH_RESULTS = 200
         const val MAX_PROVIDER_TYPE_DATA_LENGTH = 32_768
         const val MAX_PROVIDER_TYPE_JSON_DEPTH = 16
+        const val MAX_PROVIDER_LINK_RETAINED_METADATA_CHARS = 32L * 1024L * 1024L
         // A malformed provider can return unlimited invalid episodes. Bound attempts,
         // not only the number successfully converted into actionable episodes.
         const val MAX_EPISODE_SCAN = MediaItem.MAX_EPISODES * 4
@@ -946,4 +1033,15 @@ internal class Cs3MediaProviderAdapter(
             "mc_cid", "mc_eid", "_ga", "_gl",
         )
     }
+}
+
+internal fun parseCs3HomeSectionId(providerId: String, sectionId: String): Pair<Int, Int>? {
+    if (providerId.isBlank() || sectionId.isBlank()) return null
+    val prefix = "$providerId:home:"
+    if (!sectionId.startsWith(prefix)) return null
+    val parts = sectionId.substring(prefix.length).split(':')
+    if (parts.size != 2 || parts.any { !it.matches(Regex("[0-9]+")) }) return null
+    val mainPageIndex = parts[0].toIntOrNull() ?: return null
+    val shelfIndex = parts[1].toIntOrNull() ?: return null
+    return mainPageIndex to shelfIndex
 }

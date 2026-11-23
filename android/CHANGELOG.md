@@ -1,12 +1,13 @@
 # Changelog
 
-## 1.0.0.10 — Settings wiring completed; unpublished local candidate
+## 1.0.0.10 — 2026-11-22 (local workspace candidate; unpublished)
 
-- Replaced misleading Appearance and language placeholders with explicit status: the accepted dark theme and separate phone/TV layouts are active, while translated interface resources are not available in this build.
-- Wired the Settings download-folder action to the existing Android folder picker, Storage usage to the existing Downloads summary, and the active-profile action to the existing profile picker. The profile action returns to its Settings row after selection or cancel.
-- Kept Android automatic backup explicitly off by design and directed users to the encrypted `.orbitlib` archive. Existing backup behavior was not changed.
-- Built and signed the Release APK with the established update-compatible certificate, verified its package/version and 16 KB alignment, and installed it on the Huawei phone and Android TV emulator. Phone folder selection, storage navigation, profile picker return, and appearance status passed. TV D-pad storage/profile navigation and focus return passed; its system folder picker is a transparent platform stub. Details: [Settings acceptance](artifacts/settings-acceptance-2026-11-18/README.md).
-- APK SHA-256: `649FB5FAB04ADF3D9F451D83448502DB50889CF86290F296E11271913602F27E`. This local build is unpublished; it does not close `.06` updater/data migration, app-wide TalkBack, or conditional live Jellyfin/FCast acceptance.
+- Add episode artwork and synopsis to the long-press sheet while retaining its title and actions. Separate the sheet sections with teal dividers and use nested scrolling to keep touch gestures distinct.
+- Add safe-area padding to the phone launcher icon and Android 12 splash mark to prevent logo cropping.
+- Preserve provider and add-on stream results without an arbitrary item-count limit. Handle malformed Stremio entries individually, map declared media types, and retain valid playback and subtitle request metadata.
+- Keep the existing profile subtitle controls and selection behavior while improving subtitle data handling at provider boundaries.
+- Replace misleading Appearance and language placeholders with accurate status. Wire the Settings download-folder, storage usage, and active-profile actions to their existing Android screens.
+- Keep automatic Android backup off by design and direct users to the encrypted `.orbitlib` archive.
 
 ## 1.0.0.09 — TMDB API key controls
 

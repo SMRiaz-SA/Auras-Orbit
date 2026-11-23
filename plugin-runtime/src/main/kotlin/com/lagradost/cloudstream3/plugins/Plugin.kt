@@ -8,6 +8,16 @@ import com.lagradost.cloudstream3.actions.VideoClickActionHolder
 import kotlin.Throws
 
 abstract class Plugin : BasePlugin() {
+    companion object {
+        /**
+         * Binary compatibility with Cloudstream Android's Compose-compiled Plugin API.
+         * Recent plugin bytecode can read this compiler-generated stability field even
+         * though the desktop host does not run Compose's compiler on this class.
+         */
+        @JvmField
+        val `$stable`: Int = 8
+    }
+
     /**
      * Called when your Plugin is loaded
      * @param context Context
