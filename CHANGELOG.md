@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0.11 — 2026-11-23
+
+### Stable release
+
+- Prefetch up to two adjacent posters on visible Home provider shelves, using the shared artwork cache and a bounded request queue.
+- Open a selected title's details immediately from a Home shelf's **View all** page by dismissing the expanded shelf first.
+
 ## 1.0.0.10 — 2026-11-23
 
 ### Stable release

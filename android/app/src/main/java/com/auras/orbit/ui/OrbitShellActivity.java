@@ -220,6 +220,8 @@ public final class OrbitShellActivity extends Activity implements
     // top-level scroll recovery; ordinary data refreshes do not reset the viewport.
     private ShellRoute pendingTopLevelScrollRestore;
     private static final int MAX_HOME_FEATURED_ITEMS = 6;
+    private static final int HOME_ARTWORK_PREFETCH_COUNT = 2;
+    private static final int HOME_ARTWORK_PREFETCH_MAX_QUEUED = 12;
     private static final Object PROVIDER_ARTWORK_CACHE_LOCK = new Object();
     private static final Set<String> PROVIDER_ARTWORK_MAINTENANCE_PENDING =
             Collections.synchronizedSet(new HashSet<>());
@@ -501,6 +503,12 @@ public final class OrbitShellActivity extends Activity implements
     /** Invalidates pending library callbacks when another library is selected. */
     private int jellyfinLibraryRequestEpoch;
     private final Handler providerUiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable homeArtworkPrefetchRunnable = () -> {
+        if (shellState == null || shellState.getRoute() != ShellRoute.HOME
+                || isFinishing() || isDestroyed()) return;
+        View routeScroll = findTaggedView(getWindow().getDecorView(), "route_page_scroll");
+        if (routeScroll != null) prefetchVisibleHomeRailArtwork(routeScroll);
+    };
     private ProviderBatch<AttributedHomePage> homeProviderBatch;
     private List<ProviderOutcome<AttributedHomePage>> homeProviderOutcomes = Collections.emptyList();
     private String homeProviderBatchKey;
@@ -3588,6 +3596,10 @@ public final class OrbitShellActivity extends Activity implements
         boolean homeRoute = shellState != null
                 && HomeContinuationTriggerPolicy.isHomeContinuationContent(
                         shellState.getRoute() == ShellRoute.HOME, providerTitleDetailsOpen);
+        if (homeRoute) {
+            providerUiHandler.removeCallbacks(homeArtworkPrefetchRunnable);
+            providerUiHandler.postDelayed(homeArtworkPrefetchRunnable, 100L);
+        }
         if (!HomeContinuationTriggerPolicy.isCapturedDownwardScroll(homeRoute,
                 homeScrollMovePending, gestureId, homeScrollActiveGestureId,
                 scrollY, oldScrollY)) return;
@@ -4306,12 +4318,18 @@ public final class OrbitShellActivity extends Activity implements
             @Override public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 int firstVisible = layoutManager.findFirstVisibleItemPosition();
                 if (firstVisible >= 0) providerRailFirstVisiblePositions.put(railKey, firstVisible);
+                if (homeRailState != null && dx != 0) {
+                    prefetchAdjacentHomeRailArtwork(recyclerView, layoutManager, adapter, dx > 0);
+                }
                 maybeLoadHorizontalHomeRail(recyclerView, layoutManager, adapter, homeRailState);
             }
         });
         parent.addView(scroll, fullWidth());
         if (homeRailState != null) {
-            scroll.post(() -> maybeLoadHorizontalHomeRail(scroll, layoutManager, adapter, homeRailState));
+            scroll.post(() -> {
+                prefetchAdjacentHomeRailArtwork(scroll, layoutManager, adapter, true);
+                maybeLoadHorizontalHomeRail(scroll, layoutManager, adapter, homeRailState);
+            });
         }
         if (railWindow.hasPager()) {
             LinearLayout pager = new LinearLayout(this);
@@ -4349,8 +4367,70 @@ public final class OrbitShellActivity extends Activity implements
         }
     }
 
+    /** Prefetches only the next two posters for Home rails intersecting the viewport. */
+    private void prefetchVisibleHomeRailArtwork(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE) return;
+        if (view instanceof RecyclerView
+                && view.getTag() instanceof String
+                && ((String) view.getTag()).startsWith("provider_rail_view_")
+                && view.getGlobalVisibleRect(new android.graphics.Rect())) {
+            RecyclerView rail = (RecyclerView) view;
+            RecyclerView.Adapter<?> rawAdapter = rail.getAdapter();
+            RecyclerView.LayoutManager rawLayoutManager = rail.getLayoutManager();
+            if (rawAdapter instanceof ProviderMediaRailAdapter
+                    && rawLayoutManager instanceof LinearLayoutManager) {
+                prefetchAdjacentHomeRailArtwork(rail,
+                        (LinearLayoutManager) rawLayoutManager,
+                        (ProviderMediaRailAdapter) rawAdapter, true);
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int index = 0; index < group.getChildCount(); index++) {
+                prefetchVisibleHomeRailArtwork(group.getChildAt(index));
+            }
+        }
+    }
+
+    /**
+     * Starts at most two cacheable artwork requests beside the visible Home items. Existing
+     * request deduplication and the bounded executor keep repeated scroll callbacks cheap.
+     */
+    private void prefetchAdjacentHomeRailArtwork(RecyclerView rail,
+            LinearLayoutManager layoutManager, ProviderMediaRailAdapter adapter, boolean forward) {
+        if (rail == null || layoutManager == null || adapter == null
+                || adapter.homeRailState == null
+                || !rail.getGlobalVisibleRect(new android.graphics.Rect())
+                || POSTER_EXECUTOR.queuedCount() > HOME_ARTWORK_PREFETCH_MAX_QUEUED) return;
+        int firstVisible = layoutManager.findFirstVisibleItemPosition();
+        int lastVisible = layoutManager.findLastVisibleItemPosition();
+        if (firstVisible < 0 || lastVisible < 0) return;
+        int itemCount = adapter.getItemCount();
+        for (int offset = 1; offset <= HOME_ARTWORK_PREFETCH_COUNT; offset++) {
+            int position = forward ? lastVisible + offset : firstVisible - offset;
+            if (position < 0 || position >= itemCount) break;
+            int itemIndex = adapter.start + position;
+            if (itemIndex < adapter.start || itemIndex >= adapter.end
+                    || itemIndex >= adapter.items.size()) continue;
+            prefetchProviderRailArtwork(adapter.items.get(itemIndex));
+        }
+    }
+
+    private void prefetchProviderRailArtwork(ProviderRailItem railItem) {
+        if (railItem == null || railItem.provider == null || railItem.item == null
+                || railItem.provider.descriptor() == null
+                || !hasHttpArtworkUrl(railItem.item.posterUrl)) return;
+        // The loader weakly retains image waiters; this detached target lets it populate the
+        // normal memory/disk caches without holding a card view that is not yet on screen.
+        ImageView cacheTarget = new ImageView(this);
+        requestProviderArtworkImage(cacheTarget, railItem.provider.profileScopeId(),
+                railItem.provider.descriptor().id, railItem.item.posterUrl,
+                railItem.item.posterHeaders, railItem.item.posterUrl);
+    }
+
     private LinearLayout createProviderMediaRailTile(ProviderRailItem railItem,
-            boolean television, boolean showSourceAttribution) {
+            boolean television, boolean showSourceAttribution,
+            boolean dismissExpandedHomeRailOnOpen) {
         MediaProvider provider = railItem.provider;
         com.auras.orbit.providers.MediaItem item = railItem.item;
         LinearLayout tile = column();
@@ -4363,8 +4443,14 @@ public final class OrbitShellActivity extends Activity implements
             String stableItemId = item.stableId == null ? "" : item.stableId;
             tile.setTag(railItem.tagPrefix + "_" + safeExtensionTag(stableItemId) + "_"
                     + Integer.toHexString(stableItemId.hashCode()));
-            tile.setOnClickListener(view -> showProviderTitleDetails(
-                    provider, item, television, String.valueOf(view.getTag())));
+            tile.setOnClickListener(view -> {
+                if (dismissExpandedHomeRailOnOpen) {
+                    AlertDialog dialog = expandedHomeRailDialog;
+                    if (dialog != null && dialog.isShowing()) dialog.dismiss();
+                }
+                showProviderTitleDetails(provider, item, television,
+                        String.valueOf(view.getTag()));
+            });
             addFocusLift(tile, 1.05f);
         }
         AspectRatioFrameLayout art = new AspectRatioFrameLayout(this, 2f / 3f);
@@ -4451,7 +4537,7 @@ public final class OrbitShellActivity extends Activity implements
             ProviderRailItem railItem = items.get(start + position);
             if (railItem == null || railItem.item == null) return;
             LinearLayout tile = createProviderMediaRailTile(
-                    railItem, television, showSourceAttribution);
+                    railItem, television, showSourceAttribution, false);
             holder.content.addView(tile, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
@@ -4496,7 +4582,7 @@ public final class OrbitShellActivity extends Activity implements
             holder.content.removeAllViews();
             if (position < state.items.size()) {
                 LinearLayout tile = createProviderMediaRailTile(
-                        state.items.get(position), television, true);
+                        state.items.get(position), television, true, true);
                 holder.content.addView(tile, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
                 return;

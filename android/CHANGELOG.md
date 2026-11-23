@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0.11 — 2026-11-23
+
+- Prefetch up to two adjacent posters on visible Home provider shelves, using the shared artwork cache and a bounded request queue.
+- Open a selected title's details immediately from a Home shelf's **View all** page by dismissing the expanded shelf first.
+
 ## 1.0.0.10 — 2026-11-23
 
 - Add episode artwork and synopsis to the long-press sheet while retaining its title and actions. Separate the sheet sections with teal dividers and use nested scrolling to keep touch gestures distinct.
